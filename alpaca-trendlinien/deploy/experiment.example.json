@@ -1,0 +1,14 @@
+{
+  "symbols": ["MSFT", "AMZN"],
+  "samples": 10,
+  "seed": 20261017,
+  "history_days": 900,
+  "search_bars": 60,
+  "horizons": [5, 10, 20],
+  "holdout_fraction": 0.2,
+  "retest_bars": 12,
+  "retest_bps": 20,
+  "latency_seconds": 900,
+  "cost_bps": 5,
+  "stop_buffer_bps": 0
+}

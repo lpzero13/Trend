@@ -1,0 +1,782 @@
+//@version=6
+indicator("Tori Trendline Automator v5 — Chart + 4h + 1D", shorttitle="Tori Lines v5 MTF", overlay=true, behind_chart=false, max_lines_count=85, max_labels_count=30, max_bars_back=5000, dynamic_requests=true)
+
+// Vollstaendige Wick-Huelle in O(N), gemeinsamer Kalenderzeitraum.
+// Geraden verwenden Quell-Zeitstempel statt Chart-bar_index.
+// HTF: [1] / lookahead_on; LTF: alle Intrabars mit security_lower_tf.
+
+grp_algo = "1. Analyse und Auswahl"
+lookbackDays = input.int(365, "Gemeinsamer Rueckblick (Kalendertage)", minval=14, maxval=1500, group=grp_algo)
+commonStart = input.time(0, "Optional: gemeinsames Startdatum (0 = Rueckblick)", group=grp_algo)
+selection = input.string("Qualitaet zuerst", "Aktive Linie", options=["Qualitaet zuerst", "Innerste bestaetigte Linie"], group=grp_algo)
+skipLastDown = input.int(0, "Letzte rote Segmente ueberspringen", minval=0, maxval=10, group=grp_algo)
+skipLastUp = input.int(0, "Letzte gruene Segmente ueberspringen", minval=0, maxval=10, group=grp_algo)
+pullbackBars = input.int(1, "Bestaetigung nach Punkt B (Quellkerzen)", minval=0, maxval=5, group=grp_algo)
+minTouches = input.int(3, "Kontakte fuer qualifizierte Linie", minval=2, maxval=10, group=grp_algo)
+minSpanDays = input.int(7, "Mindest-Kontaktzeitraum (Kalendertage)", minval=1, maxval=90, group=grp_algo)
+touchToleranceTicks = input.int(1, "Kontakt-Toleranz (Ticks)", minval=0, maxval=20, group=grp_algo, tooltip="Zaehlt nahe Kontakte. Wick-Verletzungen bleiben unzulaessig.")
+requireQuality = input.bool(true, "Long-Signale nur mit qualifizierten Linien", group=grp_algo)
+
+grp_man = "2. Manuelle Punkte"
+manualTF = input.string("4h", "Manuelle Punkte gelten fuer", options=["4h", "1D", "Chart"], group=grp_man)
+snapToWick = input.bool(true, "An Hoch / Tief einrasten", group=grp_man)
+useManualRed = input.bool(false, "Rot manuell", group=grp_man)
+manRedTimeA = input.time(0, "Rot A", inline="rA", group=grp_man)
+manRedPriceA = input.price(0.0, "", inline="rA", group=grp_man)
+manRedTimeB = input.time(0, "Rot B", inline="rB", group=grp_man)
+manRedPriceB = input.price(0.0, "", inline="rB", group=grp_man)
+useManualGreen = input.bool(false, "Gruen manuell", group=grp_man)
+manGreenTimeA = input.time(0, "Gruen A", inline="gA", group=grp_man)
+manGreenPriceA = input.price(0.0, "", inline="gA", group=grp_man)
+manGreenTimeB = input.time(0, "Gruen B", inline="gB", group=grp_man)
+manGreenPriceB = input.price(0.0, "", inline="gB", group=grp_man)
+
+grp_lock = "3. Trade und Ereignisse"
+lockLines = input.bool(false, "Alle dargestellten Linien einfrieren", group=grp_lock)
+lockTime = input.time(0, "Linienstand vor Einstieg (Datum / Uhrzeit)", group=grp_lock, tooltip="Je Intervall wird der letzte Kerzenschluss bis zu diesem Zeitpunkt verwendet.")
+eventBars = input.int(12, "Maximale Bruchsuche (Quellkerzen)", minval=2, maxval=40, group=grp_lock, tooltip="Obergrenze pro Rekonstruktion. Bei grossen Datenmengen wird die Suche zum Schutz vor Pine-Laufzeitfehlern begrenzt; der tatsaechliche Umfang steht im Tooltip. Fuer einen aelteren Bruch dessen festen Zeitpunkt waehlen.")
+showHistory = input.bool(false, "Historischen Bruch mit Safety Line einblenden", group=grp_lock)
+historyTF = input.string("1D", "Historie fuer", options=["1D", "4h", "Chart"], group=grp_lock)
+historyAt = input.time(0, "Signal bis Datum/Uhrzeit (0 = neuestes)", group=grp_lock, tooltip="Fester Zeitpunkt: Der letzte Bruch bis hier bleibt ausgewaehlt, auch wenn spaeter neue Brueche entstehen. Uhrzeit in der Boersen-Zeitzone pruefen.")
+historyOffset = input.int(1, "Bruch zurueck (1 = letzter bis Zeitpunkt)", minval=1, maxval=30, group=grp_lock)
+retestDays = input.int(30, "Gebrochene rote Linie behalten (Tage)", minval=1, maxval=90, group=grp_lock)
+
+grp_vis = "4. Anzeige"
+showLocal = input.bool(true, "Linien des gewaehlten Chartintervalls (gepunktet)", group=grp_vis)
+localDays = input.int(60, "Rueckblick lokales Chartintervall (Kalendertage)", minval=1, maxval=1500, group=grp_vis, tooltip="Unabhaengig vom 1D-/4h-Rueckblick. Kleine Intervalle zeigen so die lokale Struktur; zu kurze Datenhistorie wird markiert.")
+localSelection = input.string("Innerste bestaetigte Linie", "Aktive lokale Linie", options=["Innerste bestaetigte Linie", "Qualitaet zuerst"], group=grp_vis)
+showDay = input.bool(true, "1D-Linien (durchgezogen)", group=grp_vis)
+showFour = input.bool(true, "4h-Linien (gestrichelt)", group=grp_vis)
+showOuterLines = input.bool(true, "Uebergeordnete Linien anzeigen", group=grp_vis)
+maxSegments = input.int(4, "Sichtbare Segmente je Richtung / Intervall", minval=1, maxval=12, group=grp_vis, tooltip="Begrenzt nur die Anzeige, niemals die Suche.")
+showPivotDots = input.bool(true, "Aktive Anker und Qualitaet beschriften", group=grp_vis)
+showRetest = input.bool(true, "Gebrochene rote Retest-Linie anzeigen", group=grp_vis)
+showLocalRetest = input.bool(false, "Lokale Retest-Linie zusaetzlich anzeigen", group=grp_vis)
+showDashboard = input.bool(true, "Info-Box anzeigen", group=grp_vis)
+showSignals = input.bool(true, "Getrennte Schlusskurs-Ereignisse markieren", group=grp_vis)
+lowRiskLimit = input.float(6.0, "Kleiner Linienabstand bis (%)", minval=0.1, maxval=25, group=grp_vis)
+dashboardMode = input.string("Kompakt", "Info-Box Ansicht", options=["Kompakt", "Details"], group=grp_vis, display=display.none)
+dashboardWidth = input.int(32, "Breite kompakte Info-Box (% des Charts)", minval=25, maxval=45, group=grp_vis, display=display.none)
+dashboardPosition = input.string("Automatisch", "Position Info-Box", options=["Automatisch", "Rechts unten", "Rechts oben", "Links oben"], group=grp_vis, display=display.none, tooltip="Automatisch: Kurs in der oberen Haelfte des sichtbaren Kerzenbereichs -> Box unten, sonst oben. So bleiben die juengsten Kerzen moeglichst frei.")
+dashboardTextSize = input.string("Normal", "Schriftgroesse Detail-Box", options=["Normal", "Gross", "Sehr gross"], group=grp_vis, display=display.none)
+labelTextSize = input.string("Normal", "Schriftgroesse Linien-Boxen", options=["Normal", "Gross"], group=grp_vis, display=display.none)
+retestWidth = input.int(3, "Staerke orangener Retest-Linien", minval=2, maxval=5, group=grp_vis, display=display.none)
+string dashboardFont = dashboardTextSize == "Sehr gross" ? size.huge : (dashboardTextSize == "Gross" ? size.large : size.normal)
+string labelFont = labelTextSize == "Gross" ? size.large : size.normal
+
+int DAY = 86400000
+float chartSeconds = timeframe.in_seconds()
+bool isDay = chartSeconds == 86400
+bool isFour = chartSeconds == 14400
+bool hasLocal = not isDay and not isFour
+string localName = timeframe.isintraday ? (chartSeconds >= 3600 and chartSeconds % 3600 == 0 ? str.tostring(chartSeconds / 3600, "#") + "h" : timeframe.period + (timeframe.isseconds ? "s" : "m")) : timeframe.period
+if not chart.is_standard or na(chartSeconds)
+    runtime.error("Tori v5: Zeitbasierte Standardkerzen verwenden (keine Tick-, Renko- oder sonstigen synthetischen Charts).")
+
+// Sichtbare Kerzen ausschliesslich fuer die Platzierung der Info-Box.
+var float visibleHigh = na
+var float visibleLow = na
+if time == chart.left_visible_bar_time
+    visibleHigh := high
+    visibleLow := low
+else if time >= chart.left_visible_bar_time and time <= chart.right_visible_bar_time
+    visibleHigh := math.max(nz(visibleHigh, high), high)
+    visibleLow := math.min(nz(visibleLow, low), low)
+
+f_windowStart(int sourceClose, string tfName) =>
+    int midnight = timestamp(syminfo.timezone, year(sourceClose, syminfo.timezone), month(sourceClose, syminfo.timezone), dayofmonth(sourceClose, syminfo.timezone), 0, 0)
+    commonStart > 0 ? commonStart : midnight - (tfName == "Chart" ? localDays : lookbackDays) * DAY
+
+type SourceBars
+    array<int> t
+    array<int> tc
+    array<float> h
+    array<float> l
+    array<float> c
+
+type TrendRay
+    int aTime
+    float aPrice
+    int bTime
+    float bPrice
+    float slope
+    int contacts
+    float spanDays
+    bool valid
+    bool qualified
+
+type BreakEvent
+    int barTime
+    int closedAt
+    float eventClose
+    int code
+    TrendRay red
+    TrendRay green
+    int windowStart
+    bool partial
+
+type Snapshot
+    array<TrendRay> redRays
+    array<TrendRay> greenRays
+    TrendRay red
+    TrendRay green
+    TrendRay brokenRed
+    int brokenTime
+    int eventTime
+    string eventText
+    int eventCode
+    int sourceClose
+    int windowStart
+    bool partial
+    string issue
+    int redTotal
+    int greenTotal
+    int referenceClose
+    array<BreakEvent> events
+    int searchedBars
+
+// Nur aktuelle Historienpakete kopieren: vermeidet unnoetige MTF-Speicherkopien.
+f_data() =>
+    var array<int> ts = array.new_int()
+    var array<int> tcs = array.new_int()
+    var array<float> hs = array.new_float()
+    var array<float> ls = array.new_float()
+    var array<float> cs = array.new_float()
+    array.push(ts, time)
+    array.push(tcs, time_close)
+    array.push(hs, high)
+    array.push(ls, low)
+    array.push(cs, close)
+    if array.size(ts) > 4500
+        array.shift(ts)
+        array.shift(tcs)
+        array.shift(hs)
+        array.shift(ls)
+        array.shift(cs)
+    SourceBars result = na
+    // Quellkerzen statt Kalendertage: funktioniert auch nach Feiertagen / DST.
+    if bar_index >= last_bar_index - 2
+        result := SourceBars.new(array.copy(ts), array.copy(tcs), array.copy(hs), array.copy(ls), array.copy(cs))
+    result
+
+f_value(TrendRay ray, int timestamp) =>
+    float value = na
+    if not na(ray)
+        value := ray.aPrice + ray.slope * float(timestamp - ray.aTime)
+    value
+
+f_cut(float value, float level, bool upper) =>
+    bool result = false
+    if not na(level)
+        float epsilon = math.max(syminfo.mintick * 0.000001, math.abs(level) * 0.0000000001)
+        result := upper ? value > level + epsilon : value < level - epsilon
+    result
+
+f_touch(float value, float level) =>
+    float epsilon = math.max(syminfo.mintick * 0.000001, math.abs(level) * 0.0000000001)
+    not na(level) and math.abs(value - level) <= math.max(syminfo.mintick * touchToleranceTicks, epsilon)
+
+f_end(SourceBars data, int cutoff) =>
+    int ending = -1
+    if not na(data)
+        if array.size(data.t) > 0
+            for i = array.size(data.t) - 1 to 0
+                if array.get(data.tc, i) <= cutoff
+                    ending := i
+                    break
+    ending
+
+f_level(SourceBars data, int index, bool upper) =>
+    upper ? array.get(data.h, index) : array.get(data.l, index)
+
+f_slope(SourceBars data, int a, int b, bool upper) =>
+    (f_level(data, b, upper) - f_level(data, a, upper)) / float(array.get(data.t, b) - array.get(data.t, a))
+
+f_ray(SourceBars data, int a, int b, int ending, bool upper, bool manual, float av, float bv) =>
+    int at = array.get(data.t, a)
+    int bt = array.get(data.t, b)
+    float slope = (bv - av) / float(bt - at)
+    int touches = 0
+    int firstTouch = na
+    int lastTouch = na
+    bool valid = upper ? slope < 0 : slope > 0
+    // Hull garantiert die schnittfreie Verlaengerung; Kontaktintervalle teilen
+    // die Kette auf. Manuelle Geraden muessen bis zur letzten Kerze geprueft werden.
+    int statEnd = manual ? ending : b
+    for i = a to statEnd
+        int timestamp = array.get(data.t, i)
+        float level = av + slope * float(timestamp - at)
+        float wick = f_level(data, i, upper)
+        if f_cut(wick, level, upper)
+            valid := false
+        if f_touch(wick, level)
+            touches += 1
+            if na(firstTouch)
+                firstTouch := timestamp
+            lastTouch := timestamp
+    float span = not na(firstTouch) and not na(lastTouch) ? float(lastTouch - firstTouch) / DAY : 0.0
+    TrendRay.new(at, av, bt, bv, slope, touches, span, valid, valid and touches >= minTouches and span >= minSpanDays)
+
+f_build(SourceBars data, int ending, bool upper, int skipCount, int analysisStart) =>
+    array<TrendRay> rays = array.new<TrendRay>()
+    int cutoff = analysisStart
+    int start = ending
+    for i = ending to 0
+        if array.get(data.t, i) < cutoff
+            break
+        start := i
+    if start < ending
+        int anchor = start
+        float extreme = f_level(data, start, upper)
+        for i = start to ending
+            float v = f_level(data, i, upper)
+            if upper ? v > extreme : v < extreme
+                extreme := v
+                anchor := i
+        array<int> hull = array.new_int()
+        array.push(hull, anchor)
+        if anchor < ending
+            for i = anchor + 1 to ending
+                while array.size(hull) >= 2
+                    int a = array.get(hull, array.size(hull) - 2)
+                    int b = array.get(hull, array.size(hull) - 1)
+                    float oldSlope = f_slope(data, a, b, upper)
+                    float newSlope = f_slope(data, b, i, upper)
+                    if not (upper ? newSlope >= oldSlope : newSlope <= oldSlope)
+                        break
+                    array.pop(hull)
+                array.push(hull, i)
+        if array.size(hull) > 1
+            for j = 0 to array.size(hull) - 2
+                int a = array.get(hull, j)
+                int b = array.get(hull, j + 1)
+                float slope = f_slope(data, a, b, upper)
+                bool directionOK = upper ? slope < 0 : slope > 0
+                bool pullbackOK = ending - b >= pullbackBars
+                if pullbackOK and pullbackBars > 0
+                    for k = 1 to pullbackBars
+                        if upper ? f_level(data, b + k, upper) >= f_level(data, b, upper) : f_level(data, b + k, upper) <= f_level(data, b, upper)
+                            pullbackOK := false
+                if not directionOK or not pullbackOK
+                    break
+                array.push(rays, f_ray(data, a, b, ending, upper, false, f_level(data, a, upper), f_level(data, b, upper)))
+        if skipCount > 0
+            for s = 1 to skipCount
+                if array.size(rays) > 1
+                    array.pop(rays)
+    rays
+
+f_choose(array<TrendRay> rays, string chosenSelection) =>
+    TrendRay chosen = na
+    float bestScore = -1.0
+    bool qualifiedFound = false
+    if array.size(rays) > 0
+        for i = 0 to array.size(rays) - 1
+            TrendRay ray = array.get(rays, i)
+            float score = math.min(float(ray.contacts) / minTouches, 1.0) + math.min(ray.spanDays / minSpanDays, 1.0)
+            if chosenSelection == "Innerste bestaetigte Linie"
+                chosen := ray
+            else if ray.qualified
+                chosen := ray
+                qualifiedFound := true
+            else if not qualifiedFound and score >= bestScore
+                chosen := ray
+                bestScore := score
+    chosen
+
+f_point(SourceBars data, int ending, int timestamp) =>
+    int index = -1
+    if timestamp > 0
+        for i = ending to 0
+            if array.get(data.t, i) <= timestamp and timestamp < array.get(data.tc, i)
+                index := i
+                break
+    index
+
+f_manual(SourceBars data, int ending, bool upper) =>
+    int a = f_point(data, ending, upper ? manRedTimeA : manGreenTimeA)
+    int b = f_point(data, ending, upper ? manRedTimeB : manGreenTimeB)
+    TrendRay ray = na
+    if a >= 0 and b >= 0 and a != b
+        float av = snapToWick ? f_level(data, a, upper) : (upper ? manRedPriceA : manGreenPriceA)
+        float bv = snapToWick ? f_level(data, b, upper) : (upper ? manRedPriceB : manGreenPriceB)
+        if a > b
+            int swapIndex = a
+            a := b
+            b := swapIndex
+            float swapValue = av
+            av := bv
+            bv := swapValue
+        if av > 0 and bv > 0
+            float slope = (bv - av) / float(array.get(data.t, b) - array.get(data.t, a))
+            if upper ? slope < 0 : slope > 0
+                ray := f_ray(data, a, b, ending, upper, true, av, bv)
+    ray
+
+f_pair(SourceBars data, int ending, string tfName) =>
+    int analysisStart = f_windowStart(array.get(data.tc, ending), tfName)
+    string chosenSelection = tfName == "Chart" ? localSelection : selection
+    array<TrendRay> reds = f_build(data, ending, true, skipLastDown, analysisStart)
+    array<TrendRay> greens = f_build(data, ending, false, skipLastUp, analysisStart)
+    TrendRay red = f_choose(reds, chosenSelection)
+    TrendRay green = f_choose(greens, chosenSelection)
+    string issue = ""
+    if manualTF == tfName or (manualTF == "Chart" and ((isDay and tfName == "1D") or (isFour and tfName == "4h")))
+        if useManualRed
+            red := f_manual(data, ending, true)
+            if na(red)
+                issue := "Rot: manuelle Punkte fehlen / Richtung ungueltig"
+        if useManualGreen
+            green := f_manual(data, ending, false)
+            if na(green)
+                issue := "Gruen: manuelle Punkte fehlen / Richtung ungueltig"
+    Snapshot.new(reds, greens, red, green, na, na, na, "Kein Bruch im geprueften Zeitraum", 0, array.get(data.tc, ending), analysisStart, array.get(data.t, 0) > analysisStart, issue, array.size(reds), array.size(greens), array.get(data.tc, ending), array.new<BreakEvent>(), 0)
+
+f_visible(array<TrendRay> rays, TrendRay active) =>
+    array<TrendRay> visible = array.new<TrendRay>()
+    if not na(active)
+        int selected = -1
+        if array.size(rays) > 0
+            for i = 0 to array.size(rays) - 1
+                TrendRay candidate = array.get(rays, i)
+                if candidate.aTime == active.aTime and candidate.bTime == active.bTime
+                    selected := i
+        if selected >= 0
+            for i = math.max(0, selected - maxSegments + 1) to selected
+                array.push(visible, array.get(rays, i))
+        else
+            array.push(visible, active)
+    visible
+
+f_analyze(SourceBars data, int ending, string tfName, bool freeze) =>
+    int referenceEnd = freeze ? (lockTime > 0 ? f_end(data, lockTime) : -1) : ending
+    if freeze and lockTime > timenow
+        referenceEnd := -1
+    Snapshot result = na
+    array<BreakEvent> events = array.new<BreakEvent>()
+    if referenceEnd >= 1
+        int windowFirst = f_end(data, f_windowStart(array.get(data.tc, referenceEnd), tfName))
+        int windowSize = referenceEnd - math.max(windowFirst, 0) + 1
+        int searchBudget = math.min(eventBars, math.max(1, int(4000 / math.max(1, windowSize))))
+        int first = freeze ? referenceEnd : math.max(1, ending - searchBudget)
+        Snapshot previous = f_pair(data, first, tfName)
+        TrendRay broken = na
+        int brokenTime = na
+        int eventTime = na
+        string eventText = "Kein Bruch im geprueften Zeitraum"
+        int eventCode = 0
+        bool redWasCut = not na(previous.red) and not previous.red.valid
+        bool greenWasCut = not na(previous.green) and not previous.green.valid
+        if first < ending
+            for i = first + 1 to ending
+                int nowTime = array.get(data.t, i)
+                int prevTime = array.get(data.t, i - 1)
+                float nowClose = array.get(data.c, i)
+                float prevClose = array.get(data.c, i - 1)
+                TrendRay red = previous.red
+                TrendRay green = previous.green
+                float rn = f_value(red, nowTime)
+                float rp = f_value(red, prevTime)
+                float gn = f_value(green, nowTime)
+                float gp = f_value(green, prevTime)
+                bool redBreak = not na(red) and not redWasCut and nowClose > rn and prevClose <= rp
+                bool exitBreak = not na(green) and nowClose < gn and prevClose >= gp
+                bool safetyCut = greenWasCut or f_cut(array.get(data.l, i), gn, false)
+                bool ordered = not na(red) and not na(green) and gn > 0 and gn < rn
+                bool qualityOK = not requireQuality or (not na(red) and not na(green) and red.qualified and green.qualified)
+                if exitBreak
+                    eventTime := array.get(data.tc, i)
+                    eventText := "Gruen Schluss-Bruch @ " + str.tostring(gn, format.mintick)
+                    eventCode := -1
+                else if redBreak
+                    eventTime := array.get(data.tc, i)
+                    bool longOK = ordered and not safetyCut and qualityOK and not previous.partial
+                    eventText := (longOK ? "Long-Bruch @ " : "Rot-Bruch, Filter nicht erfuellt @ ") + str.tostring(rn, format.mintick)
+                    eventCode := longOK ? 1 : 2
+                if redBreak
+                    array.push(events, BreakEvent.new(nowTime, array.get(data.tc, i), nowClose, ordered and not safetyCut and qualityOK and not previous.partial ? 1 : 2, red.copy(), na(green) ? na : green.copy(), previous.windowStart, previous.partial))
+                    broken := red.copy()
+                    brokenTime := array.get(data.tc, i)
+                if freeze
+                    redWasCut := redWasCut or f_cut(array.get(data.h, i), rn, true)
+                    greenWasCut := safetyCut
+                else
+                    previous := f_pair(data, i, tfName)
+                    redWasCut := not na(previous.red) and not previous.red.valid
+                    greenWasCut := not na(previous.green) and not previous.green.valid
+        result := previous
+        if freeze
+            if not na(result.red)
+                result.red.valid := not redWasCut
+            if not na(result.green)
+                result.green.valid := not greenWasCut
+        result.brokenRed := broken
+        result.brokenTime := brokenTime
+        result.eventTime := eventTime
+        result.eventText := eventText
+        result.eventCode := eventCode
+        result.events := events
+        result.searchedBars := freeze ? ending - referenceEnd : ending - first
+        result.sourceClose := array.get(data.tc, ending)
+        result.redRays := f_visible(result.redRays, result.red)
+        result.greenRays := f_visible(result.greenRays, result.green)
+    result
+
+// Jede Quelle besitzt ihre eigene Historie, unabhaengig vom sichtbaren Chart.
+// Hoehere TF: bestaetigte [1]-Pakete; gleiche/niedrigere TF: Intrabar-Pakete.
+string sourceTicker = ticker.modify(syminfo.tickerid, session=session.regular)
+f_source(string tf) =>
+    SourceBars result = na
+    if timeframe.in_seconds(tf) > chartSeconds
+        result := request.security(sourceTicker, tf, f_data()[1], lookahead=barmerge.lookahead_on, calc_bars_count=5000)
+    else
+        array<SourceBars> packets = request.security_lower_tf(sourceTicker, tf, f_data()[1], calc_bars_count=5000)
+        if array.size(packets) > 0
+            for i = array.size(packets) - 1 to 0
+                SourceBars packet = array.get(packets, i)
+                if not na(packet)
+                    result := packet
+                    break
+    result
+
+SourceBars dayData = f_source("1D")
+SourceBars fourData = f_source("240")
+SourceBars localData = hasLocal ? f_source(timeframe.period) : na
+
+varip Snapshot daySnap = na
+varip Snapshot fourSnap = na
+varip Snapshot localSnap = na
+varip Snapshot selectedHistory = na
+varip int localVersion = na
+varip int historyVersion = na
+varip int dayVersion = na
+varip int fourVersion = na
+varip int seenDayEvent = na
+varip int seenFourEvent = na
+bool dayLong = false
+bool fourLong = false
+bool dayExit = false
+bool fourExit = false
+bool localLong = false
+bool localExit = false
+varip int seenLocalEvent = na
+varip bool localLongMark = false
+varip bool localExitMark = false
+varip bool dayLongMark = false
+varip bool fourLongMark = false
+varip bool dayExitMark = false
+varip bool fourExitMark = false
+if barstate.isnew
+    dayLongMark := false
+    fourLongMark := false
+    dayExitMark := false
+    fourExitMark := false
+    localLongMark := false
+    localExitMark := false
+
+var array<line> drawings = array.new_line()
+var array<label> labels = array.new_label()
+var table info = table.new(dashboardPosition == "Rechts unten" ? position.bottom_right : (dashboardPosition == "Links oben" ? position.top_left : position.top_right), 4, 11, border_width=1)
+var table historyInfo = table.new(position.bottom_left, 1, 2, border_width=0)
+if barstate.isfirst
+    for i = 0 to 79
+        array.push(drawings, line.new(na, na, na, na, xloc=xloc.bar_time))
+    for i = 0 to 19
+        array.push(labels, label.new(na, na, "", xloc=xloc.bar_time, size=size.tiny))
+
+
+f_drawRay(line drawing, TrendRay ray, bool upper, int lane, bool active, bool broken) =>
+    if not na(ray)
+        color base = broken ? #e87500 : (upper ? #ff1744 : #00b85c)
+        int transparency = broken ? 0 : (active ? (ray.qualified or lane == 2 ? 0 : 30) : 78)
+        // Alte Quellanker koennen ausserhalb der geladenen Chartkerzen liegen.
+        // Den sichtbaren Abschnitt aus derselben Zeitgeraden projizieren.
+        int drawStart = math.max(ray.aTime, chart.left_visible_bar_time)
+        int drawEnd = math.max(time, ray.bTime)
+        if drawEnd <= drawStart
+            drawEnd := drawStart + 1
+        line.set_xy1(drawing, drawStart, f_value(ray, drawStart))
+        line.set_xy2(drawing, drawEnd, f_value(ray, drawEnd))
+        line.set_extend(drawing, extend.right)
+        line.set_color(drawing, color.new(base, transparency))
+        line.set_width(drawing, broken ? retestWidth : (active ? (lane == 0 ? 3 : 2) : 1))
+        line.set_style(drawing, broken ? (lane == 0 ? line.style_dotted : line.style_dashed) : (lane == 0 ? line.style_solid : (lane == 1 ? line.style_dashed : line.style_dotted)))
+
+f_anchor(label dotA, label dotB, TrendRay ray, string tfName, bool upper) =>
+    if showPivotDots and not na(ray)
+        color col = upper ? #ff1744 : #00b85c
+        label.set_xy(dotA, ray.aTime, ray.aPrice)
+        label.set_text(dotA, tfName + " A")
+        label.set_style(dotA, label.style_circle)
+        label.set_size(dotA, size.small)
+        label.set_color(dotA, col)
+        label.set_textcolor(dotA, color.white)
+        label.set_xy(dotB, ray.bTime, ray.bPrice)
+        label.set_text(dotB, tfName + (upper ? " Rot" : " Gruen") + (ray.qualified ? " | qualifiziert" : " | vorlaeufig") + "\n" + str.tostring(ray.contacts) + " Kontakte / " + str.tostring(ray.spanDays, "#.0") + " Tage")
+        label.set_style(dotB, tfName == "1D" ? label.style_label_lower_right : (tfName == "4h" ? label.style_label_upper_right : (upper ? label.style_label_down : label.style_label_up)))
+        label.set_size(dotB, labelFont)
+        label.set_color(dotB, upper ? #c91c3b : #006b39)
+        label.set_textcolor(dotB, color.white)
+        label.set_tooltip(dotB, "A: " + str.format_time(ray.aTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(ray.aPrice, format.mintick) + "\nB: " + str.format_time(ray.bTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(ray.bPrice, format.mintick))
+        if tfName != "1D" and tfName != "4h"
+            // Lokale Beschriftung an der aktuellen Projektion statt ueber einer Retest-Box.
+            label.set_xy(dotB, time, f_value(ray, time))
+            label.set_style(dotB, label.style_label_right)
+
+f_drawSet(Snapshot snap, int lane, string name, bool enabled) =>
+    if enabled and not na(snap)
+        int base = lane * 24
+        int labelBase = lane * 5
+        int redCount = array.size(snap.redRays)
+        int greenCount = array.size(snap.greenRays)
+        if redCount > 0
+            for i = 0 to redCount - 1
+                bool active = i == redCount - 1
+                if active or showOuterLines
+                    f_drawRay(array.get(drawings, base + i), array.get(snap.redRays, i), true, lane, active, false)
+        if greenCount > 0
+            for i = 0 to greenCount - 1
+                bool active = i == greenCount - 1
+                if active or showOuterLines
+                    f_drawRay(array.get(drawings, base + 12 + i), array.get(snap.greenRays, i), false, lane, active, false)
+        f_anchor(array.get(labels, labelBase), array.get(labels, labelBase + 1), snap.red, name, true)
+        f_anchor(array.get(labels, labelBase + 2), array.get(labels, labelBase + 3), snap.green, name, false)
+        bool historyLane = showHistory and (historyTF == name or (historyTF == "Chart" and (lane == 2 or (isDay and lane == 0) or (isFour and lane == 1))))
+        bool historyAvailable = historyAt > 0 ? (not na(selectedHistory) and array.size(selectedHistory.events) >= historyOffset) : array.size(snap.events) >= historyOffset
+        if showRetest and not (historyLane and historyAvailable) and (lane != 2 or showLocalRetest) and not na(snap.brokenRed) and snap.sourceClose - snap.brokenTime <= retestDays * DAY
+            f_drawRay(array.get(drawings, 72 + lane), snap.brokenRed, true, lane, false, true)
+            label retest = array.get(labels, lane * 5 + 4)
+            int eventBarTime = snap.brokenTime
+            if array.size(snap.events) > 0
+                eventBarTime := array.get(snap.events, array.size(snap.events) - 1).barTime
+            label.set_xy(retest, eventBarTime, f_value(snap.brokenRed, eventBarTime))
+            label.set_text(retest, name + " Retest-Linie\nBruch: " + str.format_time(snap.brokenTime, "dd.MM HH:mm", syminfo.timezone))
+            label.set_size(retest, labelFont)
+            label.set_color(retest, #ffb454)
+            label.set_textcolor(retest, #161b22)
+            label.set_style(retest, lane == 0 ? label.style_label_lower_right : (lane == 1 ? label.style_label_upper_right : label.style_label_right))
+
+f_quality(TrendRay ray) =>
+    na(ray) ? "Keine Linie" : (not ray.valid ? "WICK VERLETZT | " : "") + str.tostring(ray.contacts) + "K / " + str.tostring(ray.spanDays, "#.0") + "T | " + (ray.qualified and ray.valid ? "qualifiziert" : "vorlaeufig")
+
+f_status(Snapshot snap, int referenceTime, bool ownTF) =>
+    string result = lockLines ? "Snapshot fehlt / Zeitpunkt pruefen" : "Quellhistorie nicht verfuegbar"
+    if not na(snap)
+        float r = f_value(snap.red, referenceTime)
+        float g = f_value(snap.green, referenceTime)
+        if snap.issue != ""
+            result := snap.issue
+        else if not na(snap.green) and (not snap.green.valid or (ownTF and f_cut(low, f_value(snap.green, time), false)))
+            result := "Gruene Wick-Regel verletzt" + (ownTF and not barstate.isconfirmed ? " (intrabar)" : "")
+        else if na(r) or na(g)
+            result := "Kein vollstaendiges Linienpaar"
+        else if g >= r
+            result := "Linien gekreuzt / kein Keil"
+        else if not snap.red.valid or (ownTF and f_cut(high, f_value(snap.red, time), true))
+            result := "Rote Wick-Regel verletzt" + (ownTF and not barstate.isconfirmed ? " (intrabar)" : "")
+        else
+            result := (lockLines ? "Eingefroren | " : "") + (snap.red.qualified and snap.green.qualified ? "Qualifiziertes Linienpaar" : "Vorlaeufiges Linienpaar")
+    result
+
+f_cell(int column, int row, string cellText, color foreground) =>
+    table.cell(info, column, row, cellText, bgcolor=#1e222d, text_color=foreground, text_size=dashboardFont, text_halign=column == 0 ? text.align_left : text.align_right)
+
+f_column(Snapshot snap, int column, string tfName, int referenceTime, bool ownTF) =>
+    f_cell(column, 0, tfName + (lockLines ? " | FIX" : " | geschlossen"), color.white)
+    float r = na(snap) ? na : f_value(snap.red, referenceTime)
+    float g = na(snap) ? na : f_value(snap.green, referenceTime)
+    f_cell(column, 1, na(r) ? "—" : str.tostring(r, format.mintick), #ff5252)
+    f_cell(column, 2, na(g) ? "—" : str.tostring(g, format.mintick), #00e676)
+    float distance = not na(g) and g > 0 and close > 0 and close >= g ? (close - g) / close * 100.0 : na
+    string distanceText = na(g) ? "Keine Safety" : (close < g ? "Unter Gruen" : str.tostring(distance, "#.##") + "%" + (distance <= lowRiskLimit ? " | nah" : " | weit"))
+    f_cell(column, 3, distanceText, color.white)
+    f_cell(column, 4, f_status(snap, referenceTime, ownTF), color.white)
+    f_cell(column, 5, na(snap) ? "—" : f_quality(snap.red), #ff5252)
+    f_cell(column, 6, na(snap) ? "—" : f_quality(snap.green), #00e676)
+    string eventText = na(snap) ? "—" : snap.eventText
+    if not na(snap) and not na(snap.eventTime)
+        eventText += "\n" + str.format_time(snap.eventTime, "dd.MM HH:mm", syminfo.timezone)
+    f_cell(column, 7, eventText, color.silver)
+    f_cell(column, 8, na(snap) ? "—" : str.format_time(snap.windowStart, "dd.MM.yy", syminfo.timezone) + (snap.partial ? " | Historie begrenzt" : ""), color.silver)
+    f_cell(column, 9, na(snap) ? "—" : str.format_time(snap.sourceClose, "dd.MM HH:mm", syminfo.timezone), color.silver)
+    string stand = "—"
+    if not na(snap)
+        stand := str.format_time(snap.referenceClose, "dd.MM HH:mm", syminfo.timezone) + " | R " + str.tostring(array.size(snap.redRays)) + "/" + str.tostring(snap.redTotal) + " G " + str.tostring(array.size(snap.greenRays)) + "/" + str.tostring(snap.greenTotal)
+    f_cell(column, 10, stand, color.silver)
+
+// Die Standardansicht begrenzt die Breite und zeigt nur die Kerninformationen.
+// Vollstaendige Zustands- und Ereignistexte stehen in den Zellen-Tooltips.
+f_compactCell(int column, int row, string cellText, color foreground, string tip) =>
+    float cellWidth = dashboardWidth * (column == 0 ? 0.20 : 0.80 / (hasLocal ? 3 : 2))
+    table.cell(info, column, row, cellText, width=cellWidth, bgcolor=#1e222d, text_color=foreground, text_size=size.normal, text_halign=column == 0 ? text.align_left : text.align_right, tooltip=tip)
+
+f_compactColumn(Snapshot snap, int column, string tfName, int referenceTime, bool ownTF) =>
+    string history = na(snap) ? "Keine Quellhistorie" : "Quellschluss: " + str.format_time(snap.sourceClose, "dd.MM.yy HH:mm", syminfo.timezone) + "\nLinienstand: " + str.format_time(snap.referenceClose, "dd.MM.yy HH:mm", syminfo.timezone) + "\nAnalyse ab: " + str.format_time(snap.windowStart, "dd.MM.yy", syminfo.timezone) + "\nBruchsuche: " + str.tostring(snap.searchedBars) + " Quellkerzen" + (snap.partial ? "\nHistorie begrenzt" : "")
+    f_compactCell(column, 0, tfName + (lockLines ? " FIX" : " Schluss"), color.white, history)
+    float r = na(snap) ? na : f_value(snap.red, referenceTime)
+    float g = na(snap) ? na : f_value(snap.green, referenceTime)
+    f_compactCell(column, 1, na(r) ? "—" : str.tostring(r, format.mintick), #ff5252, "Rote Linie am gemeinsamen Referenzzeitpunkt")
+    f_compactCell(column, 2, na(g) ? "—" : str.tostring(g, format.mintick), #00e676, "Gruene Linie am gemeinsamen Referenzzeitpunkt")
+    float distance = not na(g) and g > 0 and close > 0 and close >= g ? (close - g) / close * 100.0 : na
+    f_compactCell(column, 3, na(g) ? "—" : (close < g ? "Unter Gruen" : str.tostring(distance, "#.##") + "%"), color.white, "Abstand zur gruenen Linie, kein Gesamtrisiko")
+    string status = f_status(snap, referenceTime, ownTF)
+    string brief = "Vorlaeufig"
+    if na(snap)
+        brief := "Daten fehlen"
+    else if snap.issue != ""
+        brief := "Daten pruefen"
+    else if str.contains(status, "Gruene Wick")
+        brief := "Gruen verletzt"
+    else if str.contains(status, "Rote Wick")
+        brief := "Rot verletzt"
+    else if str.contains(status, "gekreuzt")
+        brief := "Gekreuzt"
+    else if str.contains(status, "Kein vollstaendiges")
+        brief := "Paar fehlt"
+    else if str.contains(status, "Qualifiziertes")
+        brief := "Qualifiziert"
+    if str.contains(status, "intrabar")
+        brief += "\nintrabar"
+    if not na(snap) and snap.partial
+        brief += "\nDaten begrenzt"
+    f_compactCell(column, 4, brief, color.white, status + (not na(snap) and snap.partial ? "\nRueckblick laenger als verfuegbare Quellhistorie" : ""))
+    string quality = na(snap) ? "—" : "R: " + (na(snap.red) ? "—" : str.tostring(snap.red.contacts)) + " / G: " + (na(snap.green) ? "—" : str.tostring(snap.green.contacts))
+    string qualityTip = na(snap) ? "Keine Linien" : "Rot: " + f_quality(snap.red) + "\nGruen: " + f_quality(snap.green) + "\nR = Rot, G = Gruen; Kontaktanzahl allein bestaetigt keine qualifizierte Linie."
+    f_compactCell(column, 5, quality, color.silver, qualityTip)
+    string eventBrief = na(snap) or na(snap.eventTime) ? "Kein Bruch" : (snap.eventCode == -1 ? "Gruen gebrochen" : (snap.eventCode == 1 ? "Long-Bruch" : "Rot, Filter fehlt")) + "\n" + str.format_time(snap.eventTime, "dd.MM HH:mm", syminfo.timezone)
+    string eventTip = na(snap) ? "Keine Ereignisse" : snap.eventText + (na(snap.eventTime) ? "" : "\n" + str.format_time(snap.eventTime, "dd.MM.yy HH:mm", syminfo.timezone)) + "\nBruchsuche: " + str.tostring(snap.searchedBars) + " Quellkerzen"
+    f_compactCell(column, 6, eventBrief, color.silver, eventTip)
+
+if barstate.islast or barstate.islastconfirmedhistory
+    int dEnd = f_end(dayData, timenow)
+    int hEnd = f_end(fourData, timenow)
+    int lEnd = f_end(localData, timenow)
+    int dKey = dEnd >= 1 ? array.get(dayData.tc, dEnd) : na
+    int hKey = hEnd >= 1 ? array.get(fourData.tc, hEnd) : na
+    int lKey = lEnd >= 1 ? array.get(localData.tc, lEnd) : na
+    if not na(dKey) and (na(dayVersion) or dKey != dayVersion)
+        daySnap := f_analyze(dayData, dEnd, "1D", lockLines)
+        dayVersion := dKey
+    if not na(hKey) and (na(fourVersion) or hKey != fourVersion)
+        fourSnap := f_analyze(fourData, hEnd, "4h", lockLines)
+        fourVersion := hKey
+    if not na(lKey) and (na(localVersion) or lKey != localVersion)
+        localSnap := f_analyze(localData, lEnd, "Chart", lockLines)
+        localVersion := lKey
+    if showHistory and historyAt > 0 and na(historyVersion)
+        SourceBars historyData = historyTF == "1D" ? dayData : (historyTF == "4h" ? fourData : (isDay ? dayData : (isFour ? fourData : localData)))
+        int historicalEnd = f_end(historyData, historyAt)
+        if historicalEnd >= 1 and historyAt <= timenow
+            selectedHistory := f_analyze(historyData, historicalEnd, historyTF == "Chart" ? (isDay ? "1D" : (isFour ? "4h" : "Chart")) : historyTF, false)
+            historyVersion := array.get(historyData.tc, historicalEnd)
+    if barstate.isrealtime
+        if not na(daySnap) and not na(daySnap.eventTime) and (na(seenDayEvent) or daySnap.eventTime != seenDayEvent)
+            dayLong := daySnap.eventCode == 1 and daySnap.eventTime == daySnap.sourceClose
+            dayExit := daySnap.eventCode == -1 and daySnap.eventTime == daySnap.sourceClose
+            seenDayEvent := daySnap.eventTime
+        if not na(fourSnap) and not na(fourSnap.eventTime) and (na(seenFourEvent) or fourSnap.eventTime != seenFourEvent)
+            fourLong := fourSnap.eventCode == 1 and fourSnap.eventTime == fourSnap.sourceClose
+            fourExit := fourSnap.eventCode == -1 and fourSnap.eventTime == fourSnap.sourceClose
+            seenFourEvent := fourSnap.eventTime
+        if not na(localSnap) and not na(localSnap.eventTime) and (na(seenLocalEvent) or localSnap.eventTime != seenLocalEvent)
+            localLong := localSnap.eventCode == 1 and localSnap.eventTime == localSnap.sourceClose
+            localExit := localSnap.eventCode == -1 and localSnap.eventTime == localSnap.sourceClose
+            seenLocalEvent := localSnap.eventTime
+    else
+        seenDayEvent := na(daySnap) ? na : daySnap.eventTime
+        seenFourEvent := na(fourSnap) ? na : fourSnap.eventTime
+        seenLocalEvent := na(localSnap) ? na : localSnap.eventTime
+
+if barstate.islast
+    if dashboardPosition == "Automatisch"
+        table.set_position(info, close > math.avg(nz(visibleHigh, high), nz(visibleLow, low)) ? position.bottom_right : position.top_right)
+    for i = 0 to 79
+        line.set_xy1(array.get(drawings, i), na, na)
+        line.set_xy2(array.get(drawings, i), na, na)
+    for i = 0 to 19
+        label.set_xy(array.get(labels, i), na, na)
+    f_drawSet(daySnap, 0, "1D", showDay)
+    f_drawSet(fourSnap, 1, "4h", showFour)
+    f_drawSet(localSnap, 2, localName, hasLocal and showLocal)
+    int referenceTime = not na(fourVersion) ? fourVersion : (not na(dayVersion) ? dayVersion : time)
+    table.clear(info, 0, 0, 3, 10)
+    if showDashboard and dashboardMode == "Kompakt"
+        f_compactCell(0, 0, "Tori v5", color.white, syminfo.ticker + " | Details per Mauszeiger ueber einer Zelle oder ueber Info-Box Ansicht: Details")
+        f_compactCell(0, 1, "Rot", color.white, "Rote Linie am Referenzzeitpunkt")
+        f_compactCell(0, 2, "Gruen", color.white, "Gruene Linie am Referenzzeitpunkt")
+        f_compactCell(0, 3, "Abstand", color.white, "Abstand zur gruenen Linie, kein Gesamtrisiko")
+        f_compactCell(0, 4, "Zustand", color.white, "Aktueller Linienzustand")
+        f_compactCell(0, 5, "Kontakte", color.white, "R = Rot / G = Gruen. Details inklusive Zeitraum per Mauszeiger.")
+        f_compactCell(0, 6, "Bruch", color.white, "Letzter beobachteter Schlusskursbruch im geprueften Zeitraum")
+        f_compactColumn(daySnap, 1, "1D", referenceTime, isDay)
+        f_compactColumn(fourSnap, 2, "4h", referenceTime, isFour)
+        if hasLocal
+            f_compactColumn(localSnap, 3, localName, nz(localVersion, referenceTime), true)
+    else if showDashboard
+        f_cell(0, 0, "Tori v5 | " + syminfo.ticker, color.white)
+        f_cell(0, 1, "Rot am Referenzzeitpunkt", color.white)
+        f_cell(0, 2, "Gruen am Referenzzeitpunkt", color.white)
+        f_cell(0, 3, "Abstand Gruen (kein Gesamtrisiko)", color.white)
+        f_cell(0, 4, "Linienzustand", color.white)
+        f_cell(0, 5, "Qualitaet Rot", color.white)
+        f_cell(0, 6, "Qualitaet Gruen", color.white)
+        f_cell(0, 7, "Letzter beobachteter Schluss-Bruch", color.white)
+        f_cell(0, 8, "Analyse ab", color.white)
+        f_cell(0, 9, "Letzter Quellschluss", color.white)
+        f_cell(0, 10, "Linienstand | sichtbar / gefunden", color.white)
+        f_column(daySnap, 1, "1D", referenceTime, isDay)
+        f_column(fourSnap, 2, "4h", referenceTime, isFour)
+        if hasLocal
+            f_column(localSnap, 3, localName, nz(localVersion, referenceTime), true)
+
+    table.clear(historyInfo, 0, 0, 0, 1)
+    if showHistory
+        // Abstand zur TradingView-Wortmarke am unteren Chartrand.
+        table.cell(historyInfo, 0, 1, "", height=4, bgcolor=color.new(color.black, 100))
+        Snapshot archive = historyAt > 0 ? selectedHistory : (historyTF == "1D" ? daySnap : (historyTF == "4h" ? fourSnap : (isDay ? daySnap : (isFour ? fourSnap : localSnap))))
+        string archiveName = historyTF == "Chart" ? localName : historyTF
+        int count = na(archive) ? 0 : array.size(archive.events)
+        if count >= historyOffset
+            BreakEvent e = array.get(archive.events, count - historyOffset)
+            f_drawRay(array.get(drawings, 75), e.red, true, 0, false, true)
+            line.set_color(array.get(drawings, 75), #8e44ad)
+            line.set_style(array.get(drawings, 75), line.style_solid)
+            if not na(e.green)
+                f_drawRay(array.get(drawings, 76), e.green, false, 0, true, false)
+                line.set_color(array.get(drawings, 76), #008b9a)
+                line.set_style(array.get(drawings, 76), line.style_dashed)
+            label pin = array.get(labels, 15)
+            label.set_xy(pin, e.barTime, e.eventClose)
+            label.set_text(pin, archiveName + " Bruch FIX\n" + str.format_time(e.closedAt, "dd.MM HH:mm", syminfo.timezone))
+            label.set_style(pin, label.style_label_lower_right)
+            label.set_color(pin, #6a1b9a)
+            label.set_textcolor(pin, color.white)
+            label.set_size(pin, labelFont)
+            string identity = archiveName + " | " + str.format_time(e.closedAt, "dd.MM.yy HH:mm", syminfo.timezone) + (e.code == 1 ? " | qualifiziert" : " | Filter nicht erfuellt")
+            string anchorTip = "Rot A: " + str.format_time(e.red.aTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(e.red.aPrice, format.mintick) + "\nRot B: " + str.format_time(e.red.bTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(e.red.bPrice, format.mintick)
+            if not na(e.green)
+                anchorTip += "\nGruen A: " + str.format_time(e.green.aTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(e.green.aPrice, format.mintick) + "\nGruen B: " + str.format_time(e.green.bTime, "dd.MM.yy HH:mm", syminfo.timezone) + " / " + str.tostring(e.green.bPrice, format.mintick)
+            label.set_tooltip(pin, anchorTip)
+            table.cell(historyInfo, 0, 0, archiveName + " Signal FIX | " + str.format_time(e.closedAt, "dd.MM.yy HH:mm", syminfo.timezone) + (e.code == 1 ? " | qualifiziert" : " | Filter fehlt") + "\nRot violett / damalige Safety tuerkis\nSchluss " + str.tostring(e.eventClose, format.mintick) + (e.partial ? " | Daten begrenzt" : ""), width=40, text_color=color.white, bgcolor=#34223f, text_size=size.normal, text_halign=text.align_left, tooltip=anchorTip)
+        else
+            table.cell(historyInfo, 0, 0, "Signalhistorie " + archiveName + ": kein passender Bruch in " + str.tostring(na(archive) ? 0 : archive.searchedBars) + " Quellkerzen\nZeitpunkt, Bruch zurueck und verfuegbare Daten pruefen.", width=40, text_color=color.white, bgcolor=#34223f, text_size=size.normal)
+
+dayLongMark := dayLongMark or dayLong
+fourLongMark := fourLongMark or fourLong
+dayExitMark := dayExitMark or dayExit
+fourExitMark := fourExitMark or fourExit
+localLongMark := localLongMark or localLong
+localExitMark := localExitMark or localExit
+plotshape(showSignals and dayLongMark, title="1D Long Schluss-Bruch", style=shape.triangleup, location=location.belowbar, color=#00b85c, text="1D", size=size.small)
+plotshape(showSignals and fourLongMark, title="4h Long Schluss-Bruch", style=shape.triangleup, location=location.belowbar, color=#008cff, text="4h", size=size.tiny)
+plotshape(showSignals and dayExitMark, title="1D Gruen Schluss-Bruch", style=shape.triangledown, location=location.abovebar, color=#ff1744, text="1D", size=size.small)
+plotshape(showSignals and fourExitMark, title="4h Gruen Schluss-Bruch", style=shape.triangledown, location=location.abovebar, color=#ff9800, text="4h", size=size.tiny)
+plotshape(showSignals and localLongMark, title="Chart Long Schluss-Bruch", style=shape.triangleup, location=location.belowbar, color=#008b9a, text="L", size=size.tiny)
+plotshape(showSignals and localExitMark, title="Chart Gruen Schluss-Bruch", style=shape.triangledown, location=location.abovebar, color=#e87500, text="L", size=size.tiny)
+alertcondition(dayLong, "Tori 1D: Long Schluss-Bruch", "Bestaetigter 1D-Linienbruch mit gepruefter Safety Line: {{ticker}}")
+alertcondition(fourLong, "Tori 4h: Long Schluss-Bruch", "Bestaetigter 4h-Linienbruch mit gepruefter Safety Line: {{ticker}}")
+alertcondition(dayExit, "Tori 1D: Safety Schluss-Bruch", "Bestaetigter 1D-Schlusskursbruch der gruenen Linie: {{ticker}}")
+alertcondition(fourExit, "Tori 4h: Safety Schluss-Bruch", "Bestaetigter 4h-Schlusskursbruch der gruenen Linie: {{ticker}}")
+
+alertcondition(localLong, "Tori Chart: Long Schluss-Bruch", "Bestaetigter Linienbruch im Chartintervall mit gepruefter Safety Line: {{ticker}} / {{interval}}")
+alertcondition(localExit, "Tori Chart: Safety Schluss-Bruch", "Bestaetigter Schlusskursbruch der lokalen gruenen Linie: {{ticker}} / {{interval}}")

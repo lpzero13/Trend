@@ -1,0 +1,313 @@
+.research-page {
+  overflow: auto;
+  height: auto;
+  min-height: 100vh;
+  background: var(--hover);
+}
+.research-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.research-page a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.research-header .brand {
+  color: var(--text);
+  font-size: 26px;
+}
+.research-layout {
+  max-width: 1500px;
+  margin: auto;
+  padding: 32px;
+  display: grid;
+  gap: 22px;
+}
+.eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.6px;
+}
+.research-intro h1 {
+  font-size: 32px;
+  letter-spacing: -0.8px;
+  margin: 10px 0;
+}
+.research-intro p {
+  max-width: 860px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.research-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  min-width: 0;
+}
+.research-card h2 {
+  font-size: 17px;
+  margin: 0 0 18px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.form-grid label,
+.study-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.form-grid .wide-label {
+  grid-column: span 3;
+}
+.research-page input,
+.research-page select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  min-height: 40px;
+}
+.wide-label button {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 0;
+  min-height: 20px;
+  color: var(--accent);
+}
+.assumptions {
+  margin-top: 20px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.assumptions summary {
+  cursor: pointer;
+}
+.assumptions .form-grid {
+  margin-top: 16px;
+}
+.assumptions p,
+.method-strip p,
+.research-footnote {
+  line-height: 1.6;
+  color: var(--muted);
+  font-size: 13px;
+}
+.study-actions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.study-actions button {
+  border: 1px solid var(--border);
+  min-height: 40px;
+}
+.study-actions .primary {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: bold;
+}
+.study-actions label {
+  min-width: 130px;
+}
+#schedule-state {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 0;
+}
+#research-error {
+  color: var(--red);
+  line-height: 1.5;
+}
+.method-strip {
+  border-left: 3px solid var(--accent);
+  padding: 2px 18px;
+}
+.method-strip p {
+  margin: 7px 0;
+}
+.results-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.section-heading h2 {
+  margin-bottom: 8px;
+}
+.section-heading p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+.job-row {
+  display: block;
+  text-align: left;
+  width: 100%;
+  padding: 14px 10px;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+.job-row.selected {
+  border-left: 3px solid var(--accent);
+  background: var(--hover);
+}
+.job-row small {
+  display: block;
+  color: var(--muted);
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.status-pill {
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: var(--hover);
+  margin-left: 6px;
+}
+.status-pill.succeeded {
+  color: var(--green);
+}
+.status-pill.failed {
+  color: var(--red);
+}
+.stat-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin: 10px 0 22px;
+}
+.stat-row strong {
+  display: block;
+  font-size: 26px;
+}
+.stat-row span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.table-wrap {
+  overflow: auto;
+  margin: 14px 0;
+}
+.research-page table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.research-page th,
+.research-page td {
+  text-align: left;
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.research-page th {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+.research-page .positive {
+  color: var(--green);
+}
+.research-page .negative {
+  color: var(--red);
+}
+.research-page .note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.case-reason {
+  white-space: normal;
+  min-width: 130px;
+}
+.research-page details.case-details {
+  margin-top: 18px;
+}
+.research-page details.case-details summary {
+  cursor: pointer;
+  font-weight: bold;
+}
+.case-details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.research-page #report-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.research-page .error-note {
+  color: var(--red);
+}
+@media (max-width: 1000px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .form-grid .wide-label {
+    grid-column: auto;
+  }
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+  .jobs-card {
+    max-height: 300px;
+    overflow: auto;
+  }
+}
+@media (max-width: 600px) {
+  .research-layout {
+    padding: 18px 12px;
+  }
+  .research-header {
+    padding: 12px;
+    gap: 12px;
+  }
+  .research-intro h1 {
+    font-size: 26px;
+  }
+  .research-card {
+    padding: 16px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .study-actions > * {
+    width: 100%;
+  }
+}
+
+.research-page table {
+  font-size: 13px;
+}
+.research-page th {
+  font-size: 11px;
+}

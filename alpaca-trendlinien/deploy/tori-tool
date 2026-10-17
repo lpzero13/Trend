@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export TORI_DATA_DIR="${TORI_DATA_DIR:-/var/lib/tori}"
+exec /opt/tori/.venv/bin/python /opt/tori/tori.py "$@"

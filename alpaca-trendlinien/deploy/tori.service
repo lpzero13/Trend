@@ -1,0 +1,27 @@
+[Unit]
+Description=Tori Market Lab - Web and autonomous research worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tori
+Group=tori
+WorkingDirectory=/opt/tori
+EnvironmentFile=/etc/tori/tori.env
+Environment=TORI_DATA_DIR=/var/lib/tori
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/tori/.venv/bin/python /opt/tori/server.py --host 0.0.0.0 --port 8765 --allowed-host ${TORI_ALLOWED_HOST}
+Restart=on-failure
+RestartSec=5
+StateDirectory=tori
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tori
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
