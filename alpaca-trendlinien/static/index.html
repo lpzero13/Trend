@@ -18,9 +18,13 @@
     <script defer src="/app.js"></script>
   </head>
   <body>
+    <nav class="app-navigation" aria-label="Hauptnavigation">
+      <span class="brand">tori<span>.</span></span>
+      <a href="/" aria-current="page">Chart</a>
+      <a href="/research">Forschung</a>
+    </nav>
     <header class="toolbar">
-      <span class="brand">tori<span>.</span></span
-      ><button
+      <button
         id="symbol-button"
         class="symbol-button"
         aria-haspopup="dialog"
@@ -45,7 +49,6 @@
         <option value="trading">Handelskerzen</option>
       </select>
       <div class="toolbar-spacer"></div>
-      <a href="/research" style="color:var(--accent);text-decoration:none;padding:7px">Forschung</a>
       <button
         id="history-button"
         title="Analyse zu einem vergangenen Zeitpunkt"
@@ -143,14 +146,14 @@
           ▤</button
         ><button
           id="undo-tool"
-          title="Letzte Zeichenänderung rückgängig (Strg+Z)"
+          title="Letzte Linien- oder Messänderung rückgängig (Strg+Z)"
           aria-label="Zeichnung rückgängig"
         >
           ↶</button
         ><button
           id="delete-tool"
-          title="Ausgewählte Linie löschen (Entf)"
-          aria-label="Ausgewählte Linie löschen"
+          title="Ausgewählte Linie oder Messung löschen (Entf)"
+          aria-label="Ausgewählte Zeichnung löschen"
         >
           ⌫
         </button>

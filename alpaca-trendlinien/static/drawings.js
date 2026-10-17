@@ -195,8 +195,8 @@ class RayLayer {
   snapshot() {
     return JSON.stringify(this.items);
   }
-  remember() {
-    this.undoStack.push(this.snapshot());
+  remember(action = this.snapshot()) {
+    this.undoStack.push(action);
     if (this.undoStack.length > 40) this.undoStack.shift();
   }
   commit() {
@@ -235,12 +235,38 @@ class RayLayer {
     this.commit();
   }
   undo() {
-    const prev = this.undoStack.pop();
-    if (prev) {
+    const prev = this.undoStack.at(-1);
+    if (typeof prev === "function") {
+      if (prev() === false) return;
+      this.undoStack.pop();
+      this.onSelection?.();
+    } else if (prev) {
+      this.undoStack.pop();
       this.items = JSON.parse(prev);
       this.selected = null;
+      this.measurementSelected = false;
       this.commit();
     }
+  }
+  hitMeasurement(p) {
+    const m = this.measurement;
+    if (!m || m.a.time > this.measurementEnd || m.b.time > this.measurementEnd)
+      return false;
+    const a = this.point(m.a),
+      b = this.point(m.b);
+    if (![a.x, a.y, b.x, b.y].every(Number.isFinite)) return false;
+    const left = Math.min(a.x, b.x),
+      right = Math.max(a.x, b.x),
+      top = Math.min(a.y, b.y),
+      bottom = Math.max(a.y, b.y);
+    return (
+      p.x >= left - 8 &&
+      p.x <= right + 8 &&
+      p.y >= top - 8 &&
+      p.y <= bottom + 8 &&
+      (Math.min(Math.abs(p.x - left), Math.abs(p.x - right)) <= 8 ||
+        Math.min(Math.abs(p.y - top), Math.abs(p.y - bottom)) <= 8)
+    );
   }
   down(event) {
     if (event.button !== 0) return;
@@ -260,8 +286,11 @@ class RayLayer {
           ),
         );
       anchor.time = axis[i];
-      if (!this.measureDraft) this.measureDraft = { a: anchor, b: anchor };
-      else {
+      if (!this.measureDraft) {
+        this.selected = null;
+        this.measurementSelected = false;
+        this.measureDraft = { a: anchor, b: anchor };
+      } else {
         this.measurement = { a: this.measureDraft.a, b: anchor };
         this.measureDraft = null;
         this.onMeasureCommit?.(this.measurement);
@@ -288,6 +317,7 @@ class RayLayer {
         };
         this.items.push(ray);
         this.selected = ray.id;
+        this.measurementSelected = false;
         this.draft = null;
         this.commit();
         this.onDone?.();
@@ -297,6 +327,7 @@ class RayLayer {
     }
     const hit = this.hit(p);
     this.selected = hit?.ray.id || null;
+    this.measurementSelected = !hit && this.hitMeasurement(p);
     this.update();
     this.onSelection?.();
     if (hit) {
@@ -347,7 +378,11 @@ class RayLayer {
     }
     if (!this.drag) {
       if (!this.active && !this.measureActive && this.inside(p))
-        this.host.style.cursor = this.hit(p) ? "grab" : "";
+        this.host.style.cursor = this.hit(p)
+          ? "grab"
+          : this.hitMeasurement(p)
+            ? "pointer"
+            : "";
       return;
     }
     const anchor = this.anchor(p);
@@ -382,7 +417,7 @@ class RayLayer {
   up(event) {
     if (!this.drag) return;
     if (this.drag.changed) {
-      this.undoStack.push(this.drag.before);
+      this.remember(this.drag.before);
       this.commit();
     }
     this.drag = null;
@@ -418,7 +453,7 @@ class RayLayer {
         ctx.fillStyle = loss ? "#dc262622" : "#2563eb22";
         ctx.fillRect(left, top, width, height);
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = this.measurementSelected ? 2.5 : 1.5;
         ctx.setLineDash([5, 4]);
         ctx.strokeRect(left, top, width, height);
         ctx.setLineDash([]);

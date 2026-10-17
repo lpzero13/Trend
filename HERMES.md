@@ -70,10 +70,10 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Automatische Linien | Wick-Hülle, gerichtete Linien, Bestätigung, Kontakte, Kontaktspanne und Auswahl im Python-Kern |
 | Mehrere Intervalle | 4h/1D als Kontext, 1h zusätzlich im 1h-Chart; Ebenen ein-/ausblendbar, Linien mit Intervallbeschriftung |
 | Manuelle Zeichnung | Rays mit Bearbeitung, Löschen und Rückgängig, browserlokal je Aktie |
-| Messungen | Zwei Punkte, absolute/relative Änderung und Kerzenschritte; blau aufwärts, rot abwärts; Speichern, Löschen und Wiederherstellen |
+| Messungen | Zwei Punkte, absolute/relative Änderung und Kerzenschritte; blau aufwärts, rot abwärts; Speichern, Auswahl am Rahmen, Löschen und Wiederherstellen; gemeinsamer Rückgängig-Verlauf mit Rays |
 | Historische Sicht | Datumswahl in New Yorker Zeit, tatsächlich vorhandene Kerzen vor-/zurückschalten, harte Stichtagsgrenzen |
 | Manuelle Fixierung | unveränderliche lokale Stände mit damaligen Rohkerzen und Ankern |
-| Forschungsansicht | Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
+| Forschungsansicht | Über die feste Hauptnavigation „Chart / Forschung“ erreichbar; Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
 | Reproduzierbarkeit | Dataset-Prüfsummen, archivierte Parameter und Universen, Seed, Engine-/Regelversion und Ereignisse |
 | Hermes-Schnittstelle | CLI/JSON und authentifizierbare HTTP-Job-API; Berechnung benötigt keinen Browser und kein LLM |
@@ -217,6 +217,8 @@ Auftragsübernahme ist transaktional. Nach einem Prozessabbruch gibt die OS-Sper
 Ein Engine-Hash bindet den Auftrag an die verwendete Kernversion. Werden relevante Quelldateien verändert, darf ein alter unterbrochener Auftrag nicht stillschweigend unter neuer Logik weiterlaufen. Dafür gibt es eine verständliche Fehlermeldung; für die neue Version wird ein neuer Auftrag angelegt. Ein Hash allein archiviert noch keinen alten Code: für spätere Wiederholungen zusätzlich den zugehörigen Git-Commit festhalten.
 
 Browserdaten liegen separat im Local Storage: Favoriten, Thema, eigene Rays/Messungen und Auswahl einer Fixierung. Ein Wechsel von Host, Port oder Browser erzeugt einen anderen Speicherbereich. Diese Daten werden beim Umzug in den LXC nicht automatisch übertragen. Die eigentlichen serverseitigen Snapshotdateien gehören dagegen in das Datenbackup.
+
+Die Zeichenleiste und Entf/Strg+Z gelten für eigene Rays und Messungen. Neue und aus der Messungsliste geöffnete Messungen sind ausgewählt; der Rahmen lässt sich im Auswahlmodus erneut anklicken. Entf löscht die ausgewählte Zeichnung, Strg+Z nimmt die jüngste Linien- oder Messänderung zurück (auch das Anlegen einer Messung). Ein angefangener Entwurf wird zuerst abgebrochen. Der gemeinsame Verlauf umfasst maximal 40 Änderungen und bleibt bei Intervall- und Datumssprüngen derselben Aktie erhalten; Neuladen oder Aktienwechsel setzt ihn zurück. Gelöschte gespeicherte Messungen bleiben unabhängig davon über die Messungsliste wiederherstellbar. Bei fehlgeschlagener Speicherung wird ein Rückgängig-Schritt nicht verbraucht.
 
 ## 9. Konfiguration
 
@@ -400,11 +402,13 @@ Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichk
 
 ## 14. Nachweise und Testverfahren
 
-Der lokale Ausgangsstand wurde mit **61 Python- und 21 JavaScript-Tests** geprüft. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade.
+Der aktuelle lokale Stand wurde mit **61 Python- und 24 JavaScript-Tests** geprüft. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. Die zusätzlichen Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
 
 Zusätzlich gab es einen echten lokalen Alpaca-Lauf für MSFT/AMZN mit 900 Tagen Import und je zehn Starts: 20 Starts, einer ohne beobachteten Einstieg, 194 archivierte Linienereignisse. Ein anschließender CLI-Lauf mit denselben Datasets und ohne Zugangsdaten lieferte dieselben fachlichen Fälle und dieselbe Zusammenfassung. Das belegt die technische Reproduzierbarkeit dieses Versuchs, nicht Profitabilität oder Volluniversum-Eignung.
 
 Im Browser wurden Hell/Dunkel, Forschungsübersicht, Originalanker über einen Kerzenschritt und der Wechsel zwischen Intervallen geprüft. Ein früher Entwicklungslauf scheiterte am alten 20-Seiten-Limit; dieser Fehler wurde behoben und bleibt im lokalen Archiv nachvollziehbar.
+
+Zusätzlich wurden die Hauptnavigation Chart/Forschung sowie Anlegen, Löschen und Rückgängigmachen einer Messung über Zeichenleiste, Entf und Strg+Z im Chrome-Browser geprüft. Rückgängig nach einem Intervallwechsel stellt den vorherigen Messungsbestand wieder her.
 
 Aus dem Anwendungsordner:
 

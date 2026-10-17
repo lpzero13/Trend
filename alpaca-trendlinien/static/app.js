@@ -235,7 +235,10 @@ function setTool(active) {
         ? "Messung: Startpreis setzen · dann Endpreis · Escape zum Abbrechen"
         : "Ersten Punkt setzen · dann zweiten Punkt · Escape zum Abbrechen";
 }
-rayLayer.onMeasure = () => updateMeasurementSummary();
+rayLayer.onMeasure = () => {
+  updateMeasurementSummary();
+  updateDrawingSummary();
+};
 function updateMeasurementSummary() {
   const m = rayLayer.measureDraft || rayLayer.measurement,
     data = state.data;
@@ -256,8 +259,34 @@ rayLayer.onSelection = () => updateDrawingSummary();
 function updateDrawingSummary() {
   $("#drawing-summary").textContent =
     `Eigene Rays: ${rayLayer.items.length} · Messungen: ${state.measurementArchive.items.length}${storageWarning ? " · Speicherung fehlgeschlagen" : ""}`;
-  $("#delete-tool").disabled = !rayLayer.selected;
-  $("#undo-tool").disabled = !rayLayer.undoStack.length;
+  const measurementSelected =
+    rayLayer.measurementSelected &&
+    rayLayer.measurement &&
+    !$("#measurement-result").hidden;
+  const draft = rayLayer.draft || rayLayer.measureDraft;
+  $("#delete-tool").disabled = !(
+    rayLayer.selected ||
+    measurementSelected ||
+    draft
+  );
+  $("#delete-tool").title = draft
+    ? "Angefangene Zeichnung abbrechen (Entf)"
+    : measurementSelected
+      ? "Ausgewählte Messung löschen (Entf)"
+      : "Ausgewählte Linie löschen (Entf)";
+  $("#undo-tool").disabled = !(rayLayer.undoStack.length || draft);
+}
+function deleteDrawing() {
+  if (rayLayer.draft || rayLayer.measureDraft) setTool(false);
+  else if (rayLayer.selected) rayLayer.remove();
+  else if (rayLayer.measurementSelected && !$("#measurement-result").hidden)
+    $("#clear-measurement").onclick();
+  updateDrawingSummary();
+}
+function undoDrawing() {
+  if (rayLayer.draft || rayLayer.measureDraft) setTool(false);
+  else rayLayer.undo();
+  updateDrawingSummary();
 }
 // Selection can change without changing stored geometry.
 $("#chart").addEventListener("pointerup", () =>
@@ -533,8 +562,7 @@ function render(bundle, preserve = false) {
   rayLayer.measurementEnd = data.reference;
   updateMeasurementSummary();
   rayLayer.timeframe = state.timeframe;
-  if (!preserve || symbolChanged || !hadData)
-    rayLayer.load(storedRays(state.symbol));
+  if (symbolChanged || !hadData) rayLayer.load(storedRays(state.symbol));
   $("#ticker").textContent = data.symbol;
   $("#company").textContent = data.company;
   $("#interval-label").textContent = state.timeframe;
@@ -872,14 +900,8 @@ $("#cursor-tool").onclick = () => setTool(false);
 $("#measure-tool").onclick = () => {
   if (state.data) setTool(rayLayer.measureActive ? false : "measure");
 };
-$("#delete-tool").onclick = () => {
-  rayLayer.remove();
-  updateDrawingSummary();
-};
-$("#undo-tool").onclick = () => {
-  rayLayer.undo();
-  updateDrawingSummary();
-};
+$("#delete-tool").onclick = deleteDrawing;
+$("#undo-tool").onclick = undoDrawing;
 document.querySelectorAll("[data-tf]").forEach(
   (b) =>
     (b.onclick = () => {
@@ -954,6 +976,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     setTool(false);
     rayLayer.selected = null;
+    rayLayer.measurementSelected = false;
     rayLayer.update();
     updateDrawingSummary();
   }
@@ -964,13 +987,11 @@ document.addEventListener("keydown", (e) => {
     setTool("measure");
   if (e.key === "Delete" || e.key === "Backspace") {
     e.preventDefault();
-    rayLayer.remove();
-    updateDrawingSummary();
+    deleteDrawing();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
-    rayLayer.undo();
-    updateDrawingSummary();
+    undoDrawing();
   }
 });
 document

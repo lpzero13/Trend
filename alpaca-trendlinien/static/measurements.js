@@ -76,17 +76,22 @@ function restoreMeasurements(symbol) {
     state.measurementArchive.items.find(
       (m) => m.id === state.measurementArchive.activeId,
     ) || null;
+  rayLayer.measurementSelected = !!rayLayer.measurement;
 }
-function commitMeasurementState(next) {
+function commitMeasurementState(next, remember = false) {
   next = MeasurementStore.normalize(next);
+  const previous = remember ? structuredClone(state.measurementArchive) : null;
   if (!write("tori-measurements:" + state.symbol, next)) {
     showError(
       "Messungen konnten nicht gespeichert werden. Bitte den Browserspeicher prüfen; der bisher gespeicherte Bestand bleibt erhalten.",
     );
     return false;
   }
+  if (remember) rayLayer.remember(() => commitMeasurementState(previous));
   state.measurementArchive = next;
   rayLayer.measurement = next.items.find((m) => m.id === next.activeId) || null;
+  rayLayer.selected = null;
+  rayLayer.measurementSelected = !!rayLayer.measurement;
   updateMeasurementSummary();
   updateDrawingSummary();
   renderMeasurementList();
@@ -108,6 +113,7 @@ function saveCompletedMeasurement(measurement) {
     if (
       commitMeasurementState(
         MeasurementStore.add(state.measurementArchive, item),
+        true,
       )
     )
       return;
@@ -115,12 +121,21 @@ function saveCompletedMeasurement(measurement) {
     showError(e.message);
   }
   rayLayer.measurement = { ...item, unsaved: true };
+  rayLayer.selected = null;
+  rayLayer.measurementSelected = true;
+  rayLayer.remember(() => {
+    restoreMeasurements(state.symbol);
+    updateMeasurementSummary();
+    rayLayer.update();
+  });
   updateMeasurementSummary();
+  updateDrawingSummary();
 }
 function deleteMeasurement(id) {
   if (
     commitMeasurementState(
       MeasurementStore.remove(state.measurementArchive, id),
+      true,
     )
   )
     $("#measurements-note").textContent =
@@ -188,7 +203,10 @@ function setupMeasurements() {
     $("#measurements-dialog").showModal();
   };
   $("#undo-measure-delete").onclick = () =>
-    commitMeasurementState(MeasurementStore.undo(state.measurementArchive));
+    commitMeasurementState(
+      MeasurementStore.undo(state.measurementArchive),
+      true,
+    );
   $("#clear-measurement").onclick = () => {
     if (rayLayer.measureDraft) {
       setTool(false);
@@ -198,8 +216,18 @@ function setupMeasurements() {
     if (id && state.measurementArchive.items.some((m) => m.id === id))
       deleteMeasurement(id);
     else {
+      const previous = rayLayer.measurement;
+      if (previous)
+        rayLayer.remember(() => {
+          rayLayer.measurement = previous;
+          rayLayer.measurementSelected = true;
+          updateMeasurementSummary();
+          rayLayer.update();
+        });
       rayLayer.measurement = null;
+      rayLayer.measurementSelected = false;
       updateMeasurementSummary();
+      updateDrawingSummary();
       rayLayer.update();
     }
   };
