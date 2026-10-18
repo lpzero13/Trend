@@ -2,6 +2,8 @@
 
 Stand: **18.10.2026**. Dieses Dokument ist der zentrale Einstieg für Hermes und künftige Entwickler. Es beschreibt den tatsächlich implementierten Stand und trennt ihn von Vorhaben. Änderungen am Verhalten, an Schnittstellen oder am Betrieb müssen hier nachvollzogen werden.
 
+**Update-Übergabe vom 18.10.2026:** Der zusammengeführte Stand für `main` umfasst die Forschungsnavigation und Messungsbedienung, P1/P2, die Scrollkorrektur sowie den optionalen Tori-Einstiegsmodus. Alle drei Kriterien-Dokumente sind enthalten: `LONG-KRITERIEN-ENTWURF.md`, `TORI-KRITERIEN-ARBEITSNOTIZ.md` und `TORI-EINSTIEGSMODUS.md` unter `alpaca-trendlinien/`. Für eine bestehende Containerinstallation Abschnitt 12 und `BETRIEB-P2.md` verwenden: Dienst vor dem Update stoppen und Bestand sichern, denselben Datenpfad und lokale Secrets erhalten, Python-Abhängigkeiten aktualisieren und Schema 3 berücksichtigen. Alte unterbrochene Aufträge nicht unter verändertem Engine-Hash fortsetzen. Der Tori-Modus bleibt ausdrücklich wählbar; bestehende Zeitpläne werden nicht automatisch umgestellt. Ein GitHub-Upload aktualisiert den Container nicht selbst.
+
 ## 1. Auftrag und langfristiges Ziel
 
 Tori soll Aktien anhand automatischer Trendlinien untersuchen und dem Nutzer manuelle Sichtkontrolle ermöglichen. Langfristig soll ein Dienst auf Proxmox ein festgelegtes Aktienuniversum regelmäßig prüfen, interessante **Long**-Situationen erkennen und aufbereitete Kandidaten melden. Hermes bzw. ein lokales LLM kann Ergebnisse erklären, Fälle voranalysieren und Forschungsaufträge steuern.
