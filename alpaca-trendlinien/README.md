@@ -6,6 +6,8 @@ Lokale Seite mit echten historischen IEX-Kursen von Alpaca, Kerzen für **1h, 4h
 
 **Neu:** [Automatische Forschung, Bedienung und Linux-/Hermes-Anbindung](FORSCHUNG.md). Der erste normale Serverstart richtet einen täglichen Forschungsauftrag für MSFT/AMZN ein, zehn Starts je Aktie; die Forschungsansicht kann diesen Zeitplan ändern oder pausieren. Aufträge laufen ohne offenen Browser.
 
+**Tori-Kriterien historisch prüfen:** [Zufallsfenster und Kursentwicklung nach 5/10/20 Handelstagen](TORI-KURSBEOBACHTUNG.md). In der Forschung den Tori-Modus, zufällige Zeiträume und Kursbeobachtung wählen. Einstiegsvarianten werden getrennt erfasst; die Kursänderungen enthalten keine Ausstiegs- oder Depotbewertung.
+
 Die feste Hauptnavigation oben bietet **Chart** für die manuelle Suche und **Forschung** für automatische Untersuchungen, Aufträge und Ergebnisse.
 
 ## Start unter Windows

@@ -203,6 +203,8 @@ function spec() {
   if ($("#entry-mode").value === "tori") {
     result.entry_mode = "tori";
     result.tori = {
+      sampling: $("#tori-sampling").value,
+      observe_forward: $("#tori-observe").value === "yes",
       line_policy: $("#tori-policy").value,
       safety_selection: $("#tori-safety").value,
       start_date: $("#tori-start").value,
@@ -236,24 +238,24 @@ $("#entry-mode").onchange = () => {
   $("#tori-settings")
     .querySelectorAll("input,select")
     .forEach((el) => (el.disabled = !tori));
-  for (const id of [
-    "study-samples",
-    "study-seed",
-    "study-search",
-    "study-horizons",
-    "study-cost",
-  ])
-    $("#" + id).disabled = tori;
+  const random = tori && $("#tori-sampling").value === "random";
+  for (const id of ["study-samples", "study-seed", "study-search"])
+    $("#" + id).disabled = tori && !random;
+  $("#study-horizons").disabled = tori && $("#tori-observe").value !== "yes";
+  $("#study-cost").disabled = tori;
+  $("#horizon-label").textContent = tori ? "Auswertung nach Handelstagen (nach Einstiegstag)" : "Auswertung nach 4h-Kerzen";
   $("#research-intro-copy").textContent = tori
-    ? "Jede abgeschlossene 4h-Kerze prüfen. Bestätigte Linienpaare festhalten und Ausbruch, horizontale Bestätigung sowie Retest mit nachvollziehbaren Einstiegsprüfungen verfolgen."
+    ? "Tori-Kriterien in zufälligen Zeiträumen oder einem vollständigen Zeitraum prüfen. Linienpaare festhalten; Ausbruch, horizontale Bestätigung und Retest getrennt beobachten."
     : originalCopy["research-intro-copy"];
   $("#observation-note").textContent = tori
-    ? "Retest-Zone und Beobachtungsdauer gelten auch im Tori-Modus. Dort werden die separat eingestellten Einstiegskriterien geprüft. Die Kosten- und Horizontauswertung der bisherigen Ereignisstudie ist ausgeschaltet."
+    ? "Die Horizonte zählen Börsensitzungen nach dem Einstiegstag, keine 4h-Kerzen. Angezeigt wird die reine Kursänderung zum jeweiligen Tagesschluss, ohne Kosten, Stop-Ausführung oder Take-Profit. Unvollständige Beobachtungen werden separat gezählt."
     : originalCopy["observation-note"];
   $("#method-copy").textContent = tori
-    ? "365 Tage Linienvorlauf, danach jede Kerze im gewählten Entwicklungszeitraum. Der spätere Holdout bleibt reserviert. Die Linien eines Setups bleiben fixiert; neue Linienpaare werden im Verfolgungsmodus separat aufgenommen. Parallele Setups und Einstiegsvarianten sind abhängig."
+    ? "365 Tage Linienvorlauf. Zufallsfenster werden vor der Signalsuche per Seed gezogen, ohne Überlappung der Suchzeiträume; bei wenig Historie sind weniger Fenster möglich. Je Fenster/Variante wird der erste Einstieg zur Kursbeobachtung ausgewählt. Auch Fenster ohne Einstieg bleiben sichtbar. Der spätere Holdout bleibt reserviert. Fixierte Setups bleiben bestehen; spätere Kursbeobachtungen und Einstiegsvarianten können abhängig sein."
     : originalCopy["method-copy"];
 };
+$("#tori-sampling").onchange = () => $("#entry-mode").onchange();
+$("#tori-observe").onchange = () => $("#entry-mode").onchange();
 $("#entry-mode").onchange();
 $("#universe").onchange = () => {
   $("#study-symbols").disabled = $("#universe").value === "all";
@@ -395,10 +397,16 @@ function renderToriReport(data) {
   $("#export-report").href = `/api/research/jobs/${job.id}/report`;
   $("#export-events").href = `/api/research/jobs/${job.id}/events?limit=250`;
   $("#cancel-job").disabled = !["queued", "running"].includes(job.status);
-  let html = `<p class="note"><b>Nur Einstiege, keine Take-Profits oder Ausstiege.</b> ${summary.setups} archivierte Linienpaare. Jede abgeschlossene 4h-Kerze im gewählten Entwicklungszeitraum wird geprüft; Linien zu X bzw. bei Aufnahme eines Setups bleiben fest. Gleiche 1h-Einstiegszeitpunkte werden je Variante/Qualität/Dataset zusätzlich dedupliziert. Varianten und parallele Linienpaare sind keine unabhängigen Trades.</p>`;
+  const observing = !!summary.observations;
+  let html = `<p class="note"><b>${observing ? "Einstiege und spätere Schlusskurse" : "Nur Einstiege"}, keine Take-Profits oder Ausstiege.</b> ${summary.setups} archivierte Linienpaare. ${job.spec.tori.sampling === "random" ? "Zufallsfenster werden ohne Sicht auf spätere Signale gewählt. Für die Kursbeobachtung zählt je Fenster und Variante der erste Einstieg; zeitgleiche Linienpaare werden dedupliziert." : "Jede abgeschlossene 4h-Kerze im gewählten Entwicklungszeitraum wird geprüft."} Linien zu X bzw. bei Aufnahme eines Setups bleiben fest. Varianten und parallele Linienpaare sind keine unabhängigen Trades.</p>`;
   for (const item of job.symbols) {
     const p = item.plan;
     html += `<p class="note">${escapeHtml(item.symbol)} · ${p ? `${date(p.scanStartAt)} bis ${date(p.scanEndAt)} · ${p.coverage?.candles ?? 0}/${p.candles} Kerzen geprüft · Holdout ab ${date(p.holdout_start)}` : "Wartet auf Daten"}${item.error ? " · " + escapeHtml(item.error) : ""}</p>`;
+    if (p?.windows) {
+      const complete = (p.coverage?.windows || []).filter(w => w.complete);
+      const empty = complete.filter(w => !w.entryVariants.length).length;
+      html += `<p class="note">${p.actual_samples}/${p.requested_samples} nicht überlappende Suchfenster verfügbar · ${complete.length} abgeschlossen · ${empty} ohne Einstieg. Seed ${job.spec.seed}. Beobachtungsverläufe können trotzdem überlappen.</p><details><summary>Gezogene Zeiträume und Varianten</summary><ul>${p.windows.map(w => { const done = complete.find(c => c.id === w.id); return `<li>${date(w.scanStartAt)} – ${date(w.scanEndAt)} · ${done ? done.entryVariants.map(v => entryNames[v]).join(", ") || "kein Einstieg" : "noch nicht vollständig geprüft"}</li>`; }).join("")}</ul></details>`;
+    }
   }
   if (job.error) html += `<p class="error-note">${escapeHtml(job.error)}</p>`;
   html +=
@@ -410,14 +418,40 @@ function renderToriReport(data) {
     }
   html +=
     '</tbody></table></div><p class="note">Die Qualitätsgruppe verwendet eigenständige Kontakte beider Linien. Keine A+/A-/B-Zertifizierung. Tageskontext im Standard: bestätigte Struktur darf nicht fallen; „gemischt“ ist erlaubt. Pflichtkontext unbekannt → kein Entry. Fehlender bekannter Widerstand bleibt unbekannt. IEX/Rohkurse und heutiges Universum bleiben Datenbegrenzungen.</p>';
+  if (observing) {
+    html += `<h3>Kursentwicklung nach dem Einstieg</h3><p class="note">${summary.observations.uniqueEntriesAcrossVariants} eindeutige Einstiegszeitpunkte über alle Varianten. Je Gruppe wird Dataset + Einstiegszeit einmal gezählt. Handelstag 1 ist die erste Börsensitzung nach dem Einstiegstag. Kursänderung = (Tagesschluss / Einstiegskurs − 1) × 100. Rohkurse ohne Dividenden-/Splitbereinigung; keine Depot-Rendite. Positive Verläufe sind keine Strategie-Trefferquote.</p><div class="table-wrap"><table><thead><tr><th>Variante / Qualität</th>${job.spec.horizons.map(h => `<th>Nach ${h} Handelstagen</th>`).join("")}</tr></thead><tbody>`;
+    for (const variant of Object.keys(entryNames)) for (const quality of ["provisional", "qualified"]) {
+      const g = summary.observations.groups[variant+"_"+quality];
+      if (!g?.uniqueEntries) {
+        html += `<tr><td>${entryNames[variant]} · ${quality === "qualified" ? "qualifiziert" : "vorläufig"}</td><td colspan="${job.spec.horizons.length}">Keine ausgewählten Kursbeobachtungen</td></tr>`;
+        continue;
+      }
+      html += `<tr><td>${entryNames[variant]} · ${quality === "qualified" ? "qualifiziert" : "vorläufig"}</td>${job.spec.horizons.map(h => {
+        const o = g?.horizons[String(h)];
+        return `<td><b class="${valueClass(o?.median_pct)}">${number(o?.median_pct)}${o?.n ? " % Median" : ""}</b><br><small>Ø ${number(o?.mean_pct)} % · n=${o?.n || 0}<br>${o?.positive || 0} höher / ${o?.negative || 0} tiefer / ${o?.flat || 0} gleich<br>${o?.incomplete || 0} unvollständig · ${o?.overlapping_entries || 0} überlappend</small></td>`;
+      }).join("")}</tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
   html += `<p class="note">Linienpaare ${data.page.total ? data.page.offset + 1 : 0}–${data.page.offset + trials.length} von ${data.page.total}. Die Zusammenfassung umfasst den ganzen Auftrag. Ausführung verwendet die erste verfügbare 1h-Eröffnung nach Schluss plus ${job.spec.latency_seconds} s; keine Garantie eines handelbaren Fills.</p><div class="table-wrap"><table><thead><tr><th>Aktie / Fixierung</th><th>Variante / Zustand</th><th>Bestätigung / Einstieg</th><th>Prüfung</th><th>Chart</th></tr></thead><tbody>`;
   for (const trial of trials)
     for (const v of trial.variants) {
       const checks = [...(v.checks || []), ...(v.executionChecks || [])];
       html += `<tr><td>${escapeHtml(trial.symbol)}<br><small>${date(trial.startAt)}</small></td><td class="case-reason">${entryNames[v.variant]}<br><small>${entryStates[v.status] || escapeHtml(v.status)}${v.reason ? " · " + escapeHtml(entryReason(v.reason)) : v.waitingFor ? " · wartet auf " + escapeHtml(entryReason(v.waitingFor)) : ""}</small></td><td>${date(v.signalAt)}<br>${v.entryAt ? `${date(v.entryAt)} · ${number(v.entryPrice)}` : "—"}</td><td class="entry-checks"><details><summary>${checks.length ? `${checks.filter((c) => c.required && c.state !== "pass").length} offene/fehlgeschlagene Pflichtprüfungen` : "Wartet auf Ausbruch"}</summary><ul>${checks.map((c) => `<li>${c.state === "pass" ? "✓" : c.state === "fail" ? "✕" : "?"} ${checkNames[c.name] || escapeHtml(c.name)}${c.required ? "" : " (Hinweis)"}: ${escapeHtml(typeof c.value === "object" ? JSON.stringify(c.value) : number(c.value))}</li>`).join("")}</ul></details></td><td><a href="${chartLink(trial, v)}" target="_blank" rel="noopener">Linienstand ↗</a>${v.entryAt ? ` · <a href="${chartLink(trial, v, true)}" target="_blank" rel="noopener">Entry-Kerze ↗</a>` : ""}</td></tr>`;
     }
-  html +=
-    '</tbody></table></div><details class="case-details"><summary>Fixierte Anker und vollständige Prüfprotokolle</summary><pre id="case-json"></pre></details><details class="case-details"><summary>Versionierte Tori-Annahmen dieses Auftrags</summary><pre id="tori-spec-json"></pre></details>';
+  html += '</tbody></table></div>';
+  if (observing) {
+    html += `<h3>Einzelne Kursbeobachtungen · aktuelle Ergebnisseite</h3><div class="table-wrap"><table><thead><tr><th>Aktie / Variante</th><th>Einstieg</th>${job.spec.horizons.map(h => `<th>+${h} Handelstage</th>`).join("")}</tr></thead><tbody>`;
+    const seen = new Set();
+    for (const t of trials) for (const v of t.variants) if (v.observationSelected) {
+      const key = `${t.datasetId}|${v.variant}|${v.quality}|${v.entryAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      html += `<tr><td>${escapeHtml(t.symbol)} · ${entryNames[v.variant]}</td><td>${date(v.entryAt)}<br>${number(v.entryPrice)}</td>${job.spec.horizons.map(h => {const o = v.forward?.[String(h)]; return `<td class="${valueClass(o?.return_pct)}">${o?.complete ? `${number(o.return_pct)} %<br>${number(o.close)}` : o?.reason === "missing_daily_sessions" ? "Datenlücke" : "Unvollständig"}<br><small>${escapeHtml(o?.targetDate || "")}</small></td>`;}).join("")}</tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+  html += '<details class="case-details"><summary>Fixierte Anker und vollständige Prüfprotokolle</summary><pre id="case-json"></pre></details><details class="case-details"><summary>Versionierte Tori-Annahmen dieses Auftrags</summary><pre id="tori-spec-json"></pre></details>';
   $("#report-content").innerHTML = html;
   const filter = document.createElement("select");
   filter.setAttribute("aria-label", "Tori-Fälle anzeigen");

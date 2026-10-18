@@ -1,0 +1,16 @@
+{
+  "symbols": ["AAPL", "AMZN", "GOOGL", "MSFT", "NVDA"],
+  "entry_mode": "tori",
+  "history_days": 900,
+  "samples": 10,
+  "search_bars": 60,
+  "seed": 20261018,
+  "horizons": [5, 10, 20],
+  "holdout_fraction": 0.2,
+  "tori": {
+    "sampling": "random",
+    "observe_forward": true,
+    "line_policy": "tracked",
+    "context": "daily"
+  }
+}

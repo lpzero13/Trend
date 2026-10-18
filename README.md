@@ -15,6 +15,7 @@ Weitere Dokumentation:
 - [Betriebsanzeige, Ereignisseiten und Lastmessung](alpaca-trendlinien/BETRIEB-P1.md)
 - [Long-Kriterien als Diskussionsentwurf](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md)
 - [Tori-Vorgaben und ergänzende Testideen vom 18.10.2026](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md)
+- [Tori-Zufallsfenster und Kursentwicklung nach Handelstagen](alpaca-trendlinien/TORI-KURSBEOBACHTUNG.md)
 - [Ursprünglicher Architekturplan V2/V3](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md)
 - [Prüfprotokoll und bekannte Grenzen](alpaca-trendlinien/VERIFICATION.md)
 - [Vorlage für Hermes als Auftraggeber/Auswerter](alpaca-trendlinien/integrations/hermes/SKILL.md)
@@ -23,7 +24,7 @@ Weitere Dokumentation:
 
 Die manuelle Webansicht unter `/` und die Forschungsansicht unter `/research` sind implementiert. Ein Python-Worker bearbeitet gespeicherte Aufträge ohne offenen Browser. Zufällige historische Startpunkte, Ausbruch-/Retest-Varianten, unveränderliche Datasets, eine dauerhafte Queue und JSON-Schnittstellen sind vorhanden.
 
-Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Hermes hat die Containerinstallation und erste Betriebsszenarien laut Nutzerbericht geprüft. Neue P1-/P2-Änderungen sind lokal getestet; ihr Rollout im Zielcontainer steht noch aus.
+Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Hermes hat laut Nutzerbericht Commit `82d88eb` einschließlich P1/P2 im Container geprüft. Die darauf folgende Erweiterung um Tori-Zufallsfenster und Schlusskurse nach Handelstagen ist zunächst lokal.
 
 ## Lokal unter Windows starten
 

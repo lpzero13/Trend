@@ -48,7 +48,7 @@ def validate_spec(value):
         if type(result[name]) not in (int, float) or not low <= result[name] <= high:
             raise DataError(f"{name}: ungültiger Wertebereich.", 400)
     if not isinstance(result["horizons"], list) or not result["horizons"] or len(result["horizons"]) > 8 or any(type(x) is not int or not 1 <= x <= 250 for x in result["horizons"]):
-        raise DataError("Beobachtungsfenster: 1–8 Kerzenabstände von 1 bis 250.", 400)
+        raise DataError("Beobachtungshorizonte: 1–8 ganze Zahlen von 1 bis 250.", 400)
     result["horizons"] = sorted(set(result["horizons"]))
     ids = result.get("dataset_ids", {})
     if not isinstance(ids, dict) or any(k not in result["symbols"] or not isinstance(v, str) or not re.fullmatch(r"[a-f0-9]{64}", v) for k,v in ids.items()):

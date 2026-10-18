@@ -22,6 +22,7 @@ DEFAULTS = {
     "min_body_atr": .25, "min_body_fraction": .5, "min_close_location": .65,
     "max_safety_pct": 3, "max_safety_atr": 2,
     "horizontal_bars": 20, "context": "daily", "min_room_r": 2,
+    "sampling": "full", "observe_forward": False,
 }
 
 
@@ -29,6 +30,8 @@ def validate(value):
     if not isinstance(value, dict) or set(value)-set(DEFAULTS):
         raise DataError("Unbekannte Tori-Einstiegsparameter.", 400)
     result = {**DEFAULTS, **value}
+    if result["sampling"] not in ("full", "random") or type(result["observe_forward"]) is not bool:
+        raise DataError("Ungültige Tori-Zeitraum-/Beobachtungsauswahl.", 400)
     if result["line_policy"] not in ("tracked", "snapshot") or result["context"] not in ("daily", "topdown", "off"):
         raise DataError("Ungültige Tori-Linien-/Kontextauswahl.", 400)
     if result["safety_selection"] not in ("nearest_confirmed", "chart"):
@@ -70,10 +73,15 @@ def plan(dataset, spec):
         end = min(end, bisect_left([b.end for b in bars], until)-1)
     if first > end:
         raise DataError("Kein Tori-Zeitraum nach Vorlauf und vor reserviertem Holdout. Datum/Historie prüfen.", 422)
-    return {"mode": VERSION, "scan_start": first, "discovery_end": end,
+    result = {"mode": VERSION, "scan_start": first, "discovery_end": end,
             "scanStartAt": bars[first-1].end, "scanEndAt": bars[end].end,
+            "observation_end": bars[boundary-1].end,
             "holdout_start": bars[boundary].end, "starts": [first-1],
             "actual_samples": 0, "requested_samples": 0, "candles": end-first+1}
+    if options.get("sampling") == "random":
+        from tori_observations import sample_windows
+        result.update(sample_windows(bars, first, end, spec, dataset["material"]["symbol"]))
+    return result
 
 
 def value(ray, index):
@@ -207,7 +215,8 @@ class EntryScanner:
         anchors = [{k: ray[k] for k in ("a_time", "a_price", "b_time", "b_price")} for ray in (red, green)]
         identity = digest({"dataset": self.dataset["id"], "anchors": anchors, "mode": VERSION,
                            "options": self.options, "latency": self.spec["latency_seconds"],
-                           "retest": [self.spec["retest_bars"], self.spec["retest_bps"]]})
+                           "retest": [self.spec["retest_bars"], self.spec["retest_bps"]],
+                           **({"window": self.plan["windowId"]} if "windowId" in self.plan else {})})
         if identity in self.known:
             return
         self.known.add(identity)
@@ -226,6 +235,8 @@ class EntryScanner:
                               "armedSignal": deepcopy(signal), "entryMode": "tori",
                               "eventId": identity, "signalAt": prefix[-1].end, "checks": [], "quality": quality,
                               "group": v+"_"+quality} for v in VARIANTS]}
+        if "windowId" in self.plan:
+            case["windowId"] = self.plan["windowId"]
         self.cases[identity] = case
         self.active.add(identity)
         self.journal(case, "tori_armed", prefix[-1].end, anchors=anchors)

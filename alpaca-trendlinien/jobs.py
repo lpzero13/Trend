@@ -21,7 +21,7 @@ def engine_hash():
     import hashlib
     value = hashlib.sha256()
     for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
-                 "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py"):
+                 "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py", "tori_observations.py"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
@@ -45,6 +45,11 @@ def _insert_job(db, spec, automatic=False):
         from tori_entries import VERSION
         metadata.update(studyVersion=VERSION, entryMode="tori", execution="first available 1h open after closed 4h confirmation + configured latency",
                         outcomes="entries only; no exits or forward returns", tori=spec["tori"])
+        if spec["tori"].get("observe_forward"):
+            from tori_observations import VERSION as observation_version
+            metadata.update(observationVersion=observation_version,
+                            outcomes="raw close changes after XNYS sessions strictly following entry date; no exits/costs/portfolio P&L",
+                            horizons=spec["horizons"], selection="first entry per variant per sampled window" if spec["tori"].get("sampling")=="random" else "all detected entries")
     db.execute("INSERT INTO jobs(id,created,updated,status,spec,manifest,automatic) VALUES(?,?,?,?,?,?,?)",
         (identity,now,now,"queued",json.dumps(spec),json.dumps(metadata),int(automatic)))
     return identity
@@ -119,6 +124,11 @@ def report(identity,offset=0,limit=250,entry_filter="all"):
             from tori_entries import summarize as entry_summary
             # Mutable setup rows and their summary share one SQLite read snapshot.
             summary = entry_summary(json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=?", (identity,last_row)))
+            if job["spec"]["tori"].get("observe_forward"):
+                from tori_observations import summarize_observations
+                summary["observations"] = summarize_observations(
+                    (json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=?", (identity,last_row))), job["spec"]["horizons"])
+                summary["interpretation"] = "Einstiege mit getrennter Schlusskursbeobachtung nach Handelstagen; keine Ausstiege, Kosten oder Depot-P/L. Varianten und überlappende Verläufe sind abhängig."
     job["completedTrials"]=total
     if job["spec"].get("entry_mode") != "tori":
         summary = _summary(identity,last_row,tuple(job["spec"]["horizons"]),str(data_dir()))
@@ -382,16 +392,35 @@ def run_entries(identity, dataset, spec, plan, interrupted, advancing):
             flush()
     symbol = dataset["material"]["symbol"]
     phase(identity, "entries", symbol=symbol, completed=0, total=plan["candles"], unit="candles")
-    scanner = EntryScanner(dataset,spec,plan,emit)
-    def progress(done,total):
-        advancing("entries",symbol=symbol,completed=done,total=total,unit="candles")
-    complete = scanner.advance(plan["discovery_end"], interrupted, progress)
-    if complete:
-        scanner.finish()
-    flush()
+    windows = plan.get("windows", [None])
+    coverage = {"candles":0,"withoutPair":0,"windows":[]}
+    complete = True
+    for window in windows:
+        scan_plan = {**plan, **window, "windowId":window["id"]} if window else plan
+        scanner = EntryScanner(dataset,spec,scan_plan,emit)
+        previous_count = coverage["candles"]
+        def progress(done,total):
+            advancing("entries",symbol=symbol,completed=previous_count+done,total=plan["candles"],unit="candles")
+        complete = scanner.advance(scan_plan["discovery_end"], interrupted, progress)
+        if complete:
+            scanner.finish()
+            if spec["tori"].get("observe_forward"):
+                from tori_observations import observe_cases
+                observe_cases(list(scanner.cases.values()),dataset,spec,plan,random_window=window is not None)
+                for case in scanner.cases.values():
+                    scanner.save(case)
+        flush()
+        coverage["candles"] += scanner.coverage["candles"]
+        coverage["withoutPair"] += scanner.coverage["withoutPair"]
+        if window:
+            entries = {v["variant"] for c in scanner.cases.values() for v in c["variants"] if v["status"]=="observed"}
+            coverage["windows"].append({"id":window["id"],"startAt":window["scanStartAt"],"endAt":window["scanEndAt"],
+                                         "complete":complete,"setups":len(scanner.cases),"entryVariants":sorted(entries)})
+        if not complete:
+            break
     with connection() as db:
         stored = json.loads(db.execute("SELECT plan FROM symbols WHERE job_id=? AND symbol=?",(identity,symbol)).fetchone()[0])
-        stored["coverage"] = scanner.coverage
+        stored["coverage"] = coverage
         db.execute("UPDATE symbols SET plan=? WHERE job_id=? AND symbol=?",(json.dumps(stored),identity,symbol))
     return complete
 

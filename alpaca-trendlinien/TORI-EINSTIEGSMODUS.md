@@ -2,6 +2,8 @@
 
 Stand: 18.10.2026 · `tori-entries-1`. Experimentelle, nachvollziehbare Operationalisierung der eingereichten Kriterien. Keine verifizierte Eins-zu-eins-Kopie der Videos, keine belegte Handelsstrategie. Keine Take-Profits, Ausstiege, Orders oder realisierten Gewinne in diesem Modus.
 
+**Ergänzung:** Optional lassen sich inzwischen zufällige Suchfenster und spätere Schlusskursänderungen nach Handelstagen wählen. Der ursprüngliche Nur-Einstiege-Modus bleibt erhalten. Auswahl, Zählweise und Grenzen stehen in [TORI-KURSBEOBACHTUNG.md](TORI-KURSBEOBACHTUNG.md); die unten beschriebenen Einstiegsprüfungen bleiben unverändert.
+
 ## Auswahl und Abgrenzung
 
 Unter **Forschung → Untersuchungsmodus → Tori-Kriterien · alle Einstiege im Zeitraum** auswählen. Die bisherige Forschung mit Zufallsstarts bleibt separat wählbar und Standard. Bestehender Zeitplan, manuelle Chartanalyse, Rays und Messungen werden durch diese Auswahl nicht geändert. Erst „Einmal untersuchen“ startet einen Auftrag; „Automatik übernehmen“ ändert ausdrücklich den Zeitplan. Regeländerungen erfordern neue Aufträge.

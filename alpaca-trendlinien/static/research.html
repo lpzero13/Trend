@@ -97,7 +97,7 @@
                 Bisherige Forschung · zufällige Starts
               </option>
               <option value="tori">
-                Tori-Kriterien · alle Einstiege im Zeitraum
+                Tori-Kriterien · Einstiege und Kursverläufe
               </option>
             </select>
           </label>
@@ -105,11 +105,19 @@
             <p class="note">
               Separater experimenteller Einstiegsmodus: jede abgeschlossene
               4h-Kerze, Ausbruch / horizontale Bestätigung / Retest getrennt.
-              Keine Ausstiege und keine Gewinnbewertung. Der spätere Holdout
+              Optional Kursentwicklung nach Handelstagen beobachten, ohne Ausstiege oder Depotbewertung. Der spätere Holdout
               bleibt reserviert. Leere Datumsfelder nutzen den verfügbaren
               Entwicklungszeitraum.
             </p>
             <div class="form-grid">
+              <label>Zeiträume<select id="tori-sampling">
+                <option value="random">Zufällige Zeiträume je Aktie</option>
+                <option value="full">Gesamten gewählten Zeitraum prüfen</option>
+              </select></label>
+              <label>Nach dem Einstieg<select id="tori-observe">
+                <option value="yes">Kurse nach den eingestellten Handelstagen auswerten</option>
+                <option value="no">Nur Einstiege erfassen</option>
+              </select></label>
               <label
                 >Linien verfolgen<select id="tori-policy">
                   <option value="tracked">
@@ -345,7 +353,7 @@
             <summary>Beobachtungsannahmen · frei einstellbar</summary>
             <div class="form-grid">
               <label
-                >Auswertung nach 4h-Kerzen<input
+                ><span id="horizon-label">Auswertung nach 4h-Kerzen</span><input
                   id="study-horizons"
                   value="5, 10, 20"
                   required
