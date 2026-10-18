@@ -496,6 +496,12 @@ function renderToriReport(data) {
   }
 }
 function renderReport(data) {
+  if (data.job.spec.entry_mode === "lab") {
+    $("#report-subtitle").textContent = "Registriertes Laborexperiment";
+    $("#report-content").innerHTML = `<p>Profile, Diagnose, zeitlich getrennte Prüfungen und Fallbeurteilungen stehen im <a href="/lab?job=${encodeURIComponent(data.job.id)}">Forschungslabor</a>.</p>`;
+    $("#report-actions").hidden = true;
+    return;
+  }
   if (data.job.spec.entry_mode === "tori") return renderToriReport(data);
   $("#export-events").href =
     `/api/research/jobs/${data.job.id}/events?limit=250`;

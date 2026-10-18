@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="de" class="research-document">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tori · Forschungslabor</title><link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/research.css"><link rel="stylesheet" href="/lab.css">
+  <script defer src="/vendor/lightweight-charts.js"></script><script defer src="/api.js"></script><script defer src="/lab.js"></script>
+</head>
+<body class="research-page">
+<header class="research-header"><a class="brand" href="/">tori<span>.</span></a>
+  <nav class="app-navigation" aria-label="Hauptnavigation"><a href="/">Chart</a><a href="/research">Forschung</a><a href="/lab" aria-current="page">Labor</a></nav>
+  <span class="toolbar-spacer"></span><span id="lab-state" role="status">Verbinden …</span><button id="lab-theme" aria-label="Hell/Dunkel wechseln">◐</button>
+</header>
+<main class="research-layout">
+  <section class="research-intro"><span class="eyebrow">REGELN PRÜFEN · LONG</span><h1>Erkennen. Vergleichen. Unabhängig prüfen.</h1>
+    <p>Jede Kerze wird chronologisch untersucht. Ursprüngliche Setups bleiben nachvollziehbar. Entwicklungs-, Validierungs- und Abschlusstestdaten werden getrennt ausgewertet. Ergebnisse sind Forschungsbeobachtungen; eine optional simulierte Ausführung beruht auf festen Annahmen.</p></section>
+  <p id="lab-error" role="alert" hidden></p>
+  <section class="research-card"><h2>Neues Experiment</h2>
+    <form id="lab-form">
+      <label class="lab-label">Forschungsfrage<textarea id="lab-hypothesis" required minlength="10" maxlength="3000" rows="2">Verbessern die Tori-Qualitätsmerkmale Einstiege gegenüber dem einfachen Grundsignal bei vergleichbaren Marktbedingungen?</textarea></label>
+      <div class="form-grid">
+        <label>Aktienliste<input id="lab-symbols" value="AAPL AMZN GOOGL MSFT NVDA" required></label>
+        <label>Universum<select id="lab-universe"><option value="list">Diese feste Liste</option><option value="all">Gesamter aktueller Alpaca-Katalog</option></select></label>
+        <label>Historie · Kalendertage<input id="lab-history" type="number" min="450" max="3650" value="900" required></label>
+        <label>Zufalls-Seed für Kontrollen<input id="lab-seed" type="number" min="0" max="2147483647" value="20261018" required></label>
+        <label>Primärer Horizont · Handelstage<select id="lab-horizon"><option>5</option><option selected>10</option><option>20</option></select></label>
+        <label>Primäre Einstiegsfamilie<select id="lab-family"><option value="breakout">Direkter Ausbruch</option><option value="horizontal">Horizontale Bestätigung</option><option value="retest">Retest</option></select></label>
+        <label>Primäre Kennzahl<select id="lab-metric"><option value="mean_excess_pct">Mittlere Mehrentwicklung zu Zufallskontrollen</option><option value="median_return_pct">Median der Kursänderung</option></select></label>
+        <label>Maximal registrierte Profile<input id="lab-budget" type="number" min="1" max="20" value="8" required></label>
+      </div>
+      <fieldset><legend>Regelprofile · getrennt vergleichen</legend><div id="lab-profiles" class="lab-profiles">Profile werden geladen …</div></fieldset>
+      <details class="assumptions"><summary>Daten, Zeitgrenzen und wiederholbare Untersuchungen</summary>
+        <p>Neue Labordaten verwenden reguläre US-Sitzungen aus 5-Minuten-Kerzen. 4h beginnt bei Börseneröffnung; die letzte Kerze ist kürzer. Ein Jahr Vorlauf bleibt für die Linien. Leere Datumsfelder verwenden gemeinsame zeitliche Abschnitte. Der aktuelle Katalog ist kein historisch vollständiger Aktienbestand.</p>
+        <div class="form-grid">
+          <label>Datenfeed<select id="lab-feed"><option value="iex">IEX · technischer Test</option><option value="sip">SIP · Berechtigung erforderlich</option></select></label>
+          <label>Kursbereinigung<select id="lab-adjustment"><option value="split">Splits bereinigt</option><option value="raw">Unbereinigte Kurse</option><option value="all">Splits und Dividenden bereinigt</option></select></label>
+          <label>Marktvergleich · leer ohne<input id="lab-benchmark" value="SPY"></label>
+          <label>Entwicklungsanteil<input id="lab-dev-fraction" type="number" min="0.3" max="0.79" step="0.01" value="0.6"></label>
+          <label>Untersuchung ab<input id="lab-start" type="date"></label><label>Untersuchung bis<input id="lab-end" type="date"></label>
+          <label>Entwicklung endet · optional<input id="lab-dev-end" type="date"></label><label>Validierung endet · optional<input id="lab-val-end" type="date"></label>
+          <label>Kontrollen je Einstieg<input id="lab-controls" type="number" min="1" max="10" value="3"></label>
+          <label>Walk-forward: Training · Sitzungen<input id="lab-walk-train" type="number" min="20" max="1260" value="126"></label>
+          <label>Walk-forward: Folgeprüfung · Sitzungen<input id="lab-walk-test" type="number" min="5" max="252" value="42"></label>
+          <label>Mindestens Trainingseinstiege<input id="lab-min-events" type="number" min="1" max="1000" value="20"></label>
+        </div>
+        <label class="lab-check"><input id="lab-native" type="checkbox"> Vorhandene native Altbestände ausdrücklich nur als eingeschränkten Techniktest zulassen</label>
+        <label class="lab-label">Vorhandene Datenstände · optionale Symbol/ID-Zuordnung als JSON<textarea id="lab-datasets" rows="2" spellcheck="false">{}</textarea></label>
+        <label class="lab-label">Historische Mitgliedschaften · optionales JSON mit symbol, start, end, source<textarea id="lab-membership" rows="2" spellcheck="false">[]</textarea></label>
+      </details>
+      <details class="assumptions"><summary>Optionale Ausführung und Kapital</summary>
+        <label class="lab-check"><input id="lab-execution" type="checkbox"> Für jedes Profil und jede Einstiegsfamilie ein eigenes hypothetisches Depot berechnen</label>
+        <p>Keine Orders. Fehlende 5-Minuten-Pfade werden nicht durch erfundene Ausstiege ersetzt. Kosten pro Seite, Kurslücken und konkurrierende Signale werden berücksichtigt. Ein späterer positiver Schlusskurs allein ist kein gewonnener Trade.</p>
+        <div class="form-grid">
+          <label>Startkapital · Kurswährung<input id="lab-capital" type="number" min="1" value="2000"></label>
+          <label>Risikoanteil je Position<input id="lab-risk" type="number" min="0.0001" max="0.25" step="0.0001" value="0.01"></label>
+          <label>Maximaler Kapitalanteil je Position<input id="lab-allocation" type="number" min="0.001" max="1" step="0.001" value="0.25"></label>
+          <label>Gleichzeitige Positionen<input id="lab-positions" type="number" min="1" max="1000" value="5"></label>
+          <label>Ausstiegsmodell<select id="lab-exit"><option value="stop_time">Ursprünglicher Stop oder Zeitablauf</option><option value="time">Nur Zeitablauf</option><option value="stop_target_time">Stop, festes R-Ziel oder Zeitablauf</option></select></label>
+          <label>Haltedauer · Handelstage<input id="lab-holding" type="number" min="1" max="250" value="20"></label>
+          <label>Optionales Ziel · R<input id="lab-target" type="number" min="0.1" max="20" step="0.1" value="2"></label>
+          <label>Gebühr pro Order<input id="lab-fee" type="number" min="0" max="1000" step="0.01" value="0"></label>
+          <label>Voller Spread · Basispunkte<input id="lab-spread" type="number" min="0" max="500" step="0.1" value="5"></label>
+          <label>Slippage je Seite · Basispunkte<input id="lab-slippage" type="number" min="0" max="500" step="0.1" value="5"></label>
+        </div><label class="lab-check"><input id="lab-fractional" type="checkbox"> Aktienbruchteile im Modell erlauben</label>
+      </details>
+      <div class="study-actions"><button class="primary" type="submit">Registrieren & Entwicklung starten</button><span class="note">Bestehende Zeitpläne bleiben unverändert.</span></div>
+    </form>
+  </section>
+  <section class="research-card"><h2>Experiment und weitere Prüfungen</h2>
+    <div class="study-actions"><label>Experiment<select id="lab-experiments"><option value="">Noch kein Experiment</option></select></label><button id="lab-refresh">Aktualisieren</button></div>
+    <div id="lab-experiment-info" class="note"></div>
+    <div class="study-actions"><button id="lab-validation" disabled>Validierung starten</button><button id="lab-walk" disabled>Walk-forward starten</button></div>
+    <form id="lab-seal-form" class="study-actions"><label>Kandidat<select id="lab-candidate"></select></label><label class="lab-grow">Auswahl begründen<input id="lab-rationale" minlength="10" maxlength="3000" required></label><button type="submit" disabled>Kandidaten einfrieren</button></form>
+    <div class="study-actions"><label class="lab-check"><input id="lab-final-confirm" type="checkbox"> Den reservierten Zeitraum jetzt als Abschlusstest öffnen; danach gilt er als bekannt</label><button id="lab-final" disabled>Abschlusstest starten</button></div>
+    <details class="case-details"><summary>Registrierter Vertrag und Versuche</summary><pre id="lab-contract"></pre></details>
+    <details class="case-details"><summary>Versuchsjournal · seitenweise</summary><button id="lab-audit">Journal laden</button><button id="lab-audit-next" disabled>Weitere Seite</button><pre id="lab-audit-content"></pre></details>
+  </section>
+  <section class="research-card"><h2>Aufträge und Ergebnisse</h2>
+    <div class="study-actions"><label>Laborauftrag<select id="lab-jobs"></select></label><button id="lab-cancel" disabled>Auftrag abbrechen</button><a id="lab-json" href="#" target="_blank" rel="noopener">JSON · Ergebnisseite und Gesamtkennzahlen</a></div>
+    <p id="lab-job-info" class="note"></p>
+    <div class="study-actions"><label>Abschnitt<select id="lab-section"></select></label><label>Horizont<select id="lab-result-horizon"><option>5</option><option selected>10</option><option>20</option></select></label><label>Beobachtungen<select id="lab-kind"><option value="entries">Angenommene Einstiege</option><option value="hypothetical_rejected">Hypothetische abgelehnte Fälle</option></select></label></div>
+    <p class="note">Profile und Familien können dieselben Zeitpunkte enthalten. Überlappende Verläufe sind abhängig. MFE/MAE-Mittelwerte verwenden nur vollständige Feindatenpfade. Mehrentwicklung wird nur für Fälle mit verfügbaren Vergleichsdaten berechnet.</p>
+    <div id="lab-results" class="table-wrap"></div><div id="lab-diagnostics"></div>
+    <details class="case-details"><summary>Abdeckung, Merkmalsgruppen und Unsicherheit</summary><pre id="lab-stat-details"></pre></details>
+    <h3>Einzelfälle</h3><div class="study-actions"><label>Fallauswahl<select id="lab-entry-filter"><option value="entries">Mit Einstieg</option><option value="all">Alle, einschließlich Ablehnungen</option></select></label><button id="lab-prev" disabled>Zurück</button><button id="lab-next" disabled>Weiter</button><span id="lab-page" class="note"></span></div>
+    <div id="lab-cases" class="table-wrap"></div>
+    <h3>Optionale Depotsimulationen</h3><div id="lab-portfolios" class="table-wrap"></div>
+    <div id="lab-equity-chart" class="lab-chart" hidden></div><pre id="lab-portfolio-detail" hidden></pre>
+  </section>
+  <section class="research-card"><h2>Verblindete Fallprüfung</h2>
+    <p class="note">Beurteile die bekannten Kerzen, bevor du Engine und Verlauf aufdeckst. Zufällige, bestätigte und abgelehnte Entwicklungsfälle werden gemischt. Das Paket misst unsere Übereinstimmung, keine Erfolgsquote. Änderungen nach Offenlegung werden als beeinflusst markiert.</p>
+    <form id="lab-review-create" class="study-actions"><label>Fälle<input id="lab-review-count" type="number" min="1" max="100" value="30"></label><label>Seed<input id="lab-review-seed" type="number" min="0" max="2147483647" value="7"></label><label>Vergleichsprofil<select id="lab-review-profile"></select></label><button type="submit" disabled>Paket aus gewähltem Entwicklungsauftrag erstellen</button></form>
+    <div class="study-actions"><label>Fallpaket<select id="lab-review-packs"></select></label><label>Fall<select id="lab-review-cases"></select></label><button id="lab-review-next">Nächster Fall</button></div>
+    <p id="lab-review-info" class="note"></p>
+    <div class="study-actions"><button id="lab-draw-red">Rote Linie · zwei Klicks</button><button id="lab-draw-green">Grüne Linie · zwei Klicks</button><button id="lab-draw-clear">Eigene Linien entfernen</button><button id="lab-review-latest">Letzte 120 Kerzen</button><button id="lab-review-fit">Gesamten Vorlauf zeigen</button></div>
+    <p id="lab-draw-state" class="note">Eigene Anker werden zusammen mit der Beurteilung gespeichert.</p>
+    <p id="lab-review-legend" class="note"></p>
+    <div id="lab-review-chart" class="lab-chart"></div><details><summary>Tageskontext bis zum gleichen Zeitpunkt</summary><div id="lab-review-daily" class="lab-chart lab-chart-small"></div></details>
+    <form id="lab-label-form" class="study-actions"><label>Long-Signal jetzt bestätigt?<select id="lab-human-entry"><option value="wait">Warten / unklar</option><option value="yes">Ja</option><option value="no">Nein</option></select></label><label class="lab-grow">Begründung<textarea id="lab-human-reason" minlength="3" maxlength="3000" rows="2" required></textarea></label><button type="submit" disabled>Beurteilung speichern</button><button id="lab-reveal" type="button" disabled>Engine & Verlauf aufdecken</button></form>
+    <div id="lab-review-outcomes" class="table-wrap" hidden></div>
+    <details id="lab-review-engine-raw" hidden><summary>Vollständige Engine-Prüfung und Verlaufsdaten</summary><pre id="lab-review-revealed"></pre></details><button id="lab-review-compare">Gespeicherte Beurteilungen vergleichen</button><pre id="lab-review-comparison"></pre>
+  </section>
+  <p class="research-footnote">Keine Brokerorders. Historische Kursänderungen sind keine Garantie künftiger Ergebnisse. Chartdarstellung mit <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</p>
+</main>
+</body></html>

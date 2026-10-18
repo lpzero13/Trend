@@ -1,0 +1,21 @@
+.lab-label { display:flex; flex-direction:column; gap:8px; color:var(--muted); margin:16px 0; }
+.lab-label textarea,.research-page textarea { box-sizing:border-box; width:100%; border:1px solid var(--border); border-radius:6px; padding:10px; background:var(--bg); color:var(--text); font:inherit; resize:vertical; }
+.lab-check { display:flex!important; flex-direction:row!important; align-items:center; gap:8px; margin:14px 0; }
+.lab-check input { width:16px; min-height:16px; flex:0 0 16px; }
+.lab-profiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:8px 20px; }
+.lab-profiles label { align-items:start; font-size:14px; color:var(--text); }
+.lab-profiles small { display:block; color:var(--muted); line-height:1.4; margin-top:4px; }
+.research-page fieldset { border:1px solid var(--border); border-radius:8px; margin:20px 0; padding:16px; }
+.research-page legend { color:var(--muted); padding:0 8px; }
+.research-page pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:450px; overflow:auto; background:var(--bg); border:1px solid var(--border); padding:12px; border-radius:6px; font-size:12px; line-height:1.5; }
+.lab-grow { flex:1; min-width:220px; }
+.study-actions label:has(select) { max-width:100%; }
+.study-actions select { max-width:540px; }
+#lab-error { padding:14px; background:var(--surface); border:1px solid var(--red); color:var(--red); border-radius:8px; }
+.lab-chart { position:relative; min-width:0; height:430px; border:1px solid var(--border); margin:16px 0; }
+.lab-chart-small { height:260px; }
+#lab-diagnostics { margin:20px 0; }
+#lab-diagnostics details { margin:10px 0; }
+.lab-warning { color:var(--red); }
+.lab-positive { color:var(--accent); }
+@media(max-width:650px) { .research-header { gap:10px; padding:12px; } .research-layout { padding:14px; } .lab-chart { height:350px; } .lab-chart-small { height:230px; } }

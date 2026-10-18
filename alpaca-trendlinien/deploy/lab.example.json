@@ -1,0 +1,19 @@
+{
+  "entry_mode": "lab",
+  "symbols": ["AAPL", "AMZN", "GOOGL", "MSFT", "NVDA"],
+  "history_days": 900,
+  "horizons": [5, 10, 20],
+  "seed": 20261018,
+  "lab": {
+    "hypothesis": "Verbessern die Tori-Qualitätsmerkmale Einstiege gegenüber dem Grundsignal bei vergleichbaren Marktbedingungen?",
+    "profiles": ["reference", "baseline", "daily", "contacts3", "retest_hold", "atr_contacts"],
+    "variant_budget": 8,
+    "primary_family": "breakout",
+    "primary_horizon": 10,
+    "primary_metric": "mean_excess_pct",
+    "feed": "iex",
+    "adjustment": "split",
+    "benchmark_symbol": "SPY",
+    "execution": {"enabled": false}
+  }
+}

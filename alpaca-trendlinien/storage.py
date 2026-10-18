@@ -78,6 +78,15 @@ def references(db, root):
         refs.update(r[0] for r in db.execute(f"SELECT DISTINCT dataset_id FROM {table} WHERE dataset_id IS NOT NULL"))
     for row in db.execute("SELECT spec FROM jobs"): scan(json.loads(row[0]))
     for row in db.execute("SELECT value FROM settings"): scan(json.loads(row[0]))
+    # The database snapshot may predate lab migration. Never discard preregistered/review references.
+    tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    for table,columns in (("lab_experiments",("spec","datasets","plan","selection")),
+                          ("lab_reviews",("config","manifest")),("lab_review_cases",("sample",))):
+        if table in tables:
+            for column in columns:
+                for row in db.execute(f"SELECT {column} FROM {table} WHERE {column} IS NOT NULL"):
+                    value=json.loads(row[0])
+                    scan({"dataset_ids":value} if table=="lab_experiments" and column=="datasets" else value)
     for path in (root/"snapshots").glob("*.json"):
         if path.is_symlink(): raise DataError("Snapshot-Link: Referenzen nicht sicher bestimmbar.",409)
         scan(json.loads(path.read_text("utf-8")))

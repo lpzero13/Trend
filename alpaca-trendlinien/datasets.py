@@ -27,9 +27,20 @@ def path_for(identity):
     return data_dir() / "datasets" / (identity + ".json")
 
 
-def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="raw"):
+def data_kind(dataset):
+    """Read provenance, including the explicitly tagged original offline fixtures."""
+    if dataset["material"].get("dataKind") == "synthetic" or any(
+        meta.get("mode") == "synthetic-offline-fixture" for meta in dataset.get("sources", {}).values()
+    ):
+        return "synthetic"
+    return "market"
+
+
+def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="raw", session=None, data_kind="market"):
+    if data_kind not in ("market", "synthetic"):
+        raise DataError("Unbekannte Datenherkunft.", 400)
     normalized = {}
-    for tf in TIMEFRAMES:
+    for tf in (*TIMEFRAMES, *(("5m",) if "5m" in sources else ())):
         bars, meta = sources[tf]
         if meta.get("feed",feed)!=feed or meta.get("adjustment",adjustment)!=adjustment:
             raise DataError("Gemischte Feeds oder Kursbereinigungen im Dataset sind nicht erlaubt.",422)
@@ -42,9 +53,12 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
         normalized[tf] = [asdict(b) for b in bars]
     material = {"schema": SCHEMA, "symbol": symbol, "provider": provider, "feed": feed,
         "adjustment": adjustment, "timezone": "America/New_York", "basis": "bars",
-        "session": "provider-native; extended hours possible; daily closure follows stored normalization",
+        "session": session or "provider-native; extended hours possible; daily closure follows stored normalization",
         "normalization": {tf:meta.get("normalization","external-or-legacy") for tf,(_,meta) in sources.items()},
         "bars": normalized}
+    # Preserve the identity of existing market datasets; synthetic provenance is immutable.
+    if data_kind == "synthetic":
+        material["dataKind"] = "synthetic"
     identity = digest(material)
     path = path_for(identity)
     if not path.exists():
@@ -52,6 +66,8 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
         payload = {"id": identity, "material": material, "importedAt": datetime.now(timezone.utc).isoformat(),
             "quality":audit({tf:rows for tf,(rows,_) in sources.items()},feed=feed,adjustment=adjustment),
             "sources": {tf: meta for tf, (_, meta) in sources.items()}}
+        if session and session.startswith("XNYS regular"):
+            payload["quality"]["intradaySessions"]="regular; open-anchored; incomplete buckets omitted explicitly"
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix("."+uuid.uuid4().hex+".tmp")
         temporary.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), "utf-8")
@@ -104,10 +120,14 @@ def chart_dataset(identity, timeframe, as_of=None, setup=None):
     cutoff = datetime.fromisoformat(as_of.replace("Z", "+00:00")) if as_of else datetime.fromtimestamp(max(b.end for b in bars[timeframe]), timezone.utc)
     if cutoff.tzinfo is None:
         raise DataError("Dataset-Zeitpunkt braucht eine Zeitzone.", 400)
-    sources = {tf: (rows, {**dataset["sources"][tf], "mode": "immutable-dataset", "cached": True, "warning": None}) for tf, rows in bars.items()}
+    sources = {tf: (rows, {**dataset["sources"][tf], "mode": "immutable-dataset", "cached": True, "warning": None}) for tf, rows in bars.items() if tf in TIMEFRAMES}
     payload = build_chart(sources, dataset["material"]["symbol"], timeframe, cutoff,
         datetime.now(timezone.utc), historical=True)
-    payload.update(datasetId=identity, provider=dataset["material"]["provider"], feed=dataset["material"]["feed"])
+    payload.update(datasetId=identity, provider=dataset["material"]["provider"], feed=dataset["material"]["feed"],
+                   adjustment=dataset["material"]["adjustment"], session=dataset["material"]["session"],
+                   dataKind=data_kind(dataset))
+    if payload["dataKind"] == "synthetic":
+        payload["company"] = payload["symbol"] + " · Synthetischer Test"
     if setup:
         from research import line_value
         signal=setup["signal"]

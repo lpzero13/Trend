@@ -12,8 +12,12 @@ from models import DataError
 
 
 def main():
+    # The JSON tool contract is UTF-8 even when Windows pipes default to cp1252.
+    if hasattr(sys.stdout,"reconfigure"):sys.stdout.reconfigure(encoding="utf-8")
     parser=argparse.ArgumentParser(description=__doc__)
     commands=parser.add_subparsers(dest="command",required=True)
+    from lab_cli import add_commands
+    add_commands(commands)
     submit=commands.add_parser("submit",help="Forschungsauftrag einreichen")
     submit.add_argument("--spec",required=True)
     for name in ("status","report","events","cancel"):
@@ -50,7 +54,10 @@ def main():
     analyze.add_argument("--timeframe",choices=("1h","4h","1D"),default="4h")
     args=parser.parse_args()
     try:
-        if args.command=="submit": result=jobs.submit(json.loads(Path(args.spec).read_text("utf-8-sig")))
+        if args.command.startswith("lab-"):
+            from lab_cli import execute
+            result=execute(args)
+        elif args.command=="submit": result=jobs.submit(json.loads(Path(args.spec).read_text("utf-8-sig")))
         elif args.command=="status": result=jobs.get_job(args.id)
         elif args.command=="report": result=jobs.report(args.id,args.offset,args.limit,args.entry_filter)
         elif args.command=="events": result=jobs.events_for(args.id,args.limit,args.cursor)

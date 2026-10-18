@@ -21,7 +21,8 @@ def engine_hash():
     import hashlib
     value = hashlib.sha256()
     for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
-                 "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py", "tori_observations.py"):
+                 "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py", "tori_observations.py",
+                 "lab_data.py","lab_profiles.py","lab_metrics.py","lab_splits.py","lab_registry.py","lab_engine.py","lab_jobs.py","lab_execution.py"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
@@ -41,6 +42,12 @@ def _insert_job(db, spec, automatic=False):
     identity = uuid.uuid4().hex
     now = time.time()
     metadata = manifest()
+    if spec.get("entry_mode")=="lab":
+        from lab_profiles import VERSION, profile_manifest
+        metadata.update(studyVersion=VERSION,entryMode="lab",experimentId=spec["lab"]["experiment_id"],
+                        profiles=[profile_manifest(p,spec["lab"],spec["tori"]) for p in spec["lab"]["profiles"]],
+                        outcomes="separate fixed-session outcomes, matched controls and optional simulation; unvalidated research",
+                        execution="first available fine-bar open after closed 4h confirmation + configured latency")
     if spec.get("entry_mode") == "tori":
         from tori_entries import VERSION
         metadata.update(studyVersion=VERSION, entryMode="tori", execution="first available 1h open after closed 4h confirmation + configured latency",
@@ -63,6 +70,9 @@ def submit(spec):
     from storage import preflight
     pending=len([s for s in spec["symbols"] if s not in spec.get("dataset_ids",{})]) if spec.get("universe")!="all" else 0
     preflight(history_days=spec["history_days"],symbols=pending)
+    if spec.get("entry_mode")=="lab":
+        from lab_registry import register
+        spec["lab"]["experiment_id"]=register(spec,engine_hash())
     with connection() as db:
         identity = _insert_job(db,spec)
     return get_job(identity)
@@ -113,6 +123,9 @@ def report(identity,offset=0,limit=250,entry_filter="all"):
     if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=1000:
         raise DataError("Ungültige Ergebnisseite.",400)
     job = get_job(identity)
+    if job["spec"].get("entry_mode")=="lab":
+        from lab_jobs import report as lab_report
+        return lab_report(job,offset,limit,entry_filter)
     if entry_filter not in ("all","entries") or (entry_filter!="all" and job["spec"].get("entry_mode")!="tori"):
         raise DataError("Ungültiger Einstiegsfilter.",400)
     with connection() as db:
@@ -199,7 +212,18 @@ def cancel(identity):
     get_job(identity)
     with connection() as db:
         db.execute("UPDATE jobs SET status=CASE WHEN status='queued' THEN 'cancelled' ELSE 'cancel_requested' END,updated=? WHERE id=? AND status IN ('queued','running')",(time.time(),identity))
-    return get_job(identity)
+    result=get_job(identity)
+    if result["status"]=="cancelled":_finish_lab(identity,"cancelled")
+    return result
+
+
+def _finish_lab(identity,status):
+    if status not in ("succeeded","failed","partial","cancelled"):return
+    job=get_job(identity)
+    if job["spec"].get("entry_mode")!="lab" or not job["spec"]["lab"]["experiment_id"]:return
+    from lab_registry import finish_attempt
+    finish_attempt(job["spec"]["lab"]["experiment_id"],identity,status,{"stage":job["spec"]["lab"]["stage"],
+                   "completedTrials":job["completedTrials"],"error":job["error"]})
 
 
 def schedule(value=None):
@@ -284,6 +308,9 @@ def run_job(identity, stop=None):
     if job["manifest"]["engineHash"] != engine_hash():
         raise DataError("Engine-Version hat sich geändert. Bitte neuen Forschungsauftrag starten.",409)
     spec = job["spec"]
+    if spec.get("entry_mode")=="lab":
+        from lab_jobs import run
+        return run(job,stop)
     universe = job["universe"]
     if universe is None:
         if spec.get("universe") == "all":
@@ -457,6 +484,8 @@ def worker_loop(stop, *, once=False):
         with connection() as db:
             db.execute("UPDATE jobs SET status='queued' WHERE status='running'")
             db.execute("UPDATE jobs SET status='cancelled' WHERE status='cancel_requested'")
+            lab_cancelled=[r[0] for r in db.execute("SELECT id FROM jobs WHERE status='cancelled' AND json_extract(spec,'$.entry_mode')='lab'")]
+        for cancelled_id in lab_cancelled:_finish_lab(cancelled_id,"cancelled")
         with monitor() as current_job:
             while not stop.is_set():
                 current_job(None)
@@ -473,11 +502,13 @@ def worker_loop(stop, *, once=False):
                         with connection() as db:
                             db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE ? END,current_symbol=NULL,updated=? WHERE id=?",(status,time.time(),identity))
                         phase(identity, status)
+                        _finish_lab(identity,status)
                     except Exception as error:
                         message=str(error) if isinstance(error,DataError) else f"Interner Forschungsfehler ({type(error).__name__}); Auftrag bleibt zur Prüfung erhalten."
                         with connection() as db:
                             db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE 'failed' END,error=?,updated=? WHERE id=?",(message,time.time(),identity))
                         phase(identity, "failed", error=message)
+                        _finish_lab(identity,"failed")
                     current_job(None)
                 if once:
                     return True

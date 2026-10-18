@@ -1,6 +1,15 @@
 * {
   box-sizing: border-box;
 }
+.synthetic-notice {
+  color: #ffb94d;
+  background: #342515;
+  border: 1px solid #ad6b13;
+  padding: 5px 9px;
+  margin: 6px 0;
+  font-weight: 700;
+  width: fit-content;
+}
 :root {
   color-scheme: light;
   --bg: #fff;

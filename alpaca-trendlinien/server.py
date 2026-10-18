@@ -157,6 +157,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"items":jobs.list_jobs(),"schedule":jobs.schedule(),"workerActive":operational["worker"]["lockHeld"],"operations":operational})
             if path == "/api/research/schedule":
                 return self.send_json(jobs.schedule())
+            if path.startswith("/api/lab/"):
+                from lab_api import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path.startswith("/api/research/jobs/"):
                 parts=path.split("/")
                 if len(parts)==5:
@@ -216,6 +219,7 @@ class Handler(BaseHTTPRequestHandler):
             files = {
                 "/": "index.html", "/app.js": "app.js", "/style.css": "style.css",
                 "/research": "research.html", "/research.js":"research.js", "/research.css":"research.css",
+                "/lab":"lab.html", "/lab.js":"lab.js", "/lab.css":"lab.css",
                 "/drawings.js": "drawings.js",
                 "/analysis.js": "analysis.js",
                 "/measurements.js": "measurements.js", "/api.js": "api.js",
@@ -240,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path=urlparse(self.path).path
-        research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel"))
+        research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/")
         if path != "/api/snapshots" and not research:
             return self.send_json({"error": "Schreibzugriffe sind nur zum lokalen Speichern eines Analysestands vorgesehen."}, 405)
         allowed = self.allowed_hosts()
@@ -257,6 +261,10 @@ class Handler(BaseHTTPRequestHandler):
                 raise DataError("Ungültige Speicheranfrage.", 400)
             body = json.loads(self.rfile.read(length))
             if research:
+                if path.startswith("/api/lab/"):
+                    from lab_api import post
+                    result,status=post(path,body)
+                    return self.send_json(result,status)
                 if path == "/api/research/jobs":
                     return self.send_json(jobs.submit(body),202)
                 if path == "/api/research/schedule":

@@ -6,7 +6,7 @@ import time
 from models import DataError
 from settings import data_dir
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MIGRATIONS = {
     1: [
         "CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,created REAL NOT NULL,updated REAL NOT NULL,status TEXT NOT NULL,spec TEXT NOT NULL,manifest TEXT NOT NULL,universe TEXT,current_symbol TEXT,error TEXT,automatic INTEGER NOT NULL DEFAULT 0)",
@@ -20,12 +20,33 @@ MIGRATIONS = {
         "CREATE TABLE IF NOT EXISTS job_progress(job_id TEXT PRIMARY KEY,phase TEXT NOT NULL,phase_started REAL NOT NULL,progress_at REAL NOT NULL,detail TEXT NOT NULL)",
     ],
     3: ["CREATE TABLE IF NOT EXISTS dataset_quality(dataset_id TEXT PRIMARY KEY,summary TEXT NOT NULL)"],
+    4: [
+        "CREATE TABLE IF NOT EXISTS lab_experiments(id TEXT PRIMARY KEY,created REAL NOT NULL,updated REAL NOT NULL,spec TEXT NOT NULL,fingerprint TEXT NOT NULL,engine_hash TEXT NOT NULL,status TEXT NOT NULL,datasets TEXT,plan TEXT,selection TEXT)",
+        "CREATE TABLE IF NOT EXISTS lab_attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,experiment_id TEXT NOT NULL,job_id TEXT NOT NULL UNIQUE,stage TEXT NOT NULL,created REAL NOT NULL,status TEXT NOT NULL,result TEXT)",
+        "CREATE TABLE IF NOT EXISTS lab_final_access(reservation TEXT PRIMARY KEY,experiment_id TEXT NOT NULL,job_id TEXT NOT NULL,created REAL NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS lab_audit(id INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL,created REAL NOT NULL,kind TEXT NOT NULL,payload TEXT NOT NULL,previous_hash TEXT NOT NULL,hash TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS lab_reviews(id TEXT PRIMARY KEY,created REAL NOT NULL,job_id TEXT NOT NULL,config TEXT NOT NULL,manifest TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS lab_review_cases(pack_id TEXT NOT NULL,id TEXT NOT NULL,sample TEXT NOT NULL,label TEXT,revealed INTEGER NOT NULL DEFAULT 0,tainted INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(pack_id,id))",
+        "CREATE INDEX IF NOT EXISTS lab_attempts_experiment ON lab_attempts(experiment_id,id)",
+        "CREATE INDEX IF NOT EXISTS lab_audit_owner ON lab_audit(owner,id)",
+        "CREATE TABLE IF NOT EXISTS lab_simulations(job_id TEXT NOT NULL,section TEXT NOT NULL,profile TEXT NOT NULL,family TEXT NOT NULL,result TEXT NOT NULL,PRIMARY KEY(job_id,section,profile,family))",
+        "CREATE TABLE IF NOT EXISTS lab_final_windows(symbol TEXT NOT NULL,start_at INTEGER NOT NULL,end_at INTEGER NOT NULL,experiment_id TEXT NOT NULL,job_id TEXT NOT NULL,dataset_id TEXT NOT NULL,PRIMARY KEY(job_id,symbol))",
+        "CREATE INDEX IF NOT EXISTS lab_final_window_lookup ON lab_final_windows(symbol,start_at,end_at)",
+    ],
 }
 REQUIRED = {"jobs":{"id","created","updated","status","spec","manifest","universe","current_symbol","error","automatic"},
             "symbols":{"job_id","symbol","dataset_id","plan","done","error"},
             "trials":{"job_id","id","result"},"events":{"job_id","id","dataset_id","event"},
             "settings":{"key","value"},"job_progress":{"job_id","phase","phase_started","progress_at","detail"},
-            "dataset_quality":{"dataset_id","summary"}}
+            "dataset_quality":{"dataset_id","summary"},
+            "lab_experiments":{"id","spec","fingerprint","engine_hash","status","datasets","plan","selection"},
+            "lab_attempts":{"id","experiment_id","job_id","stage","status","result"},
+            "lab_final_access":{"reservation","experiment_id","job_id"},
+            "lab_audit":{"id","owner","payload","previous_hash","hash"},
+            "lab_reviews":{"id","job_id","config","manifest"},
+            "lab_review_cases":{"pack_id","id","sample","label","revealed","tainted"},
+            "lab_simulations":{"job_id","section","profile","family","result"},
+            "lab_final_windows":{"symbol","start_at","end_at","experiment_id","job_id","dataset_id"}}
 
 
 def migrate(db):

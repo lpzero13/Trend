@@ -565,6 +565,9 @@ function render(bundle, preserve = false) {
   if (symbolChanged || !hadData) rayLayer.load(storedRays(state.symbol));
   $("#ticker").textContent = data.symbol;
   $("#company").textContent = data.company;
+  const synthetic = data.dataKind === "synthetic";
+  $("#synthetic-notice").hidden = !synthetic;
+  $("#feed-label").textContent = synthetic ? "Testmodell" : (data.feed || "iex").toUpperCase();
   $("#interval-label").textContent = state.timeframe;
   history.replaceState(
     null,
@@ -622,11 +625,11 @@ function render(bundle, preserve = false) {
   updateAnalysisControls();
   renderMeasurementList();
   const meta = data.sources[state.timeframe];
-  $("#connection").textContent = Object.values(data.sources).some(
+  $("#connection").textContent = synthetic ? "● Synthetischer Offline-Test" : Object.values(data.sources).some(
     (m) => m.warning,
   )
     ? "⚠ Gespeicherter Stand"
-    : "● Alpaca · IEX";
+    : `● ${data.provider || "Alpaca"} · ${(data.feed || "iex").toUpperCase()}`;
   $("#source-status").textContent =
     `Letzte Kerze: ${dt(data.latest.time)} ET · ${data.bars.length.toLocaleString("de-DE")} Kerzen · ${meta.mode === "incremental" ? "Ergänzt" : meta.cached ? "Lokaler Cache" : "Geladen"}`;
   const warnings = Object.values(data.sources)
@@ -703,7 +706,7 @@ async function load(
     state.frozen = frozen;
     state.asOf = isoCutoff(data);
     const asset = state.assetRows.find((a) => a.symbol === symbol);
-    if (asset) data.company = asset.name;
+    if (asset && data.dataKind !== "synthetic") data.company = asset.name;
     state.bundles.set(key, data);
     state.bundles.set(bundleKey(symbol, state.asOf), data);
     while (state.bundles.size > 32)

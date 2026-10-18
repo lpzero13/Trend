@@ -22,6 +22,7 @@
       <span class="brand">tori<span>.</span></span>
       <a href="/" aria-current="page">Chart</a>
       <a href="/research">Forschung</a>
+      <a href="/lab">Labor</a>
     </nav>
     <header class="toolbar">
       <button
@@ -106,9 +107,10 @@
       <div class="instrument">
         <strong id="company">Kursdaten werden geladen</strong
         ><span class="muted">
-          · <span id="interval-label">4h</span> · IEX · USD</span
+          · <span id="interval-label">4h</span> · <span id="feed-label">IEX</span> · USD</span
         >
         <div id="ohlc" class="ohlc">—</div>
+        <div id="synthetic-notice" class="synthetic-notice" role="status" hidden>SYNTHETISCHE TESTDATEN · keine Börsenkurse</div>
         <div id="analysis-state" class="analysis-state" role="status"></div>
         <div id="replay-status" class="analysis-state" role="status"></div>
       </div>

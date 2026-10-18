@@ -11,6 +11,7 @@ Weboberfläche für die manuelle Aktienanalyse und Hintergrunddienst für reprod
 Weitere Dokumentation:
 
 - [Bedienung der Chartoberfläche](alpaca-trendlinien/README.md)
+- [Forschungslabor, Profile, Blindprüfung und getrennte Testphasen](alpaca-trendlinien/FORSCHUNGSLABOR.md)
 - [Forschungsmethode und JSON-Werkzeuge](alpaca-trendlinien/FORSCHUNG.md)
 - [Betriebsanzeige, Ereignisseiten und Lastmessung](alpaca-trendlinien/BETRIEB-P1.md)
 - [Long-Kriterien als Diskussionsentwurf](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md)

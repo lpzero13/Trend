@@ -22,12 +22,12 @@ DEFAULTS = {"symbols": ["MSFT", "AMZN"], "samples": 10, "seed": 20261017,
 
 
 def validate_spec(value):
-    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe", "entry_mode", "tori"}):
+    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe", "entry_mode", "tori", "lab"}):
         raise DataError("Unbekannte oder ungültige Forschungsparameter.", 400)
     result = {**DEFAULTS, **value}
-    if result.get("entry_mode", "legacy") not in ("legacy", "tori"):
+    if result.get("entry_mode", "legacy") not in ("legacy", "tori", "lab"):
         raise DataError("Unbekannter Einstiegsmodus.", 400)
-    if result.get("entry_mode") == "tori":
+    if result.get("entry_mode") in ("tori","lab"):
         from tori_entries import validate
         result["tori"] = validate(result.get("tori", {}))
     elif "tori" in result:
@@ -50,8 +50,18 @@ def validate_spec(value):
     if not isinstance(result["horizons"], list) or not result["horizons"] or len(result["horizons"]) > 8 or any(type(x) is not int or not 1 <= x <= 250 for x in result["horizons"]):
         raise DataError("Beobachtungshorizonte: 1–8 ganze Zahlen von 1 bis 250.", 400)
     result["horizons"] = sorted(set(result["horizons"]))
+    if result.get("entry_mode")=="lab":
+        from lab_profiles import validate as validate_lab
+        result["lab"]=validate_lab(result.get("lab",{}),result["horizons"])
+        if result["tori"]["line_policy"]!="tracked" or result["tori"]["sampling"]!="full" or result["tori"]["start_date"] or result["tori"]["end_date"]:
+            raise DataError("Labor verwendet vollständige Ereignisscans mit verfolgten Linien. Datumsgrenzen in lab.analysis_start/analysis_end setzen.",400)
+        if result["lab"]["development_fraction"]>=1-result["holdout_fraction"]:
+            raise DataError("Für die Validierung muss ein eigener Zeitanteil verbleiben.",400)
+    elif "lab" in result:
+        raise DataError("Laborparameter nur im separat gewählten Labormodus verwenden.",400)
     ids = result.get("dataset_ids", {})
-    if not isinstance(ids, dict) or any(k not in result["symbols"] or not isinstance(v, str) or not re.fullmatch(r"[a-f0-9]{64}", v) for k,v in ids.items()):
+    allowed_symbols=result["symbols"]+([result["lab"]["benchmark_symbol"]] if result.get("entry_mode")=="lab" else [])
+    if not isinstance(ids, dict) or any(k not in allowed_symbols or not isinstance(v, str) or not re.fullmatch(r"[a-f0-9]{64}", v) for k,v in ids.items()):
         raise DataError("Ungültige Dataset-Zuordnung.", 400)
     return result
 

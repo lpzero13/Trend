@@ -2,6 +2,8 @@
 
 Stand: **18.10.2026**. Dieses Dokument ist der zentrale Einstieg für Hermes und künftige Entwickler. Es beschreibt den tatsächlich implementierten Stand und trennt ihn von Vorhaben. Änderungen am Verhalten, an Schnittstellen oder am Betrieb müssen hier nachvollzogen werden.
 
+**Zusätzlicher lokal abgenommener Entwicklungszweig:** `codex/research-lab` ergänzt den vollständigen Forschungsablauf als eigenen Modus `entry_mode: "lab"` mit `/lab`, versionierten Profilen, gemeinsamen Prüfphasen, Diagnose-/Vergleichsberichten, verblindeten Fallpaketen und optionaler Ausführungssimulation. Beschreibung und Werkzeugvertrag: [FORSCHUNGSLABOR.md](alpaca-trendlinien/FORSCHUNGSLABOR.md). Schema 4 ergänzt die bisherigen Tabellen. **Lokale technische Abnahme abgeschlossen:** 158 Python-Tests je unter 3.12/3.13, 27 JavaScript-Tests, isolierter Offline-Gesamtlauf einschließlich Backup/Restore und anschließende Browserprüfung. Einzelne Nachweise und Daten-/Modellgrenzen: [FORSCHUNGSLABOR-UMSETZUNG.md](alpaca-trendlinien/FORSCHUNGSLABOR-UMSETZUNG.md). SYNTHA/SYNTHB sind ausdrücklich gekennzeichnete künstliche Technikdaten, keine Marktstudie. Dieser lokale Stand ist noch nicht auf Proxmox installiert; unten dokumentierte frühere Rollouts bleiben historisch davon getrennt. Bestehende Zeitpläne werden nicht automatisch auf Labor umgestellt.
+
 **Lokale Weiterentwicklung nach diesem Rollout:** Zusätzlich sind jetzt zufällige Tori-Suchfenster und eine getrennte Schlusskursbeobachtung nach 5/10/20 Handelstagen implementiert. Anleitung: [TORI-KURSBEOBACHTUNG.md](alpaca-trendlinien/TORI-KURSBEOBACHTUNG.md). Diese Erweiterung wurde lokal entwickelt; sie ist nicht Bestandteil des von Hermes laut Nutzerbericht installierten Commits `82d88eb`. Keine automatische Umstellung bestehender Zeitpläne.
 
 **Präzisierung der gewünschten Forschung:** `tori.sampling="origins"` zieht verschiedene zufällige Starttage und prüft danach jede 4h-Kerze bis zum ersten Einstieg je Variante oder bis zum Ende der Entwicklungsdaten, ohne die frühere 60-Kerzen-Suchgrenze. `random` bezeichnet weiterhin den alten begrenzten Fenstervergleich. Im Starttagmodus begrenzen Ab-/Bis-Datum nur die gezogenen Starttage. Holdout bleibt reserviert. Mehrere Starttage können denselben späteren Einstieg erreichen; Starts mit Entry und eindeutige Entryzeitpunkte werden deshalb getrennt berichtet. Ein Entry ist nicht garantiert. Neue Webaufträge und das Beispiel wählen zunächst `origins`; vorhandene Aufträge/Zeitpläne werden nicht umgeschrieben.
@@ -90,7 +92,7 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
 | Betriebsanzeige | Getrennte Lebenszeichen und Arbeitsphasen, Fortschrittswarnung, Datenalter und Import-/Fehlerstände ohne Providerabruf im Healthcheck |
 | Datenqualität | Versionierter XNYS-Tageskalender, Rohkurs-/IEX-Hinweise, beschreibendes Audit neuer Datasets; keine automatische Verifikation von Kapitalmaßnahmen |
-| Datenbetrieb | Speicherinventur und Importprüfung, transaktionale Migrationen bis Schema 3, geprüfte Backup-/Restore-CLI und reine Bereinigungsvorschau |
+| Datenbetrieb | Speicherinventur und Importprüfung, transaktionale Migrationen bis Schema 4, geprüfte Backup-/Restore-CLI und reine Bereinigungsvorschau |
 | Reproduzierbarkeit | Dataset-Prüfsummen, archivierte Parameter und Universen, Seed, Engine-/Regelversion und Ereignisse |
 | Hermes-Schnittstelle | CLI/JSON und authentifizierbare HTTP-Job-API; Berechnung benötigt keinen Browser und kein LLM |
 | Linux-Vorbereitung | systemd-Unit, externer persistenter Datenpfad, Token-/Host-Konfiguration und CLI-Wrapper |
@@ -409,7 +411,7 @@ Die neue CLI `backup --output <neuer-ordner>` verwendet die SQLite-Backup-API un
 6. Bei geänderter Unit `systemctl daemon-reload`, dann Dienst starten. Health, Datenpfad, Zeitplan und einen kleinen Auftrag prüfen.
 7. Neue Engine-Version nicht über alte unterbrochene Aufträge hinwegtäuschen. Fehlerhafte Altaufträge im Archiv lassen und bei Bedarf neue Experimente anlegen.
 
-Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichkeit prüfen. Transaktionale Vorwärtsmigrationen sind bis Schema 3 implementiert; neuere Schemata werden abgewiesen. Es gibt keine automatische Rückwärtsmigration. Alte P1-Versionen besitzen diesen Schutz noch nicht: altes Programm nicht blind gegen eine geänderte Datenbank starten. Git-Commits identifizieren den Code; Datenbank- und Dataset-Backups gehören separat dazu.
+Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichkeit prüfen. Transaktionale Vorwärtsmigrationen sind bis Schema 4 implementiert; neuere Schemata werden abgewiesen. Es gibt keine automatische Rückwärtsmigration. Alte P1-Versionen besitzen diesen Schutz noch nicht: altes Programm nicht blind gegen eine geänderte Datenbank starten. Git-Commits identifizieren den Code; Datenbank- und Dataset-Backups gehören separat dazu.
 
 ## 13. Fehlerbehebung
 

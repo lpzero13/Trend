@@ -13,6 +13,8 @@ Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein
 
 ## Werkzeuge
 
+**Neuer lokaler Laborzweig, Gesamtabnahme noch offen:** `entry_mode: "lab"` und die `lab-*`-CLI-Kommandos ergänzen registrierte Experimente, zeitlich getrennte Entwicklung/Validierung/Abschlusstests und Walk-forward. Vollständiger Werkzeugvertrag und Daten-/Ausführungsgrenzen: `FORSCHUNGSLABOR.md`. Einstieg `lab-profiles`, `lab-experiments`, `lab-experiment --id …`; Folgeläufe mit `lab-run`. Regeln/Daten eines Experiments nicht überschreiben. Nach Validierung `lab-seal` mit begründeter Kandidatenauswahl; finalen Holdout nur als bewusst beauftragte einmalige Prüfung öffnen. Unterschiedliche Profile/Familien und Trainings-/Prüfabschnitte niemals zu einer scheinbar unabhängigen Stichprobe addieren. Optionale modellierte Depotwerte sind von Legacy-Ereignisstudien und realen Brokerergebnissen zu unterscheiden. Vor einem tatsächlichen Rollout Schema 4 und den offenen Abnahmeplan beachten. Diese Skillvorlage wurde dadurch nicht in Hermes installiert.
+
 - `list`: verfügbare Aufträge und Status als JSON lesen.
 - `health`: lokale Betriebsbereitschaft, getrennte Lebenszeichen/Fortschrittszeiten, Datenalter und letzte Fehler lesen; kein Providerabruf. Warnung bei länger fehlendem Fortschritt ist kein sicherer Deadlock-Nachweis.
 - `submit --spec <datei.json>`: einen validierten Forschungsauftrag einreichen. Parameterbeispiel: `/opt/tori/deploy/experiment.example.json`. Die Antwort enthält die Job-ID.

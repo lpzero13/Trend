@@ -10,6 +10,8 @@ Lokale Seite mit echten historischen IEX-Kursen von Alpaca, Kerzen für **1h, 4h
 
 Die feste Hauptnavigation oben bietet **Chart** für die manuelle Suche und **Forschung** für automatische Untersuchungen, Aufträge und Ergebnisse.
 
+**Zusätzliches Forschungslabor:** Unter **Labor** (`/lab`) stehen vollständige chronologische Scans, vergleichbare Regelprofile, verblindete Fallprüfung, Entwicklungs-/Validierungs-/Abschlussphasen und optionale Ausführungssimulationen bereit. [Anleitung und Modellgrenzen](FORSCHUNGSLABOR.md), [lokale Prüfnachweise](FORSCHUNGSLABOR-UMSETZUNG.md).
+
 ## Start unter Windows
 
 Im Projektordner mit Python 3.12 oder 3.13 (lokal geprüfte Versionen):

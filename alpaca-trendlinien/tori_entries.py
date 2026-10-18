@@ -164,8 +164,9 @@ class EntryScanner:
     def __init__(self, dataset, spec, scan_plan, emit=lambda item: None):
         self.dataset, self.spec, self.plan = dataset, spec, scan_plan
         self.options = spec["tori"]
-        sources = source_bars(dataset)
-        self.bars, self.daily, self.hourly = (sources[k] for k in ("4h", "1D", "1h"))
+        sources = self.source_data(dataset)
+        self.bars, self.daily = (sources[k] for k in ("4h", "1D"))
+        self.hourly, self.execution_timeframe = self.execution_source(sources)
         self.daily_ends = [b.end for b in self.daily]
         self.hour_times = [b.time for b in self.hourly]
         self.last = scan_plan["scan_start"]-1
@@ -175,6 +176,18 @@ class EntryScanner:
         self.context_cache = {}
         self.coverage = {"candles": 0, "withoutPair": 0}
         self.first_entries, self.completed = {}, False
+
+    def source_data(self,dataset):
+        return source_bars(dataset)
+
+    def execution_source(self, sources):
+        return sources["1h"], "1h"
+
+    def lines(self, prefix):
+        return pair(prefix, rules_for("4h"))
+
+    def contacts(self, ray, prefix, upper):
+        return contact_count(ray, prefix, upper, self.options["contact_gap_bars"])
 
     def journal(self, case, kind, at, **detail):
         event = {"id": digest({"case": case["id"], "kind": kind, "at": at, "detail": detail}),
@@ -205,7 +218,7 @@ class EntryScanner:
 
     def arm(self, i):
         prefix = self.bars[:i]
-        lines = pair(prefix, rules_for("4h"))
+        lines = self.lines(prefix)
         red, green = lines["red"], lines["green"]
         if self.options["safety_selection"] == "nearest_confirmed":
             alternatives = lines.get("greens", [])
@@ -227,8 +240,8 @@ class EntryScanner:
         context = self.context(prefix[-1].end)
         signal = {"id": identity, "kind": "tori_setup", "index": i-1, "time": prefix[-1].time, "closedAt": prefix[-1].end,
                   "red": red, "green": green, "close": prefix[-1].close, "features": deepcopy(context)}
-        initial_qualified = (contact_count(red,prefix,True,self.options["contact_gap_bars"]) >= 3 and
-                             contact_count(green,prefix,False,self.options["contact_gap_bars"]) >= 3 and
+        initial_qualified = (self.contacts(red,prefix,True) >= 3 and
+                             self.contacts(green,prefix,False) >= 3 and
                              (prefix[-1].end-red["a_time"])/DAY >= 7)
         quality = "qualified" if initial_qualified else "provisional"
         case = {"id": identity, "datasetId": self.dataset["id"], "symbol": self.dataset["material"]["symbol"],
@@ -250,8 +263,8 @@ class EntryScanner:
         bar = self.bars[i]
         red, green = case["frozen"]["red"], case["frozen"]["green"]
         volatility = atr(prefix)
-        rc = contact_count(red, prefix, True, self.options["contact_gap_bars"])
-        gc = contact_count(green, prefix, False, self.options["contact_gap_bars"])
+        rc = self.contacts(red, prefix, True)
+        gc = self.contacts(green, prefix, False)
         age = (bar.end-red["a_time"])/DAY
         level, safety = value(red, i), value(green, i)
         body = bar.close-bar.open
@@ -339,7 +352,7 @@ class EntryScanner:
                 self.close_variant(case, variant, "execution:"+",".join(self.blocked(checks)), bar.time)
             else:
                 variant.update(status="observed", entryAt=bar.time, entryPrice=bar.open,
-                               initialStop=variant["safetyAtSignal"], validRisk=True, executionTimeframe="1h")
+                               initialStop=variant["safetyAtSignal"], validRisk=True, executionTimeframe=self.execution_timeframe)
                 name = variant["variant"]
                 self.first_entries[name] = min(self.first_entries.get(name, bar.time), bar.time)
                 self.journal(case, "tori_entry", bar.time, variant=variant["variant"], price=bar.open)

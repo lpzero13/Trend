@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parent
 NY = ZoneInfo("America/New_York")
 UTC = timezone.utc
 TIMEFRAMES = {"1h": "1Hour", "4h": "4Hour", "1D": "1Day"}
-SECONDS = {"1h": 3600, "4h": 14400, "1D": 86400}
+DATA_TIMEFRAMES = {**TIMEFRAMES, "5m": "5Min"}
+SECONDS = {"5m": 300, "1h": 3600, "4h": 14400, "1D": 86400}
 _LOCK = threading.Lock()
 _DATA_LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _REQUEST_LOCK = threading.Lock()
@@ -143,11 +144,13 @@ def _request(params: dict, key: str, secret: str) -> dict:
 
 def load_bars(symbol: str, timeframe: str, *, force: bool = False,
               now: datetime | None = None, end: datetime | None = None,
-              history_days: int = 450, progress=None) -> tuple[list[Bar], dict]:
+              history_days: int = 450, progress=None, feed="iex", adjustment="raw") -> tuple[list[Bar], dict]:
     if not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}", symbol):
         raise DataError("Bitte ein gültiges US-Aktiensymbol eingeben, etwa AAPL oder MSFT.", 400)
-    if timeframe not in TIMEFRAMES:
+    if timeframe not in DATA_TIMEFRAMES:
         raise DataError("Dieses Intervall wird nicht unterstützt.", 400)
+    if feed not in ("iex", "sip") or adjustment not in ("raw", "split", "all"):
+        raise DataError("Unbekannter Feed oder unbekannte Kursbereinigung.", 400)
     if not isinstance(history_days, int) or not 30 <= history_days <= 3650:
         raise DataError("Historie muss zwischen 30 und 3650 Kalendertagen liegen.", 400)
     now = now or datetime.now(UTC)
@@ -160,20 +163,21 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
     cache_symbol = urllib.parse.quote(symbol, safe="")
     suffix = "" if end is None else "_until_" + end.astimezone(UTC).date().isoformat()
     suffix += "" if history_days == 450 else f"_history_{history_days}"
-    cache_path = data_dir(ROOT) / "market" / f"{cache_symbol}_{timeframe}_iex_raw{suffix}.json"
+    cache_path = data_dir(ROOT) / "market" / f"{cache_symbol}_{timeframe}_{feed}_{adjustment}{suffix}.json"
     # Reuse recent complete history for historical analysis, but filter BEFORE analysis.
     if end is not None and not force and not cache_path.exists():
-        live_path = data_dir(ROOT) / "market" / f"{cache_symbol}_{timeframe}_iex_raw.json"
+        live_path = data_dir(ROOT) / "market" / f"{cache_symbol}_{timeframe}_{feed}_{adjustment}.json"
         try:
             live = json.loads(live_path.read_text("utf-8"))
             required = min(history_days, 380) if history_days == 450 else history_days
             if (live.get("symbol") == symbol and live.get("timeframe") == timeframe
+                    and live.get("feed") == feed and live.get("adjustment") == adjustment
                     and datetime.fromisoformat(live["requested_start"]) <= end - timedelta(days=required)
                     and datetime.fromisoformat(live["requested_end"]) >= end):
                 rows = [r for r in live["bars"] if datetime.fromisoformat(r["t"].replace("Z", "+00:00")).timestamp() <= cutoff]
                 bars, quality = parse_bars(rows, timeframe, cutoff)
                 if len(bars) >= 3:
-                    return bars, {"feed":"iex", "adjustment":"raw", "cached":True,
+                    return bars, {"feed":feed, "adjustment":adjustment, "cached":True,
                         "fetchedAt":datetime.fromtimestamp(live["fetched_at"], UTC).isoformat(),
                         "first":bars[0].time,"last":bars[-1].time,"lastClose":bars[-1].end,
                         "count":len(bars),"pages":live["pages"],"quality":quality,
@@ -181,14 +185,14 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
                         "normalization":"XNYS/calendar-4.13.2" if timeframe=="1D" else "native-duration-v1"}
         except (OSError, ValueError, KeyError, TypeError):
             pass
-    with data_lock(symbol, timeframe + suffix):
+    with data_lock(symbol, timeframe + feed + adjustment + suffix):
         payload = None
         candidate = None
         if not force and cache_path.exists():
             try:
                 candidate = json.loads(cache_path.read_text("utf-8"))
                 if not (candidate.get("symbol") == symbol and candidate.get("timeframe") == timeframe
-                        and candidate.get("feed") == "iex" and candidate.get("adjustment") == "raw"
+                        and candidate.get("feed") == feed and candidate.get("adjustment") == adjustment
                         and isinstance(candidate.get("bars"), list)):
                     candidate = None
                 historical_covered = (end is not None and candidate
@@ -203,7 +207,7 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
             try:
                 stored = json.loads(cache_path.read_text("utf-8"))
                 if (stored.get("symbol") == symbol and stored.get("timeframe") == timeframe
-                        and stored.get("feed") == "iex" and stored.get("adjustment") == "raw"
+                        and stored.get("feed") == feed and stored.get("adjustment") == adjustment
                         and isinstance(stored.get("bars"), list)):
                     candidate = stored
             except (OSError, ValueError):
@@ -215,14 +219,14 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
             key, secret = credentials()
             start = history_start_at
             history_start = start
-            if candidate and candidate.get("bars") and datetime.fromisoformat(candidate["requested_start"]) <= history_start_at:
+            if adjustment == "raw" and candidate and candidate.get("bars") and datetime.fromisoformat(candidate["requested_start"]) <= history_start_at:
                 # Re-read seven days for revised bars and unfinished candles.
                 start = max(start, datetime.fromisoformat(candidate["requested_end"]) - timedelta(days=7))
                 mode = "incremental"
             params = {
-                "symbols": symbol, "timeframe": TIMEFRAMES[timeframe],
+                "symbols": symbol, "timeframe": DATA_TIMEFRAMES[timeframe],
                 "start": start.isoformat(), "end": datetime.fromtimestamp(cutoff, UTC).isoformat(),
-                "feed": "iex", "adjustment": "raw", "sort": "asc", "limit": 10000,
+                "feed": feed, "adjustment": adjustment, "sort": "asc", "limit": 10000,
                 "asof": now.date().isoformat(),
             }
             rows: list[dict] = []
@@ -261,7 +265,7 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
                     rows = [row for row in merged.values()
                             if datetime.fromisoformat(row["t"].replace("Z", "+00:00")) >= history_start]
                 payload = {
-                    "symbol": symbol, "timeframe": timeframe, "feed": "iex", "adjustment": "raw",
+                    "symbol": symbol, "timeframe": timeframe, "feed": feed, "adjustment": adjustment,
                     "fetched_at": now.timestamp(), "requested_start": history_start.isoformat(),
                     "requested_end": datetime.fromtimestamp(cutoff, UTC).isoformat(),
                     "pages": pages, "bars": rows,
@@ -276,9 +280,9 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
             rows = [r for r in rows if datetime.fromisoformat(r["t"].replace("Z", "+00:00")).timestamp() <= cutoff]
         bars, quality = parse_bars(rows, timeframe, cutoff)
         if len(bars) < 3:
-            raise DataError(f"Für {symbol} sind im {timeframe}-Intervall nicht genügend IEX-Kurse verfügbar.", 404)
+            raise DataError(f"Für {symbol} sind im {timeframe}-Intervall nicht genügend {feed.upper()}-Kurse verfügbar.", 404)
         return bars, {
-            "feed": "iex", "adjustment": "raw", "cached": cached,
+            "feed": feed, "adjustment": adjustment, "cached": cached,
             "fetchedAt": datetime.fromtimestamp(payload["fetched_at"], UTC).isoformat(),
             "first": bars[0].time, "last": bars[-1].time, "lastClose": bars[-1].end,
             "count": len(bars), "pages": payload["pages"], "quality": quality,
