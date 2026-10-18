@@ -30,7 +30,7 @@ def validate(value):
     if not isinstance(value, dict) or set(value)-set(DEFAULTS):
         raise DataError("Unbekannte Tori-Einstiegsparameter.", 400)
     result = {**DEFAULTS, **value}
-    if result["sampling"] not in ("full", "random") or type(result["observe_forward"]) is not bool:
+    if result["sampling"] not in ("full", "random", "origins") or type(result["observe_forward"]) is not bool:
         raise DataError("Ungültige Tori-Zeitraum-/Beobachtungsauswahl.", 400)
     if result["line_policy"] not in ("tracked", "snapshot") or result["context"] not in ("daily", "topdown", "off"):
         raise DataError("Ungültige Tori-Linien-/Kontextauswahl.", 400)
@@ -81,6 +81,9 @@ def plan(dataset, spec):
     if options.get("sampling") == "random":
         from tori_observations import sample_windows
         result.update(sample_windows(bars, first, end, spec, dataset["material"]["symbol"]))
+    elif options.get("sampling") == "origins":
+        from tori_observations import sample_origins
+        result.update(sample_origins(bars, first, end, boundary-1, spec, dataset["material"]["symbol"]))
     return result
 
 
@@ -171,6 +174,7 @@ class EntryScanner:
         self.emit = emit
         self.context_cache = {}
         self.coverage = {"candles": 0, "withoutPair": 0}
+        self.first_entries, self.completed = {}, False
 
     def journal(self, case, kind, at, **detail):
         event = {"id": digest({"case": case["id"], "kind": kind, "at": at, "detail": detail}),
@@ -336,6 +340,8 @@ class EntryScanner:
             else:
                 variant.update(status="observed", entryAt=bar.time, entryPrice=bar.open,
                                initialStop=variant["safetyAtSignal"], validRisk=True, executionTimeframe="1h")
+                name = variant["variant"]
+                self.first_entries[name] = min(self.first_entries.get(name, bar.time), bar.time)
                 self.journal(case, "tori_entry", bar.time, variant=variant["variant"], price=bar.open)
             self.save(case)
 
@@ -401,6 +407,8 @@ class EntryScanner:
         self.save(case)
 
     def advance(self, end_index, cancelled=lambda: False, progress=None):
+        if self.completed:
+            return True
         end_index = min(end_index, self.plan["discovery_end"])
         for i in range(self.last+1, end_index+1):
             if cancelled():
@@ -414,6 +422,9 @@ class EntryScanner:
             self.last = i
             self.coverage["candles"] += 1
             if progress: progress(i-self.plan["scan_start"]+1, self.plan["candles"])
+            if self.plan.get("stopAfterFirstEntries") and len(self.first_entries) == len(VARIANTS):
+                self.completed = True
+                break
         return True
 
     def finish(self):

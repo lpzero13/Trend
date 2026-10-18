@@ -49,7 +49,10 @@ def _insert_job(db, spec, automatic=False):
             from tori_observations import VERSION as observation_version
             metadata.update(observationVersion=observation_version,
                             outcomes="raw close changes after XNYS sessions strictly following entry date; no exits/costs/portfolio P&L",
-                            horizons=spec["horizons"], selection="first entry per variant per sampled window" if spec["tori"].get("sampling")=="random" else "all detected entries")
+                            horizons=spec["horizons"], selection="first entry per variant per sampled origin/window" if spec["tori"].get("sampling") in ("random","origins") else "all detected entries")
+        if spec["tori"].get("sampling") == "origins":
+            from tori_observations import ORIGINS_VERSION
+            metadata["samplingVersion"] = ORIGINS_VERSION
     db.execute("INSERT INTO jobs(id,created,updated,status,spec,manifest,automatic) VALUES(?,?,?,?,?,?,?)",
         (identity,now,now,"queued",json.dumps(spec),json.dumps(metadata),int(automatic)))
     return identity
@@ -124,6 +127,13 @@ def report(identity,offset=0,limit=250,entry_filter="all"):
             from tori_entries import summarize as entry_summary
             # Mutable setup rows and their summary share one SQLite read snapshot.
             summary = entry_summary(json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=?", (identity,last_row)))
+            if job["spec"]["tori"].get("sampling") == "origins":
+                plans = [json.loads(r[0]) for r in db.execute("SELECT plan FROM symbols WHERE job_id=? AND plan IS NOT NULL",(identity,))]
+                completed = [w for p in plans for w in p.get("coverage",{}).get("windows",[]) if w["complete"]]
+                summary["searches"] = {"planned":sum(p.get("actual_samples",0) for p in plans), "completed":len(completed),
+                    "withEntry":sum(bool(w["entryVariants"]) for w in completed),
+                    "withoutEntry":sum(not w["entryVariants"] for w in completed),
+                    "byVariant":{v:sum(v in w["entryVariants"] for w in completed) for v in ("breakout","horizontal","retest")}}
             if job["spec"]["tori"].get("observe_forward"):
                 from tori_observations import summarize_observations
                 summary["observations"] = summarize_observations(
@@ -414,7 +424,11 @@ def run_entries(identity, dataset, spec, plan, interrupted, advancing):
         coverage["withoutPair"] += scanner.coverage["withoutPair"]
         if window:
             entries = {v["variant"] for c in scanner.cases.values() for v in c["variants"] if v["status"]=="observed"}
+            first_entries = {name:min(v["entryAt"] for c in scanner.cases.values() for v in c["variants"]
+                                      if v["status"]=="observed" and v["variant"]==name) for name in entries}
             coverage["windows"].append({"id":window["id"],"startAt":window["scanStartAt"],"endAt":window["scanEndAt"],
+                                         "searchedUntil":scanner.bars[scanner.last].end,
+                                         "candles":scanner.coverage["candles"],"firstEntries":first_entries,
                                          "complete":complete,"setups":len(scanner.cases),"entryVariants":sorted(entries)})
         if not complete:
             break

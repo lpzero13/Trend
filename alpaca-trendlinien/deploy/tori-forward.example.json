@@ -8,7 +8,7 @@
   "horizons": [5, 10, 20],
   "holdout_fraction": 0.2,
   "tori": {
-    "sampling": "random",
+    "sampling": "origins",
     "observe_forward": true,
     "line_policy": "tracked",
     "context": "daily"

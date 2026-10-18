@@ -13,7 +13,7 @@ from market_calendar import calendar, session_close
 from models import Bar, DataError, NY
 from research import validate_spec, trial_plan
 from test_research import fixture_sources
-from tori_observations import forward_closes, observe_cases, sample_windows, summarize_observations
+from tori_observations import forward_closes, observe_cases, sample_windows, sample_origins, summarize_observations
 import test_tori_entries as entry_tests
 
 
@@ -32,6 +32,68 @@ def case(at, price=100, name="retest", dataset="a"*64):
 
 
 class ToriObservationTests(unittest.TestCase):
+    def test_random_origins_sample_unique_dates_and_ignore_price_and_search_width(self):
+        rows=fixture_sources()["4h"][0]
+        spec=validate_spec({"entry_mode":"tori","samples":10,"search_bars":1,"tori":{"sampling":"origins"}})
+        a=sample_origins(rows,740,800,1000,spec,"TEST")
+        b=sample_origins([replace(b,high=999,close=998) for b in rows],740,800,1000,{**spec,"search_bars":500},"TEST")
+        self.assertEqual(a,b)
+        self.assertEqual(a["actual_samples"],10)
+        self.assertEqual(len({w["originDate"] for w in a["windows"]}),10)
+        self.assertTrue(all(w["discovery_end"]==1000 and w["candles"]>60 for w in a["windows"]))
+        self.assertTrue(all(datetime.fromtimestamp(rows[w["scan_start"]].time,NY).hour==8 for w in a["windows"]))
+        self.assertNotEqual(a,sample_origins(rows,740,800,1000,{**spec,"seed":1},"TEST"))
+
+    def test_origin_date_limits_do_not_limit_search_or_enter_holdout(self):
+        rows=fixture_sources()
+        data={"material":{"symbol":"TEST","bars":{tf:[asdict(b) for b in bars] for tf,(bars,_) in rows.items()}}}
+        spec=validate_spec({"entry_mode":"tori","samples":10,"tori":{"sampling":"origins","start_date":"2024-07-01","end_date":"2024-07-02"}})
+        p=trial_plan(data,spec)
+        self.assertEqual(p["actual_samples"],2)
+        self.assertEqual([w["originDate"] for w in p["windows"]],["2024-07-01","2024-07-02"])
+        self.assertTrue(all(w["scanEndAt"]>stamp("2024-07-02",23) for w in p["windows"]))
+        self.assertTrue(all(w["scanEndAt"]==p["observation_end"]<p["holdout_start"] for w in p["windows"]))
+
+    def test_first_entries_stop_identically_in_steps_or_one_jump_and_not_at_search_width(self):
+        helper=entry_tests.ToriEntryTests()
+        a,_,lines=helper.scanner();b,_,_=helper.scanner()
+        for scanner in (a,b):
+            scanner.plan["stopAfterFirstEntries"]=True
+            scanner.spec["search_bars"]=1  # Must not truncate this search.
+            scanner.hourly=[replace(row,open=103,high=103.1,low=102.9,close=103) for row in scanner.hourly]
+        helper.run_controlled(a,lines)
+        with patch("tori_entries.pair",return_value=lines),patch("tori_entries.contact_count",return_value=2):
+            for i in range(30,36): b.advance(i)
+        self.assertTrue(a.completed)
+        self.assertGreater(a.last,30)
+        self.assertLess(a.last,35)
+        self.assertEqual(a.cases,b.cases)
+        self.assertEqual(a.coverage,b.coverage)
+        self.assertEqual(len(a.first_entries),3)
+
+    def test_origin_job_offline_persists_first_entry_metadata_and_replays(self):
+        with tempfile.TemporaryDirectory() as folder,patch.dict(os.environ,{"TORI_DATA_DIR":folder,"TORI_AUTO_ENABLED":"0"}):
+            identity=save_dataset("TEST",fixture_sources())
+            data=read_dataset(identity)
+            basic=validate_spec({"entry_mode":"tori"})
+            p=trial_plan(data,basic)
+            near_end=datetime.fromtimestamp(data["material"]["bars"]["4h"][p["discovery_end"]-5]["time"],NY).date().isoformat()
+            spec={"symbols":["TEST"],"dataset_ids":{"TEST":identity},"entry_mode":"tori","samples":2,
+                  "tori":{"sampling":"origins","observe_forward":True,"start_date":near_end,"context":"off"}}
+            j=jobs.submit(spec)
+            with patch("jobs.import_dataset",side_effect=AssertionError("offline")):
+                jobs.worker_loop(threading.Event(),once=True)
+            a=jobs.report(j["id"])
+            self.assertEqual(a["job"]["status"],"succeeded")
+            windows=a["job"]["symbols"][0]["plan"]["coverage"]["windows"]
+            self.assertEqual(len(windows),2)
+            self.assertTrue(all(w["complete"] and "firstEntries" in w and "searchedUntil" in w for w in windows))
+            with jobs.connection() as db: db.execute("UPDATE symbols SET done=0 WHERE job_id=?",(j["id"],))
+            jobs.run_job(j["id"])
+            b=jobs.report(j["id"])
+            self.assertEqual(a["trials"],b["trials"])
+            self.assertEqual(a["summary"],b["summary"])
+
     def test_same_anchors_in_different_windows_keep_distinct_records(self):
         helper=entry_tests.ToriEntryTests()
         a,_,lines=helper.scanner();b,_,_=helper.scanner()

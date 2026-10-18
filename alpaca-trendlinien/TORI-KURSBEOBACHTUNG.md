@@ -1,4 +1,4 @@
-# Tori: Zufallszeiträume und Kursentwicklung nach dem Einstieg
+# Tori: Zufällige Starttage und Kursentwicklung nach dem Einstieg
 
 Stand: 18.10.2026. Lokale Erweiterung auf Basis des optionalen Tori-Einstiegsmodus. Das ist eine historische Ereignisstudie mit Einstiegskriterien, keine vollständige Handels-/Depotsimulation. Die bestehenden Kriterien werden durch spätere Kurse nicht verändert. Es werden keine Orders erzeugt.
 
@@ -7,7 +7,7 @@ Stand: 18.10.2026. Lokale Erweiterung auf Basis des optionalen Tori-Einstiegsmod
 Unter **Forschung → Untersuchungsmodus → Tori-Kriterien · Einstiege und Kursverläufe**:
 
 1. Aktienliste eintragen, beispielsweise die fünf technischen Testtitel aus `deploy/tori-forward.example.json`.
-2. Bei **Zeiträume** „Zufällige Zeiträume je Aktie“ wählen. Anzahl, Suchfenster in 4h-Kerzen und Seed einstellen.
+2. Bei **Zeiträume** „Zufälliger Tag → bis zum Einstieg / Datenende“ wählen. Anzahl der Starttage und Seed einstellen. Die Suchkerzenbegrenzung ist hier deaktiviert; sie gehört nur zur weiterhin verfügbaren Variante „Begrenzte Zufallsfenster“.
 3. **Nach dem Einstieg** auf Kursauswertung stellen. Unter Beobachtungsannahmen Horizonte `5, 10, 20` verwenden; diese zählen im Tori-Modus Handelstage. Kostenannahmen sind hier deaktiviert.
 4. Linienmodus und Einstiegskriterien wählen. Der Standard verfolgt neue Linien und hält ursprüngliche Setups befristet weiter. Die alternative Fixierung nimmt je Suchfenster nur das am Fensterbeginn bekannte Linienpaar auf.
 5. „Einmal untersuchen“ starten. Aufträge, Daten, Parameter und Ergebnisse bleiben lokal gespeichert. Bestehende Zeitpläne werden durch die Formauswahl nicht verändert.
@@ -16,7 +16,20 @@ Alternativ ist der gesamte gewählte Zeitraum weiterhin untersuchbar. „Nur Ein
 
 ## Zufallsverfahren und Auswahl
 
-- Ein Jahr Vorlauf und der reservierte spätere Holdout bleiben bestehen. Optionale Datumsfelder begrenzen die **Einstiegssuche**, nicht den späteren Kursverlauf; dieser darf bis zum Ende des Entwicklungsbestands reichen.
+### Zufällige Starttage: vorwärts bis zum Einstieg
+
+- `tori.sampling="origins"` zieht je Aktie die gewünschte Zahl verschiedener New Yorker Handelstage aus den verfügbaren Quelldaten nach dem Vorlauf. Am ersten verfügbaren 4h-Balken des gezogenen Tages startet die Prüfung mit der davor abgeschlossenen Historie. Die Ziehung verwendet nur Seed, Symbol, Zeitgrenzen und Version `tori-random-origins-1`, keine späteren Preise oder Signale. Bei zu wenigen verschiedenen Tagen wird die tatsächliche Anzahl ausgewiesen. Es wird nicht neu gezogen, weil ein Tag keinen Einstieg liefert.
+- Ab jedem Starttag wird jede folgende 4h-Kerze geprüft, bis je Einstiegsvariante der erste passende Einstieg gefunden wurde oder das Ende der Entwicklungsdaten erreicht ist. Es gibt keine Begrenzung durch `search_bars`; insbesondere nicht die früheren 60 Suchkerzen. Sind alle drei Varianten gefunden, endet der Durchlauf früher. Einzelne Linienpaare behalten ihre bisherige begrenzte Lebensdauer; im Verfolgungsmodus werden danach weiterhin neue bestätigte Paare aufgenommen. Die Kriterien und Lebensdauer einzelner Setups werden nicht gelockert.
+- Ab-/Bis-Datum begrenzen in diesem Modus ausschließlich die Auswahl der **Starttage**, nicht die folgende Suche. Ein Jahr Vorlauf und der spätere reservierte Holdout bleiben bestehen; Suche und Kursbeobachtung greifen nicht auf dessen Preise zu. Datenende bedeutet hier Ende des freigegebenen Entwicklungsbestands und kann vor dem aktuellsten Kurs liegen.
+- Die Suche garantiert keinen Einstieg. Kriterien können im gesamten folgenden Bestand unerfüllt bleiben. Auch ein sehr alter Starttag kann ohne Treffer bis ans Ende laufen. Die Ergebnisübersicht trennt geplante/abgeschlossene Starts, Starts mit mindestens einem Einstieg, Starts ohne Einstieg und eindeutige spätere Einstiegszeitpunkte.
+- Verschiedene Starttage dürfen denselben späteren Einstieg erreichen. Das sind mehrere erfolgreiche Suchläufe, aber keine unabhängigen Trades. Je Start/Variante wird der erste Entry archiviert; die Kurskennzahlen zählen Dataset + Entryzeit je Variante/Qualität nur einmal. Die Startübersicht nennt die jeweils gefundenen Zeiten und den tatsächlich zuletzt geprüften Zeitpunkt.
+- Beispiel: Drei Starttage im Januar können alle zum selben Entry im März führen. Der Bericht zeigt dann drei Starts mit Einstieg, aber nur einen eindeutigen Einstieg für die Kursstatistik. Bleibt der dritte Start nach diesem März-Entry ohne späteren Treffer, sind es zwei Starts mit Einstieg und einer ohne.
+
+### Begrenzte Zufallsfenster: ursprünglicher Vergleichstest
+
+Diese alternative Einstellung `tori.sampling="random"` bleibt zur Vergleichbarkeit alter Aufträge erhalten. Der ursprüngliche Fünfaktientest mit 42 Fenstern und einem AAPL-Entry verwendete diese Begrenzung und ist **kein** Ergebnis der neuen Suche bis zum Datenende.
+
+- Ein Jahr Vorlauf und der reservierte spätere Holdout bleiben bestehen. Optionale Datumsfelder begrenzen hier die **Einstiegssuche**, nicht den späteren Kursverlauf; dieser darf bis zum Ende des Entwicklungsbestands reichen.
 - Fenster werden aus vollständig verfügbaren Suchzeiträumen allein anhand der Zeitachse gewählt. Ein lokaler Zufallsgenerator verwendet Seed, Symbol, Zeitgrenzen, Fensterbreite und Verfahrensversion. Weder spätere Signale noch Kursgewinne beeinflussen die Auswahl. Verschiedene Aktien können verschiedene Kalenderfenster erhalten.
 - Kandidaten werden gemischt und nicht überlappende Suchfenster bis zur gewünschten Anzahl aufgenommen. Es handelt sich um ein reproduzierbares Zufallsverfahren, keine gleichgewichtete unabhängige Stichprobe aller möglichen Fensterkombinationen. Platz oder zufällige Anordnung können weniger Fenster ergeben als angefordert; der Bericht nennt die tatsächliche Anzahl. Zu kurze Zeiträume ergeben einen verständlichen Fehler.
 - Innerhalb jedes Fensters läuft die bestehende kausale 4h-Engine Kerze für Kerze. Neue Linienpaare ersetzen alte Setups nicht rückwirkend. Jedes Fenster startet mit frischem Setup-Zustand, aber vollständiger vorheriger Linienhistorie; Setups aus früheren Fenstern werden nicht übernommen.
@@ -54,7 +67,7 @@ tori-tool submit --spec /opt/tori/deploy/tori-forward.example.json
 tori-tool report --id <id> --entry-filter entries --limit 50
 ```
 
-Die Beispielwerte sind Testannahmen, keine optimierten Regeln. Zusätzliche Parameter in `tori`: `sampling: "random" | "full"` (API-Standard `full`) und `observe_forward: true | false` (API-Standard `false`). Die Weboberfläche bietet für neue Tori-Aufträge zunächst Zufallsfenster und Kursbeobachtung an. `samples`, `search_bars` und `seed` steuern die Zufallsfenster; `horizons` steuert bei aktivierter Tori-Kursbeobachtung die Handelstage. Der Legacy-Modus behält seine bisherigen Bedeutungen.
+Die Beispielwerte sind Testannahmen, keine optimierten Regeln. Zusätzliche Parameter in `tori`: `sampling: "origins" | "random" | "full"` (API-Standard `full`) und `observe_forward: true | false` (API-Standard `false`). Die Weboberfläche bietet für neue Tori-Aufträge zunächst Starttage mit Suche bis zum Einstieg/Datenende und Kursbeobachtung an. `samples` und `seed` steuern Starttage bzw. Fenster, `search_bars` gilt nur für begrenzte Zufallsfenster. `horizons` steuert bei aktivierter Tori-Kursbeobachtung die Handelstage. Der Legacy-Modus behält seine bisherigen Bedeutungen.
 
 Für eine garantierte Offline-Wiederholung `dataset_ids` je Symbol aus dem ursprünglichen Auftrag übernehmen. Dann sind keine Providerabrufe nötig. Der erste Auftrag ohne gepinnte Daten nutzt die vorhandene Provider-/Cache-Anbindung und archiviert den normalisierten Bestand; ein alter Dataset-Bestand wird nicht überschrieben.
 

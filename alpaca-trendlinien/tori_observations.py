@@ -12,6 +12,30 @@ from market_calendar import CALENDAR_VERSION, calendar, session_close
 from models import DataError, NY
 
 VERSION = "tori-forward-closes-1"
+ORIGINS_VERSION = "tori-random-origins-1"
+
+
+def sample_origins(bars, first, last_origin, search_end, spec, symbol):
+    """Sample dates first; search EVERY later candle up to the discovery boundary.
+
+    Date limits restrict origins only. No future-price or entry-dependent redraw.
+    Multiple origins may converge on the same entry, deliberately and visibly.
+    """
+    by_day = {}
+    for i in range(first, last_origin+1):
+        day = str(datetime.fromtimestamp(bars[i].time, NY).date())
+        by_day.setdefault(day, i)
+    days = sorted(by_day)
+    rng = random.Random(f"{ORIGINS_VERSION}|{spec['seed']}|{symbol}|{days[0]}|{days[-1]}|{bars[search_end].end}")
+    chosen = sorted(rng.sample(days, min(spec["samples"], len(days))))
+    windows = [{"id":digest({"version":ORIGINS_VERSION,"symbol":symbol,"day":day,"seed":spec["seed"]}),
+                "originDate":day,"scan_start":by_day[day],"discovery_end":search_end,
+                "candles":search_end-by_day[day]+1,"scanStartAt":bars[by_day[day]].time,
+                "scanEndAt":bars[search_end].end,"stopAfterFirstEntries":True} for day in chosen]
+    return {"windows":windows,"starts":[w["scan_start"]-1 for w in windows],
+            "requested_samples":spec["samples"],"actual_samples":len(windows),
+            "candles":sum(w["candles"] for w in windows),"available_origins":len(days),
+            "samplingVersion":ORIGINS_VERSION,"samplingNote":"random dates; forward until first entry per variant or discovery end; paths may overlap"}
 
 
 def sample_windows(bars, first, end, spec, symbol):

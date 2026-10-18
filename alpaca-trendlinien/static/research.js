@@ -238,9 +238,10 @@ $("#entry-mode").onchange = () => {
   $("#tori-settings")
     .querySelectorAll("input,select")
     .forEach((el) => (el.disabled = !tori));
-  const random = tori && $("#tori-sampling").value === "random";
-  for (const id of ["study-samples", "study-seed", "study-search"])
-    $("#" + id).disabled = tori && !random;
+  const sampling = $("#tori-sampling").value;
+  for (const id of ["study-samples", "study-seed"])
+    $("#" + id).disabled = tori && sampling === "full";
+  $("#study-search").disabled = tori && sampling !== "random";
   $("#study-horizons").disabled = tori && $("#tori-observe").value !== "yes";
   $("#study-cost").disabled = tori;
   $("#horizon-label").textContent = tori ? "Auswertung nach Handelstagen (nach Einstiegstag)" : "Auswertung nach 4h-Kerzen";
@@ -251,7 +252,9 @@ $("#entry-mode").onchange = () => {
     ? "Die Horizonte zählen Börsensitzungen nach dem Einstiegstag, keine 4h-Kerzen. Angezeigt wird die reine Kursänderung zum jeweiligen Tagesschluss, ohne Kosten, Stop-Ausführung oder Take-Profit. Unvollständige Beobachtungen werden separat gezählt."
     : originalCopy["observation-note"];
   $("#method-copy").textContent = tori
-    ? "365 Tage Linienvorlauf. Zufallsfenster werden vor der Signalsuche per Seed gezogen, ohne Überlappung der Suchzeiträume; bei wenig Historie sind weniger Fenster möglich. Je Fenster/Variante wird der erste Einstieg zur Kursbeobachtung ausgewählt. Auch Fenster ohne Einstieg bleiben sichtbar. Der spätere Holdout bleibt reserviert. Fixierte Setups bleiben bestehen; spätere Kursbeobachtungen und Einstiegsvarianten können abhängig sein."
+    ? sampling === "origins"
+      ? "Zufällige Handelstage nach 365 Tagen Vorlauf auswählen. Ab jedem Starttag jede 4h-Kerze bis zum ersten Einstieg je Variante oder bis zum Ende der Entwicklungsdaten prüfen; keine Begrenzung auf 60 Suchkerzen. Datumsfelder begrenzen nur die Starttage. Der spätere Holdout bleibt reserviert. Derselbe spätere Einstieg kann aus mehreren Starts erreicht werden und zählt in der Kursstatistik nur einmal je Gruppe."
+      : "365 Tage Linienvorlauf. Begrenzte Zufallsfenster sind die bisherige Testvariante und enden nach der eingestellten Zahl Suchkerzen. Je Fenster/Variante zählt der erste Einstieg zur Kursbeobachtung. Auch Fenster ohne Einstieg bleiben sichtbar. Der spätere Holdout bleibt reserviert; parallele Verläufe sind abhängig."
     : originalCopy["method-copy"];
 };
 $("#tori-sampling").onchange = () => $("#entry-mode").onchange();
@@ -398,14 +401,19 @@ function renderToriReport(data) {
   $("#export-events").href = `/api/research/jobs/${job.id}/events?limit=250`;
   $("#cancel-job").disabled = !["queued", "running"].includes(job.status);
   const observing = !!summary.observations;
-  let html = `<p class="note"><b>${observing ? "Einstiege und spätere Schlusskurse" : "Nur Einstiege"}, keine Take-Profits oder Ausstiege.</b> ${summary.setups} archivierte Linienpaare. ${job.spec.tori.sampling === "random" ? "Zufallsfenster werden ohne Sicht auf spätere Signale gewählt. Für die Kursbeobachtung zählt je Fenster und Variante der erste Einstieg; zeitgleiche Linienpaare werden dedupliziert." : "Jede abgeschlossene 4h-Kerze im gewählten Entwicklungszeitraum wird geprüft."} Linien zu X bzw. bei Aufnahme eines Setups bleiben fest. Varianten und parallele Linienpaare sind keine unabhängigen Trades.</p>`;
+  const origins = job.spec.tori.sampling === "origins";
+  let html = `<p class="note"><b>${observing ? "Einstiege und spätere Schlusskurse" : "Nur Einstiege"}, keine Take-Profits oder Ausstiege.</b> ${summary.setups} archivierte Linienpaare. ${origins ? "Ab jedem zufälligen Starttag läuft die Suche bis zum ersten Einstieg je Variante oder bis zum Ende der Entwicklungsdaten. Keine feste Suchkerzen-Grenze; gleiche spätere Einstiege können zu mehreren Starts gehören." : job.spec.tori.sampling === "random" ? "Begrenzte Zufallsfenster: Suche endet nach der festgelegten Zahl 4h-Kerzen. Für die Kursbeobachtung zählt je Fenster und Variante der erste Einstieg." : "Jede abgeschlossene 4h-Kerze im gewählten Entwicklungszeitraum wird geprüft."} Linien zu X bzw. bei Aufnahme eines Setups bleiben fest. Varianten und parallele Linienpaare sind keine unabhängigen Trades.</p>`;
+  if (summary.searches) {
+    const s = summary.searches;
+    html += `<div class="stat-row"><div><strong>${s.completed} / ${s.planned}</strong><span>Starttage abgeschlossen / geplant</span></div><div><strong>${s.withEntry}</strong><span>Starts mit mindestens einem Einstieg</span></div><div><strong>${s.withoutEntry}</strong><span>Starts ohne Einstieg bis Datenende</span></div></div><p class="note">Starttage mit erstem Einstieg je Variante: ${Object.keys(entryNames).map(v => `${entryNames[v]} ${s.byVariant[v]}`).join(" · ")}. Diese Zahlen enthalten wiederholte spätere Einstiegszeitpunkte; die Kursstatistik darunter zählt eindeutige Zeitpunkte je Gruppe.</p>`;
+  }
   for (const item of job.symbols) {
     const p = item.plan;
-    html += `<p class="note">${escapeHtml(item.symbol)} · ${p ? `${date(p.scanStartAt)} bis ${date(p.scanEndAt)} · ${p.coverage?.candles ?? 0}/${p.candles} Kerzen geprüft · Holdout ab ${date(p.holdout_start)}` : "Wartet auf Daten"}${item.error ? " · " + escapeHtml(item.error) : ""}</p>`;
+    html += `<p class="note">${escapeHtml(item.symbol)} · ${p ? `${date(p.scanStartAt)} bis ${date(p.scanEndAt)} · ${p.coverage?.candles ?? 0}/${p.candles} ${origins ? "maximal mögliche" : ""} Kerzen geprüft · Holdout ab ${date(p.holdout_start)}` : "Wartet auf Daten"}${item.error ? " · " + escapeHtml(item.error) : ""}</p>`;
     if (p?.windows) {
       const complete = (p.coverage?.windows || []).filter(w => w.complete);
       const empty = complete.filter(w => !w.entryVariants.length).length;
-      html += `<p class="note">${p.actual_samples}/${p.requested_samples} nicht überlappende Suchfenster verfügbar · ${complete.length} abgeschlossen · ${empty} ohne Einstieg. Seed ${job.spec.seed}. Beobachtungsverläufe können trotzdem überlappen.</p><details><summary>Gezogene Zeiträume und Varianten</summary><ul>${p.windows.map(w => { const done = complete.find(c => c.id === w.id); return `<li>${date(w.scanStartAt)} – ${date(w.scanEndAt)} · ${done ? done.entryVariants.map(v => entryNames[v]).join(", ") || "kein Einstieg" : "noch nicht vollständig geprüft"}</li>`; }).join("")}</ul></details>`;
+      html += `<p class="note">${p.actual_samples}/${p.requested_samples} ${origins ? "zufällige Starttage" : "nicht überlappende begrenzte Suchfenster"} verfügbar · ${complete.length} abgeschlossen · ${complete.length-empty} mit Einstieg · ${empty} ohne Einstieg bis ${origins ? "zum Datenende" : "Fensterende"}. Seed ${job.spec.seed}. ${origins ? "Mehrere Starttage können denselben Einstieg erreichen." : "Beobachtungsverläufe können trotzdem überlappen."}</p><details><summary>Gezogene Zeiträume und Varianten</summary><ul>${p.windows.map(w => { const done = complete.find(c => c.id === w.id); return `<li>${w.originDate ? escapeHtml(w.originDate) : date(w.scanStartAt)} → ${date(done?.searchedUntil || w.scanEndAt)} · ${done ? done.entryVariants.map(v => `${entryNames[v]}${done.firstEntries?.[v] ? " am "+date(done.firstEntries[v]) : ""}`).join(", ") || "kein Einstieg bis zum Suchende" : "noch nicht vollständig geprüft"}</li>`; }).join("")}</ul></details>`;
     }
   }
   if (job.error) html += `<p class="error-note">${escapeHtml(job.error)}</p>`;
