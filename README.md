@@ -54,7 +54,7 @@ python -m unittest discover -s tests -q
 node --test tests/test_geometry.cjs tests/test_snapshot_view.cjs tests/test_measurements.cjs
 ```
 
-Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions ist für Linux/Windows mit Python 3.12/3.13 eingerichtet, ohne Alpaca-Zugangsdaten. Lokal unter Windows: jeweils 98 Python-Tests mit Python 3.12 und 3.13 (je ein wegen fehlender Symlinkberechtigung übersprungen), dazu 24 JavaScript-Tests erfolgreich. Remote-CI und Containerabnahme bleiben gesondert zu prüfen.
+Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions ist für Linux/Windows mit Python 3.12/3.13 eingerichtet, ohne Alpaca-Zugangsdaten. Lokal unter Windows: jeweils 113 Python-Tests mit Python 3.12 und 3.13 (je ein wegen fehlender Symlinkberechtigung übersprungen), dazu 24 JavaScript-Tests erfolgreich. Remote-CI und Containerabnahme bleiben gesondert zu prüfen.
 
 P2 ergänzt den US-Tageskalender, beschreibende Datenqualitätsprüfungen, Speicherinventur und Importprüfung, Schema-Migrationen sowie geprüfte Backup-/Restore-Werkzeuge. Bedienung, Updatehinweise und Grenzen: [BETRIEB-P2.md](alpaca-trendlinien/BETRIEB-P2.md). Die lokale Sicherung wurde in einen neuen Ordner wiederhergestellt und ein archivierter Auftrag daraus ohne Providerabruf identisch wiederholt.
 
@@ -63,3 +63,5 @@ P2 ergänzt den US-Tageskalender, beschreibende Datenqualitätsprüfungen, Speic
 Zugangsdaten, lokale Konfiguration, Kursdaten, Datasets, Datenbanken, Snapshots, Logs, virtuelle Umgebungen und lokale Screenshots/Prüfartefakte werden nicht hochgeladen. Ein frischer Clone enthält den Code und Testfixtures; Marktdaten müssen vor Ort importiert oder aus einem eigenen Backup übernommen werden.
 
 Die gebündelte Chartbibliothek liegt mit Apache-2.0-Lizenz und Attribution unter [`static/vendor/`](alpaca-trendlinien/static/vendor/). Eine eigene öffentliche Nutzungslizenz für den übrigen Projektcode wurde bisher nicht festgelegt.
+
+Optionaler Tori-Einstiegsmodus: vollständiger Zeitraum, Fixierung zu X, Kriterienprotokoll und drei getrennte Einstiegsvarianten. Die bisherige Forschung bleibt Standard. [Anleitung und Grenzen](alpaca-trendlinien/TORI-EINSTIEGSMODUS.md).

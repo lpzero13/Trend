@@ -377,7 +377,7 @@ function automaticLines() {
         position: "belowBar",
         color: "#2765d5",
         shape: "arrowUp",
-        text: `${setup.variant === "retest" ? "Retest" : "Ausbruch"} · Entry ${fmt(setup.entryPrice)}`,
+        text: `${setup.variant === "retest" ? "Retest" : setup.variant === "horizontal" ? "Horizontal bestätigt" : "Ausbruch"} · Entry ${fmt(setup.entryPrice)}`,
       });
     if (setup.validRisk && setup.initialStop) {
       rayLayer.automatic.push({
@@ -435,7 +435,7 @@ function table() {
       (tf) => {
         const e = data.lanes[tf].event;
         return e
-          ? `${e.kind === "green_break" ? "Grün" : e.kind === "long_break" ? "Rot, qualifiziert" : "Rot, Filter fehlt"}<br><small>${dt(e.closedAt)}</small>`
+          ? `${tf === "4h" && data.researchSetup?.entryMode === "tori" ? "Rot, ursprünglicher Bruch" : e.kind === "green_break" ? "Grün" : e.kind === "long_break" ? "Rot, qualifiziert" : "Rot, Filter fehlt"}<br><small>${dt(e.closedAt)}</small>`
           : "—";
       },
     ],

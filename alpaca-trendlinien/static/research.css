@@ -100,6 +100,25 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
+.entry-mode-label {
+  display: block;
+  margin-bottom: 18px;
+  max-width: 640px;
+  color: var(--muted);
+}
+.entry-mode-label select {
+  margin-top: 7px;
+}
+#tori-settings {
+  margin-bottom: 24px;
+}
+.entry-checks {
+  white-space: normal;
+  min-width: 260px;
+}
+.entry-checks ul {
+  padding-left: 18px;
+}
 .form-grid label,
 .study-actions label {
   display: flex;

@@ -127,6 +127,16 @@ Maschinenlesbare Nachweise: `artifacts/upgrade-live-verification.json` und `arti
 
 ## P2: Betrieb und Datenqualität – 18.10.2026
 
+## Optionaler Tori-Einstiegsmodus – 18.10.2026
+
+113 Python-Tests unter Windows jeweils mit Python 3.12 und 3.13 erfolgreich, je ein Symlinktest wegen fehlender Berechtigung übersprungen; 24 JavaScript-Tests erfolgreich. 15 neue Tori-Tests decken insbesondere Einzelschritte gegen großen Sprung, unveränderte frühere Entscheidungen bei zukünftigen Kursänderungen, spätere Entry-Stundentiefs, parallele alte/neue Linienpaare, Fixierung zu X, Kontakt-Episoden, Kontext-/Momentum-/Safety-Prüfung, 1h-Eröffnung und Offline-Wiederaufnahme ohne Duplikate ab. Neue Implementierung separat auswählbar; bisherige Forschung bleibt Standard.
+
+Echter vorhandener AMZN-Bestand offline im lokalen Worker: 674 Kerzen, 284 Linienpaare. Horizontale Bestätigung und Retest fanden je denselben einen eindeutigen Einstieg, zwei zugrunde liegende Linienpaare führten zu doppelten Rohfällen. Snapshot + Chart-Safety vom 05.–20.09.2025: genau ein Linienpaar über 22 Kerzen untersucht. Originaldataset unverändert; kein Providerimport für diese Prüfaufträge. Kein Take-Profit, Ausstieg oder realisierter Gewinn berechnet.
+
+Chrome: Moduswechsel Tori/bisherig, gültige Standardwerte, Auswahl „zu X fixieren“, Entry-Filter/alle Ablehnungen und Seitenwechsel 51–100 von 284 geprüft. Historischen Entry über Chartlink geöffnet; 4h-/1D-Anker vor/nach einem 1h-Schritt identisch. Lokale Screenshots in `artifacts/tori-entry-chart.png` und `artifacts/tori-entry-research.png` (außerhalb Git). Parameter und Grenzen in [TORI-EINSTIEGSMODUS.md](TORI-EINSTIEGSMODUS.md). Bestehender Zeitplan unverändert, kein Containerrollout oder Push.
+
+## P2-Nachweise (vorheriger Stand)
+
 Nachtrag zur Scrollkorrektur: Die gemeinsame Chart-CSS sperrte das HTML-Dokument mit `overflow: hidden`; der automatische Höhenmodus des Forschungs-Bodys konnte dies nicht aufheben. Die Forschungsseite hat nun eine eigene HTML-Klasse mit vertikalem Dokumentscrollen, der Body bleibt ohne eigene Scrollfläche. In Chrome nach Neuladen echtes Mausrad-Scrollen bis zum Dokumentende und zurück sowie Bild-ab geprüft: Scrollposition bis 1116/1116, Fußnote vollständig sichtbar, Navigation weiterhin oben. 24 bestehende JavaScript-Tests erfolgreich; keine Änderung an Berechnung oder Chartlayout.
 
 98 Python-Tests unter Windows jeweils mit Python 3.12 und 3.13.12 erfolgreich (je ein Symlinktest wegen fehlender Berechtigung übersprungen), 24 JavaScript-Tests erfolgreich. Kalender-/Rohkursgrenzen, transaktionale Migrationen, sichere Backup-/Restore-Ziele, Referenzschutz, knapper Speicher, Berichtszählung und ein echter Proxy-/Worker-Subprozess sind abgedeckt. Vorhandene Wiederaufnahmeprüfungen bleiben aktiv. CI auf Linux/Windows mit beiden Python-Versionen eingerichtet, noch kein Remote-Ergebnis für diesen lokalen Stand.

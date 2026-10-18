@@ -73,6 +73,8 @@ Historische Stichtage schließen spätere und noch offene Kerzen vor jeder Berec
 
 ## Prüfung
 
+Optional unter Forschung: **Tori-Kriterien · alle Einstiege im Zeitraum**. Dieser separate Modus prüft jede geschlossene 4h-Kerze, archiviert die ursprünglichen Linienpaare und bietet eine Fixierung zu X. Ausbruch, horizontale Bestätigung und Retest werden mit expliziten Kriterien geprüft; die bisherige Zufallsstudie bleibt wählbar. Anleitung und Grenzen: [TORI-EINSTIEGSMODUS.md](TORI-EINSTIEGSMODUS.md).
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```

@@ -33,6 +33,7 @@ const phaseLabels = {
   importing: "Kursdaten importieren",
   validating: "Datenbestand prüfen",
   events: "Linienereignisse berechnen",
+  entries: "Tori-Einstiege kerzenweise prüfen",
   saving_events: "Ereignisse speichern",
   trials: "Zufallsstarts auswerten",
   symbol_error: "Fehler bei einer Aktie",
@@ -147,6 +148,7 @@ let selected = null,
   busy = false,
   reportStamp = null;
 let pageOffset = 0;
+let entryFilter = "entries";
 try {
   document.documentElement.dataset.theme =
     JSON.parse(localStorage.getItem("tori-theme")) || "light";
@@ -179,7 +181,7 @@ function showError(e) {
   $("#research-error").hidden = false;
 }
 function spec() {
-  return {
+  const result = {
     symbols: $("#study-symbols")
       .value.toUpperCase()
       .replaceAll(",", " ")
@@ -198,7 +200,61 @@ function spec() {
     retest_bars: +$("#study-retest-bars").value,
     cost_bps: +$("#study-cost").value,
   };
+  if ($("#entry-mode").value === "tori") {
+    result.entry_mode = "tori";
+    result.tori = {
+      line_policy: $("#tori-policy").value,
+      safety_selection: $("#tori-safety").value,
+      start_date: $("#tori-start").value,
+      end_date: $("#tori-end").value,
+      context: $("#tori-context").value,
+      setup_bars: +$("#tori-setup-bars").value,
+      min_contacts: +$("#tori-contacts").value,
+      contact_gap_bars: +$("#tori-contact-gap").value,
+      min_age_days: +$("#tori-age").value,
+      breakout_bps: +$("#tori-buffer").value,
+      max_safety_pct: +$("#tori-risk-pct").value,
+      max_safety_atr: +$("#tori-risk-atr").value,
+      min_body_atr: +$("#tori-body-atr").value,
+      min_body_fraction: +$("#tori-body-fraction").value,
+      min_close_location: +$("#tori-close-location").value,
+      horizontal_bars: +$("#tori-horizontal-bars").value,
+      min_room_r: +$("#tori-room").value,
+    };
+  }
+  return result;
 }
+const originalCopy = Object.fromEntries(
+  ["research-intro-copy", "observation-note", "method-copy"].map((id) => [
+    id,
+    $("#" + id).textContent,
+  ]),
+);
+$("#entry-mode").onchange = () => {
+  const tori = $("#entry-mode").value === "tori";
+  $("#tori-settings").hidden = !tori;
+  $("#tori-settings")
+    .querySelectorAll("input,select")
+    .forEach((el) => (el.disabled = !tori));
+  for (const id of [
+    "study-samples",
+    "study-seed",
+    "study-search",
+    "study-horizons",
+    "study-cost",
+  ])
+    $("#" + id).disabled = tori;
+  $("#research-intro-copy").textContent = tori
+    ? "Jede abgeschlossene 4h-Kerze prüfen. Bestätigte Linienpaare festhalten und Ausbruch, horizontale Bestätigung sowie Retest mit nachvollziehbaren Einstiegsprüfungen verfolgen."
+    : originalCopy["research-intro-copy"];
+  $("#observation-note").textContent = tori
+    ? "Retest-Zone und Beobachtungsdauer gelten auch im Tori-Modus. Dort werden die separat eingestellten Einstiegskriterien geprüft. Die Kosten- und Horizontauswertung der bisherigen Ereignisstudie ist ausgeschaltet."
+    : originalCopy["observation-note"];
+  $("#method-copy").textContent = tori
+    ? "365 Tage Linienvorlauf, danach jede Kerze im gewählten Entwicklungszeitraum. Der spätere Holdout bleibt reserviert. Die Linien eines Setups bleiben fixiert; neue Linienpaare werden im Verfolgungsmodus separat aufgenommen. Parallele Setups und Einstiegsvarianten sind abhängig."
+    : originalCopy["method-copy"];
+};
+$("#entry-mode").onchange();
 $("#universe").onchange = () => {
   $("#study-symbols").disabled = $("#universe").value === "all";
 };
@@ -265,14 +321,16 @@ function chartLink(trial, entry, future = false) {
     (x) => x.complete,
   );
   const at =
-    future && completed.length
-      ? Math.max(...completed.map((x) => x.closedAt))
-      : entry?.signalAt || trial.startAt;
+    future && trial.mode && entry?.entryAt
+      ? entry.entryAt + 3600
+      : future && completed.length
+        ? Math.max(...completed.map((x) => x.closedAt))
+        : entry?.signalAt || trial.startAt;
   return (
     "/?" +
     new URLSearchParams({
       symbol: trial.symbol,
-      tf: "4h",
+      tf: future && trial.mode ? "1h" : "4h",
       dataset: trial.datasetId,
       asof: new Date(at * 1000).toISOString(),
       ...(entry
@@ -281,7 +339,122 @@ function chartLink(trial, entry, future = false) {
     })
   );
 }
+const entryNames = {
+  breakout: "Ausbruch",
+  horizontal: "Ausbruch + Horizontalhoch",
+  retest: "Retest",
+};
+const entryStates = {
+  observed: "Einstieg beobachtet",
+  pending: "Wartet",
+  rejected: "Abgelehnt",
+  expired: "Abgelaufen",
+  censored: "Beobachtung endet",
+};
+const checkNames = {
+  confirmed_anchors: "Bestätigte Anker",
+  red_contacts: "Eigenständige rote Kontakte",
+  green_contacts: "Eigenständige grüne Kontakte",
+  line_age: "Alter bis zur Bestätigung (Tage)",
+  ordered_safety: "Grün unter Rot, unverletzt",
+  close_above_red: "Schluss mit Puffer über Rot",
+  positive_body: "Positiver Kerzenkörper",
+  body_atr: "Körper / ATR",
+  body_fraction: "Körper / Kerzenspanne",
+  close_location: "Schlussposition in der Kerze",
+  context: "Übergeordnete Swing-Struktur",
+  safety_distance_pct: "Abstand Grün (%)",
+  safety_distance_atr: "Abstand Grün / ATR",
+  room: "Raum zum bekannten Widerstand",
+  horizontal_confirmed: "Horizontalhoch überwunden",
+  retest_held: "Ursprüngliche Linie hält im Retest",
+  execution_above_trigger: "Eröffnung über Auslöser",
+  interim_safety: "Grün vor Ausführung unverletzt",
+  execution_room: "Raum an der Eröffnung",
+  setup_expired: "Setup-Laufzeit erreicht",
+  confirmation_expired: "Bestätigung nicht rechtzeitig",
+  green_violated: "Grün verletzt",
+  red_lost: "Schluss unter ursprünglicher roter Zone",
+  window_end: "Zeitraum-/Holdout-Grenze",
+};
+function entryReason(reason) {
+  return String(reason || "")
+    .split(",")
+    .map((s) =>
+      s.startsWith("execution:")
+        ? "Eröffnung: " + (checkNames[s.slice(10)] || s.slice(10))
+        : checkNames[s] || s,
+    )
+    .join(" · ");
+}
+function renderToriReport(data) {
+  const { job, summary, trials } = data;
+  $("#report-subtitle").textContent =
+    `${job.id.slice(0, 8)} · ${labels[job.status] || job.status} · Tori-Einstiege · ${job.spec.tori.line_policy === "snapshot" ? "Fixierung zu X" : "Linienpaare verfolgen"}`;
+  $("#report-actions").hidden = false;
+  $("#export-report").href = `/api/research/jobs/${job.id}/report`;
+  $("#export-events").href = `/api/research/jobs/${job.id}/events?limit=250`;
+  $("#cancel-job").disabled = !["queued", "running"].includes(job.status);
+  let html = `<p class="note"><b>Nur Einstiege, keine Take-Profits oder Ausstiege.</b> ${summary.setups} archivierte Linienpaare. Jede abgeschlossene 4h-Kerze im gewählten Entwicklungszeitraum wird geprüft; Linien zu X bzw. bei Aufnahme eines Setups bleiben fest. Gleiche 1h-Einstiegszeitpunkte werden je Variante/Qualität/Dataset zusätzlich dedupliziert. Varianten und parallele Linienpaare sind keine unabhängigen Trades.</p>`;
+  for (const item of job.symbols) {
+    const p = item.plan;
+    html += `<p class="note">${escapeHtml(item.symbol)} · ${p ? `${date(p.scanStartAt)} bis ${date(p.scanEndAt)} · ${p.coverage?.candles ?? 0}/${p.candles} Kerzen geprüft · Holdout ab ${date(p.holdout_start)}` : "Wartet auf Daten"}${item.error ? " · " + escapeHtml(item.error) : ""}</p>`;
+  }
+  if (job.error) html += `<p class="error-note">${escapeHtml(job.error)}</p>`;
+  html +=
+    '<div class="table-wrap"><table><thead><tr><th>Variante / Qualität</th><th>Linienpaare</th><th>Entries / eindeutige Zeitpunkte</th><th>Abgelehnt</th><th>Abgelaufen</th><th>Unvollständig / wartet</th></tr></thead><tbody>';
+  for (const variant of Object.keys(entryNames))
+    for (const quality of ["provisional", "qualified"]) {
+      const g = summary.groups[variant + "_" + quality] || {};
+      html += `<tr><td>${entryNames[variant]} · ${quality === "qualified" ? "≥3 Kontakte / ≥7 Tage" : "vorläufig"}</td><td>${g.setups || 0}</td><td>${g.entries || 0} / ${g.uniqueEntries || 0}</td><td>${g.rejected || 0}</td><td>${g.expired || 0}</td><td>${g.censored || 0} / ${g.pending || 0}</td></tr>`;
+    }
+  html +=
+    '</tbody></table></div><p class="note">Die Qualitätsgruppe verwendet eigenständige Kontakte beider Linien. Keine A+/A-/B-Zertifizierung. Tageskontext im Standard: bestätigte Struktur darf nicht fallen; „gemischt“ ist erlaubt. Pflichtkontext unbekannt → kein Entry. Fehlender bekannter Widerstand bleibt unbekannt. IEX/Rohkurse und heutiges Universum bleiben Datenbegrenzungen.</p>';
+  html += `<p class="note">Linienpaare ${data.page.total ? data.page.offset + 1 : 0}–${data.page.offset + trials.length} von ${data.page.total}. Die Zusammenfassung umfasst den ganzen Auftrag. Ausführung verwendet die erste verfügbare 1h-Eröffnung nach Schluss plus ${job.spec.latency_seconds} s; keine Garantie eines handelbaren Fills.</p><div class="table-wrap"><table><thead><tr><th>Aktie / Fixierung</th><th>Variante / Zustand</th><th>Bestätigung / Einstieg</th><th>Prüfung</th><th>Chart</th></tr></thead><tbody>`;
+  for (const trial of trials)
+    for (const v of trial.variants) {
+      const checks = [...(v.checks || []), ...(v.executionChecks || [])];
+      html += `<tr><td>${escapeHtml(trial.symbol)}<br><small>${date(trial.startAt)}</small></td><td class="case-reason">${entryNames[v.variant]}<br><small>${entryStates[v.status] || escapeHtml(v.status)}${v.reason ? " · " + escapeHtml(entryReason(v.reason)) : v.waitingFor ? " · wartet auf " + escapeHtml(entryReason(v.waitingFor)) : ""}</small></td><td>${date(v.signalAt)}<br>${v.entryAt ? `${date(v.entryAt)} · ${number(v.entryPrice)}` : "—"}</td><td class="entry-checks"><details><summary>${checks.length ? `${checks.filter((c) => c.required && c.state !== "pass").length} offene/fehlgeschlagene Pflichtprüfungen` : "Wartet auf Ausbruch"}</summary><ul>${checks.map((c) => `<li>${c.state === "pass" ? "✓" : c.state === "fail" ? "✕" : "?"} ${checkNames[c.name] || escapeHtml(c.name)}${c.required ? "" : " (Hinweis)"}: ${escapeHtml(typeof c.value === "object" ? JSON.stringify(c.value) : number(c.value))}</li>`).join("")}</ul></details></td><td><a href="${chartLink(trial, v)}" target="_blank" rel="noopener">Linienstand ↗</a>${v.entryAt ? ` · <a href="${chartLink(trial, v, true)}" target="_blank" rel="noopener">Entry-Kerze ↗</a>` : ""}</td></tr>`;
+    }
+  html +=
+    '</tbody></table></div><details class="case-details"><summary>Fixierte Anker und vollständige Prüfprotokolle</summary><pre id="case-json"></pre></details><details class="case-details"><summary>Versionierte Tori-Annahmen dieses Auftrags</summary><pre id="tori-spec-json"></pre></details>';
+  $("#report-content").innerHTML = html;
+  const filter = document.createElement("select");
+  filter.setAttribute("aria-label", "Tori-Fälle anzeigen");
+  filter.innerHTML =
+    '<option value="entries">Nur Setups mit Einstieg</option><option value="all">Alle Setups einschließlich Ablehnungen</option>';
+  filter.value = entryFilter;
+  filter.onchange = () => {
+    entryFilter = filter.value;
+    pageOffset = 0;
+    reportStamp = null;
+    refresh();
+  };
+  $("#report-content").prepend(filter);
+  $("#case-json").textContent = JSON.stringify(trials, null, 2);
+  $("#tori-spec-json").textContent = JSON.stringify(job.manifest, null, 2);
+  if (data.page.offset > 0 || data.page.hasMore) {
+    const nav = document.createElement("div");
+    nav.className = "study-actions";
+    for (const [text, offset, disabled] of [
+      ["Vorherige Linienpaare", Math.max(0, pageOffset - 50), pageOffset === 0],
+      ["Weitere Linienpaare", pageOffset + 50, !data.page.hasMore],
+    ]) {
+      const button = document.createElement("button");
+      button.textContent = text;
+      button.disabled = disabled;
+      button.onclick = () => {
+        pageOffset = offset;
+        reportStamp = null;
+        refresh();
+      };
+      nav.append(button);
+    }
+    $("#report-content").append(nav);
+  }
+}
 function renderReport(data) {
+  if (data.job.spec.entry_mode === "tori") return renderToriReport(data);
   $("#export-events").href =
     `/api/research/jobs/${data.job.id}/events?limit=250`;
   const { job, summary, trials } = data;
@@ -378,7 +551,7 @@ async function refresh() {
     jobsCache = data.items;
     const schedule = data.schedule;
     $("#schedule-state").textContent = schedule.enabled
-      ? `Automatik aktiv · alle ${schedule.interval_hours} Stunden · ${schedule.spec.universe === "all" ? "gesamter Katalog" : schedule.spec.symbols.join(", ")} · ${schedule.spec.samples} Starts je Aktie · nächster Auftrag ${date(schedule.next_run)}. Läuft auch bei geschlossenem Browser.`
+      ? `Automatik aktiv · alle ${schedule.interval_hours} Stunden · ${schedule.spec.universe === "all" ? "gesamter Katalog" : schedule.spec.symbols.join(", ")} · ${schedule.spec.entry_mode === "tori" ? "Tori-Einstiege im Zeitraum" : `${schedule.spec.samples} Starts je Aktie`} · nächster Auftrag ${date(schedule.next_run)}. Läuft auch bei geschlossenem Browser.`
       : "Automatik pausiert. Bereits gestartete Aufträge laufen weiter.";
     $("#background-status").textContent = !data.workerActive
       ? "⚠ Kein Worker verbunden"
@@ -393,7 +566,7 @@ async function refresh() {
       ? jobsCache
           .map(
             (job) =>
-              `<button class="job-row ${job.id === selected ? "selected" : ""}" data-job="${job.id}"><b>${escapeHtml((job.universe || job.spec.symbols).slice(0, 3).join(", "))}${(job.universe || job.spec.symbols).length > 3 ? " …" : ""}</b><span class="status-pill ${job.status}">${labels[job.status] || job.status}</span><small>${date(job.created)} · ${job.automatic ? "Automatisch" : "Manuell"}<br>${job.completedTrials} Starts · ${escapeHtml(job.current_symbol || `${job.symbols.filter((s) => s.done).length} Aktien bearbeitet`)}${job.progress && ["running", "cancel_requested"].includes(job.status) ? `<br>${escapeHtml(phaseLabels[job.progress.phase] || job.progress.phase)} · ${escapeHtml(progressText(job.progress))}` : ""}</small></button>`,
+              `<button class="job-row ${job.id === selected ? "selected" : ""}" data-job="${job.id}"><b>${escapeHtml((job.universe || job.spec.symbols).slice(0, 3).join(", "))}${(job.universe || job.spec.symbols).length > 3 ? " …" : ""}</b><span class="status-pill ${job.status}">${labels[job.status] || job.status}</span><small>${date(job.created)} · ${job.automatic ? "Automatisch" : "Manuell"}<br>${job.completedTrials} ${job.spec.entry_mode === "tori" ? "Linienpaare" : "Starts"} · ${escapeHtml(job.current_symbol || `${job.symbols.filter((s) => s.done).length} Aktien bearbeitet`)}${job.progress && ["running", "cancel_requested"].includes(job.status) ? `<br>${escapeHtml(phaseLabels[job.progress.phase] || job.progress.phase)} · ${escapeHtml(progressText(job.progress))}` : ""}</small></button>`,
           )
           .join("")
       : '<p class="note">Noch keine Aufträge.</p>';
@@ -409,11 +582,11 @@ async function refresh() {
     if (!selected && jobsCache.length) selected = jobsCache[0].id;
     const job = jobsCache.find((j) => j.id === selected);
     if (job) {
-      const stamp = `${job.id}|${job.status}|${job.completedTrials}|${job.eventCount}|${pageOffset}|${job.symbols.map((s) => s.dataset_id + String(s.done) + s.error).join()}`;
+      const stamp = `${job.id}|${job.updated}|${job.status}|${job.completedTrials}|${job.eventCount}|${pageOffset}|${entryFilter}|${job.symbols.map((s) => s.dataset_id + String(s.done) + s.error).join()}`;
       if (stamp !== reportStamp) {
         renderReport(
           await request(
-            `/api/research/jobs/${selected}/report?offset=${pageOffset}`,
+            `/api/research/jobs/${selected}/report?offset=${pageOffset}${job.spec.entry_mode === "tori" ? `&limit=50&entry_filter=${entryFilter}` : ""}`,
           ),
         );
         reportStamp = stamp;

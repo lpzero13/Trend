@@ -163,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(jobs.get_job(parts[4]))
                 if len(parts)==6 and parts[5] in ("report","events"):
                     query=parse_qs(urlparse(self.path).query)
-                    return self.send_json(jobs.report(parts[4],int(query.get("offset",["0"])[0]),int(query.get("limit",["250"])[0])) if parts[5]=="report" else jobs.events_for(parts[4],int(query.get("limit",["250"])[0]),query.get("cursor",[None])[0]))
+                    return self.send_json(jobs.report(parts[4],int(query.get("offset",["0"])[0]),int(query.get("limit",["250"])[0]),query.get("entry_filter",["all"])[0]) if parts[5]=="report" else jobs.events_for(parts[4],int(query.get("limit",["250"])[0]),query.get("cursor",[None])[0]))
                 raise DataError("Unbekannte Forschungsroute.",404)
             if path == "/api/dataset-chart":
                 query=parse_qs(urlparse(self.path).query)

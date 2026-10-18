@@ -59,6 +59,7 @@ Weitere Informationen:
 | [BETRIEB-P2.md](alpaca-trendlinien/BETRIEB-P2.md) | Kalender-/Qualitätsaudit, Speicherprüfung, Schema 3, Backup/Restore, Berichte und Deploymenttests |
 | [LONG-KRITERIEN-ENTWURF.md](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md) | Diskussionsgrundlage; Vorschläge sind keine als optimal belegten Grenzen |
 | [TORI-KRITERIEN-ARBEITSNOTIZ.md](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md) | Eingereichte Tori-Zusammenfassung vom 18.10.2026, separate Einschätzung, offene Definitionen und spätere Testideen; keine aktivierten Regeln |
+| [TORI-EINSTIEGSMODUS.md](alpaca-trendlinien/TORI-EINSTIEGSMODUS.md) | Separat wählbarer vollständiger Einstiegsmodus, Fixierung zu X, Testschwellen, Kriterien und Grenzen |
 | [ARCHITEKTUR-V2-V3.md](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md) | ursprünglicher Umbauplan, teilweise umgesetzt; enthält auch spätere Arbeiten |
 | [VERIFICATION.md](alpaca-trendlinien/VERIFICATION.md) | bisherige Tests und bewusst genannte Grenzen |
 | [Hermes-Skillvorlage](alpaca-trendlinien/integrations/hermes/SKILL.md) | Bedienung der Werkzeuge durch einen Agenten, noch nicht im Agenten installiert |
@@ -78,6 +79,7 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Manuelle Fixierung | unveränderliche lokale Stände mit damaligen Rohkerzen und Ankern |
 | Forschungsansicht | Über die feste Hauptnavigation „Chart / Forschung“ erreichbar; Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
 | Forschungsseiten-Layout | Eigenes Dokumentlayout mit vertikalem Seitenscrollen und fest sichtbarer Navigation; die Scrollsperre des Vollbildcharts gilt dort nicht |
+| Optionaler Tori-Modus | Vollständiger 4h-Durchlauf, ursprüngliche Linienpaare verfolgen oder zu X fixieren, Ausbruch/Horizontalbestätigung/Retest, Kriterienprotokoll und 1h-Eröffnungsprüfung; nur Einstiege |
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
 | Betriebsanzeige | Getrennte Lebenszeichen und Arbeitsphasen, Fortschrittswarnung, Datenalter und Import-/Fehlerstände ohne Providerabruf im Healthcheck |
 | Datenqualität | Versionierter XNYS-Tageskalender, Rohkurs-/IEX-Hinweise, beschreibendes Audit neuer Datasets; keine automatische Verifikation von Kapitalmaßnahmen |
@@ -87,7 +89,7 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Linux-Vorbereitung | systemd-Unit, externer persistenter Datenpfad, Token-/Host-Konfiguration und CLI-Wrapper |
 | Repository-Tests | Python-/JavaScript-Tests, GitHub Actions für Linux und Windows; keine Provider-Schlüssel für Unit-Tests |
 
-Laut Nutzerbericht vom 18.10.2026 hat Hermes die Anwendung inzwischen im Container installiert und einen echten Auftrag, eine Offline-Wiederholung und die Wiederaufnahme nach Worker-Abbruch geprüft. Die neuen P1-/P2-Änderungen wurden lokal unter Windows entwickelt und getestet; sie wurden von Codex nicht im Ziel-LXC installiert oder abgenommen. Die CI ersetzt keinen Installations-/Netzwerktest im Zielcontainer.
+Laut Nutzerbericht vom 18.10.2026 hat Hermes die Anwendung inzwischen im Container installiert und einen echten Auftrag, eine Offline-Wiederholung und die Wiederaufnahme nach Worker-Abbruch geprüft. Die neuen P1-/P2-Änderungen und der optionale Tori-Einstiegsmodus wurden lokal unter Windows entwickelt und getestet; sie wurden von Codex nicht im Ziel-LXC installiert oder abgenommen. Die CI ersetzt keinen Installations-/Netzwerktest im Zielcontainer.
 
 ## 4. Was noch nicht implementiert ist
 
@@ -162,9 +164,17 @@ Die normale Chartanalyse sucht derzeit nur in einem kurzen Abschnitt nach Brüch
 | `cost_bps` | 5 | angenommene Kosten je Kauf- und Verkaufsseite |
 | `stop_buffer_bps` | 0 | Puffer auf die ursprüngliche grüne Schutzmarke |
 
-Die Grenzwerte sind konfigurierbare Forschungsannahmen. Es gibt aktuell keinen zusätzlichen harten Filter auf kleinen Abstand, drei Kontakte oder einen bestimmten Tagestrend. Vorläufig/qualifiziert wird nach dem damaligen Paar getrennt ausgewiesen; bei gemischten Qualitäten zählt die schwächere Linie.
+Die Grenzwerte sind konfigurierbare Forschungsannahmen. Im bisherigen Standardmodus gibt es keinen zusätzlichen harten Filter auf kleinen Abstand, drei Kontakte oder einen bestimmten Tagestrend. Vorläufig/qualifiziert wird nach dem damaligen Paar getrennt ausgewiesen; bei gemischten Qualitäten zählt die schwächere Linie.
 
-Der grobe Einstieg erfolgt an der ersten 4h-Eröffnung, die nach Signalverfügbarkeit liegt. Mit 15 Minuten Verzögerung kann das erheblich später als der nächste unmittelbar anschließende Balken sein. Vor-/Nachbörse ist möglich. Für eine spätere Ausführungssimulation braucht es ein feineres Raster und eine festgelegte Sitzung.
+### Optional: vollständige Tori-Einstiegsprüfung
+
+`entry_mode: "tori"` aktiviert separat `tori_entries.py` / `tori-entries-1`. Die Oberfläche bietet dafür „Tori-Kriterien · alle Einstiege im Zeitraum“. Statt Zufallsstarts wird jede abgeschlossene 4h-Kerze nach dem Vorlauf und vor dem Holdout geprüft. `tracked` nimmt bestätigte neue Linienpaare auf und behält alte befristet; `snapshot` fixiert nur das Paar aus den damals abgeschlossenen Daten zu X. Die grüne Auswahl kann der Chartauswahl entsprechen oder die nächste bereits bestätigte gültige 4h-Hüllenlinie unter dem Kurs verwenden. Keine späteren Anker ersetzen das laufende Setup rückwirkend.
+
+Ausbruch, zusätzliche horizontale Bestätigung und späterer Retest sind drei getrennte Varianten. Eigenständige Kontakte, Alter, positiver Körper/Momentum, Safety-Abstand, bestätigte Tages-/optional Wochen-/Monatsstruktur und Raum zu bekannten Widerständen werden explizit geprüft. Alle Schwellen und Zustände werden archiviert; unbekannter Pflichtkontext blockiert, unbekannter freier Raum bleibt ein Hinweis. Ein Entry wird frühestens an einer nach Signalverfügbarkeit liegenden 1h-Eröffnung geprüft, mit erneutem Abstand-/Trigger-/Raumcheck. Es gibt in diesem Modus keine Ausstiege oder Zukunftsrenditen. Keine A+/A-/B-Zertifizierung und noch keine Grün-Bounce-Familie. Exakte Definitionen und bewusste Grenzen in TORI-EINSTIEGSMODUS.md.
+
+Setupzustände und Journal werden atomar im bestehenden Schema 3 gespeichert. Wiederaufnahme spielt den Abschnitt deterministisch nach und aktualisiert stabile IDs, statt Duplikate zu erzeugen. Der Bericht zeigt standardmäßig nur Setups mit Entry; alle Ablehnungen bleiben abrufbar. Filter `entry_filter=entries` bzw. CLI `report --entry-filter entries` gilt nur für Tori; Zusammenfassung immer ungefiltert, Oberfläche 50 Linienpaare je Seite. Identische Einstiegszeitpunkte werden je Variante/Qualität/Dataset zusätzlich dedupliziert. Variante und Linienpaar sind keine unabhängigen Trades. Der bestehende Zeitplan bleibt bis zu einer ausdrücklichen Änderung unverändert.
+
+Im bisherigen Zufallsmodus erfolgt der grobe Einstieg an der ersten 4h-Eröffnung, die nach Signalverfügbarkeit liegt. Mit 15 Minuten Verzögerung kann das erheblich später als der nächste unmittelbar anschließende Balken sein. Der optionale Tori-Modus prüft stattdessen die erste vorhandene 1h-Eröffnung nach Signalverfügbarkeit. Vor-/Nachbörse ist möglich. Für eine spätere präzise Ausführungssimulation braucht es ein feineres Raster und eine festgelegte Sitzung.
 
 ### Ergebnisse richtig lesen
 
@@ -415,7 +425,7 @@ Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichk
 
 ## 14. Nachweise und Testverfahren
 
-Der aktuelle lokale Stand wurde unter Windows mit **98 Python-Tests jeweils unter Python 3.12 und 3.13.12** sowie **24 JavaScript-Tests** geprüft; je Python-Lauf ein übersprungener Symlinktest wegen fehlender Windows-Berechtigung. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. P2 ergänzt Feiertage/Halbtage, Rohkursgrenzen, Migrationen, Backup/Restore, Platzprüfung, Überlappungen und einen echten Proxy-/Subprozess-Test mit externem Datenpfad. Die Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
+Der aktuelle lokale Stand wurde unter Windows mit **113 Python-Tests jeweils unter Python 3.12 und 3.13.12** sowie **24 JavaScript-Tests** geprüft; je Python-Lauf ein übersprungener Symlinktest wegen fehlender Windows-Berechtigung. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. P2 ergänzt Feiertage/Halbtage, Rohkursgrenzen, Migrationen, Backup/Restore, Platzprüfung, Überlappungen und einen echten Proxy-/Subprozess-Test mit externem Datenpfad. Die Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
 
 Zusätzlich wurde der echte lokale Datenbestand in einen neuen Ordner wiederhergestellt: zwei Datasets, fünf lesbare Snapshots und eine Offline-Wiederholung mit drei AMZN-Starts, identischen Fällen und identischer Zusammenfassung. P2-Messungen und Grenzen stehen in BETRIEB-P2.md.
 

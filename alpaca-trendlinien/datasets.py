@@ -111,6 +111,8 @@ def chart_dataset(identity, timeframe, as_of=None, setup=None):
     if setup:
         from research import line_value
         signal=setup["signal"]
+        if setup.get("entryMode") == "tori" and signal["closedAt"] > int(cutoff.timestamp()):
+            signal=setup["armedSignal"]
         if signal["closedAt"]<=int(cutoff.timestamp()):
             for tf in ("4h","1D"):
                 lane=payload["lanes"][tf]
@@ -119,13 +121,22 @@ def chart_dataset(identity, timeframe, as_of=None, setup=None):
                 for kind in ("red","green"):
                     ray=source[kind]
                     lane[kind]={**ray,"value":line_value(ray,position)} if ray else None
-                lane.update(outerRed=[],outerGreen=[],retest=None,status="Originalsignal fixiert")
-                lane["event"]={k:signal[k] for k in ("kind","time","closedAt")} if tf=="4h" else None
+                lane.update(outerRed=[],outerGreen=[],retest=None,status="Tori-Linienstand fixiert" if setup.get("entryMode")=="tori" else "Originalsignal fixiert")
+                lane["event"]={k:signal[k] for k in ("kind","time","closedAt")} if tf=="4h" and signal["kind"]!="tori_setup" else None
                 if lane["event"]:lane["event"]["price"]=signal["close"]
                 lane["sourceClose"]=source["closedAt"]
                 close=payload["charts"][tf]["latest"]["close"]
                 lane["distance"]=(close-lane["green"]["value"])/close*100 if lane["green"] else None
             payload["researchSetup"]={"eventId":signal["id"],"signalAt":setup.get("signalAt",signal["closedAt"]),
                 "variant":setup["variant"],"entryAt":setup.get("entryAt"),"entryPrice":setup.get("entryPrice"),"initialStop":setup.get("initialStop"),"validRisk":setup.get("validRisk",False)}
+            if setup.get("entryMode") == "tori":
+                state=payload["researchSetup"]
+                state["entryMode"]="tori"
+                if state["signalAt"] > int(cutoff.timestamp()):
+                    state["signalAt"]=None
+                    state["initialStop"]=None
+                    state["validRisk"]=False
+                if state["entryAt"] is None or state["entryAt"] > int(cutoff.timestamp()):
+                    state["entryAt"]=state["entryPrice"]=None
     remember(payload)
     return payload

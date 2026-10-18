@@ -25,7 +25,7 @@
       <section class="research-intro">
         <span class="eyebrow">AUTOMATISCHE UNTERSUCHUNG · LONG</span>
         <h1>Beobachten. Vergleichen. Regeln ableiten.</h1>
-        <p>
+        <p id="research-intro-copy">
           Zufällige Startpunkte statt ausgesuchter Erfolgsbeispiele. Die Engine
           sucht danach den ersten Ausbruch, beobachtet einen möglichen Retest
           und speichert auch Fälle ohne Einstieg.
@@ -90,6 +90,204 @@
       >
         <h2 id="study-title">Untersuchung einrichten</h2>
         <form id="study-form">
+          <label class="entry-mode-label"
+            >Untersuchungsmodus
+            <select id="entry-mode">
+              <option value="legacy">
+                Bisherige Forschung · zufällige Starts
+              </option>
+              <option value="tori">
+                Tori-Kriterien · alle Einstiege im Zeitraum
+              </option>
+            </select>
+          </label>
+          <section id="tori-settings" hidden>
+            <p class="note">
+              Separater experimenteller Einstiegsmodus: jede abgeschlossene
+              4h-Kerze, Ausbruch / horizontale Bestätigung / Retest getrennt.
+              Keine Ausstiege und keine Gewinnbewertung. Der spätere Holdout
+              bleibt reserviert. Leere Datumsfelder nutzen den verfügbaren
+              Entwicklungszeitraum.
+            </p>
+            <div class="form-grid">
+              <label
+                >Linien verfolgen<select id="tori-policy">
+                  <option value="tracked">
+                    Neue Linien aufnehmen, alte Setups befristet behalten
+                  </option>
+                  <option value="snapshot">
+                    Nur Linien am Startzeitpunkt X fixieren
+                  </option>
+                </select></label
+              >
+              <label
+                >Ab Datum · New York<input id="tori-start" type="date"
+              /></label>
+              <label
+                >Bis Datum · New York<input id="tori-end" type="date"
+              /></label>
+              <label
+                >Übergeordnete Struktur<select id="tori-context">
+                  <option value="daily">Tagesstruktur darf nicht fallen</option>
+                  <option value="topdown">
+                    Tag, Woche und Monat dürfen nicht fallen
+                  </option>
+                  <option value="off">Kontext nur protokollieren</option>
+                </select></label
+              >
+              <label
+                >Grüne Safety Line<select id="tori-safety">
+                  <option value="nearest_confirmed">
+                    Nächste bereits bestätigte 4h-Linie darunter
+                  </option>
+                  <option value="chart">
+                    Wie im automatischen 4h-Chart ausgewählt
+                  </option>
+                </select></label
+              >
+            </div>
+            <details class="assumptions">
+              <summary>
+                Tori-Testschwellen · einstellbar, nicht optimiert
+              </summary>
+              <p>
+                „Nicht fallen“ erlaubt steigende oder gemischte bestätigte
+                Swing-Struktur. Unbekannter Pflichtkontext blockiert den
+                Einstieg. Zwei Kontakte werden separat von mindestens drei
+                Kontakten ausgewertet. Ohne bekannten Widerstand ist der freie
+                Raum unbekannt; das wird protokolliert, aber nicht als
+                bestandene Raumprüfung ausgegeben.
+              </p>
+              <div class="form-grid">
+                <label
+                  >Setup-Laufzeit · 4h-Kerzen<input
+                    id="tori-setup-bars"
+                    type="number"
+                    min="1"
+                    max="500"
+                    value="60"
+                    required
+                /></label>
+                <label
+                  >Rote Linie · Mindestkontakte<input
+                    id="tori-contacts"
+                    type="number"
+                    min="2"
+                    max="10"
+                    value="2"
+                    required
+                /></label>
+                <label
+                  >Kontaktabstand · Kerzen<input
+                    id="tori-contact-gap"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value="2"
+                    required
+                /></label>
+                <label
+                  >Linienalter · Kalendertage<input
+                    id="tori-age"
+                    type="number"
+                    min="0"
+                    max="365"
+                    step="0.5"
+                    value="7"
+                    required
+                /></label>
+                <label
+                  >Schluss über Rot · Basispunkte<input
+                    id="tori-buffer"
+                    type="number"
+                    min="0"
+                    max="500"
+                    step="1"
+                    value="10"
+                    required
+                /></label>
+                <label
+                  >Grün-Abstand · maximal %<input
+                    id="tori-risk-pct"
+                    type="number"
+                    min="0.01"
+                    max="50"
+                    step="0.01"
+                    value="3"
+                    required
+                /></label>
+                <label
+                  >Grün-Abstand · maximal ATR<input
+                    id="tori-risk-atr"
+                    type="number"
+                    min="0.01"
+                    max="20"
+                    step="0.01"
+                    value="2"
+                    required
+                /></label>
+                <label
+                  >Positiver Körper · mindestens ATR<input
+                    id="tori-body-atr"
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value="0.25"
+                    required
+                /></label>
+                <label
+                  >Körperanteil · mindestens 0–1<input
+                    id="tori-body-fraction"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.5"
+                    required
+                /></label>
+                <label
+                  >Schlussposition · mindestens 0–1<input
+                    id="tori-close-location"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.65"
+                    required
+                /></label>
+                <label
+                  >Horizontalhoch · Rückblick 4h-Kerzen<input
+                    id="tori-horizontal-bars"
+                    type="number"
+                    min="3"
+                    max="250"
+                    value="20"
+                    required
+                /></label>
+                <label
+                  >Bekannter Widerstand · mindestens Risikodistanzen<input
+                    id="tori-room"
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    value="2"
+                    required
+                /></label>
+              </div>
+              <p>
+                ATR = einfacher Mittelwert der letzten 14 abgeschlossenen True
+                Ranges vor der Signalkerze. Der Körper muss positiv sein; die
+                Eröffnung muss nicht schon über Rot liegen. Einstieg frühestens
+                an einer vorhandenen 1h-Eröffnung nach Signalverfügbarkeit. Die
+                gemeinsamen Retest-Einstellungen stehen unter
+                „Beobachtungsannahmen“. Jede gewählte Safety Line muss schon bei
+                Aufnahme des Setups bestätigt sein; spätere Tiefs werden nicht
+                rückwirkend verwendet.
+              </p>
+            </details>
+          </section>
           <div class="form-grid">
             <label
               >Universum<select id="universe">
@@ -180,7 +378,7 @@
                   required
               /></label>
             </div>
-            <p>
+            <p id="observation-note">
               20 Basispunkte = 0,20 %. Kein Filter auf Abstand, Kontaktzahl oder
               Tagestrend. Diese Merkmale werden aufgezeichnet. Signale werden
               mit 15 Minuten Verzögerung verfügbar; Einstieg ist die erste
@@ -208,7 +406,7 @@
       </section>
       <section class="method-strip">
         <b>So lesen wir Ergebnisse</b>
-        <p>
+        <p id="method-copy">
           Je 365 Tage Vorlauf für die Linien. Der spätere 20-%-Abschnitt bleibt
           für eine spätere Validierung reserviert. Gleicher Seed + gleicher
           Datenbestand = gleiche Starts. Überlappende Fälle sind abhängig;

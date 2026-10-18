@@ -6,6 +6,8 @@ Das ist eine explorative Ereignisstudie mit einer Hintergrund-Engine. Noch kein 
 
 ## Was ein Auftrag macht
 
+Die folgenden Zufallsstarts beschreiben den bisherigen Standardmodus. Zusätzlich gibt es im Formular den separat wählbaren **Tori-Einstiegsmodus**: vollständiger 4h-Durchlauf, Linienpaare weiterverfolgen oder zu X fixieren, drei Einstiegsvarianten, explizite Prüfprotokolle und beobachtete 1h-Eröffnungen. Keine Ausstiegs-/Renditebewertung in diesem Modus. Siehe [TORI-EINSTIEGSMODUS.md](TORI-EINSTIEGSMODUS.md) für Parameter, Fixierung, Grenzen und CLI. Der bestehende Zeitplan wird durch bloßes Umschalten im Formular nicht geändert.
+
 1. Die explizite Aktienliste bzw. den aktuellen angebotenen US-Börsenkatalog für diesen Auftrag festhalten. Der Gesamtkatalog kann viele Titel ohne ausreichende IEX-Historie enthalten; diese erscheinen mit Auslassungsgrund.
 2. Je Aktie standardmäßig 900 Kalendertage für 1h, 4h und 1D abrufen. Alle Antwortseiten beachten. Veralteten Ersatzcache oder formal zurückgewiesene Kerzen für einen Forschungsimport ablehnen.
 3. Den normalisierten Bestand samt Provider, Feed, Anpassung, Sessionbeschreibung und Inhaltsprüfsumme als unveränderliches Dataset sichern. Ein neuer Anbieterbestand wird zu einer neuen Version. Die damaligen Rohkerzen werden durch spätere Abrufe nicht überschrieben.

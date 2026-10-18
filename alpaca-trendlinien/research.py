@@ -22,9 +22,16 @@ DEFAULTS = {"symbols": ["MSFT", "AMZN"], "samples": 10, "seed": 20261017,
 
 
 def validate_spec(value):
-    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe"}):
+    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe", "entry_mode", "tori"}):
         raise DataError("Unbekannte oder ungültige Forschungsparameter.", 400)
     result = {**DEFAULTS, **value}
+    if result.get("entry_mode", "legacy") not in ("legacy", "tori"):
+        raise DataError("Unbekannter Einstiegsmodus.", 400)
+    if result.get("entry_mode") == "tori":
+        from tori_entries import validate
+        result["tori"] = validate(result.get("tori", {}))
+    elif "tori" in result:
+        raise DataError("Tori-Parameter nur im separat gewählten Tori-Modus verwenden.", 400)
     symbols = result["symbols"]
     if isinstance(symbols, str):
         symbols = symbols.upper().replace(",", " ").split()
@@ -51,6 +58,9 @@ def validate_spec(value):
 
 def trial_plan(dataset, spec):
     """Draw origins by time/coverage alone, never by a later signal or return."""
+    if spec.get("entry_mode") == "tori":
+        from tori_entries import plan
+        return plan(dataset, spec)
     bars = source_bars(dataset)["4h"]
     rules = rules_for("4h")
     eligible = [i for i in range(1, len(bars)-1)

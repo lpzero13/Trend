@@ -21,7 +21,7 @@ def engine_hash():
     import hashlib
     value = hashlib.sha256()
     for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
-                 "market_calendar.py","data_quality.py","providers.py","requirements.txt"):
+                 "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
@@ -40,8 +40,13 @@ def manifest():
 def _insert_job(db, spec, automatic=False):
     identity = uuid.uuid4().hex
     now = time.time()
+    metadata = manifest()
+    if spec.get("entry_mode") == "tori":
+        from tori_entries import VERSION
+        metadata.update(studyVersion=VERSION, entryMode="tori", execution="first available 1h open after closed 4h confirmation + configured latency",
+                        outcomes="entries only; no exits or forward returns", tori=spec["tori"])
     db.execute("INSERT INTO jobs(id,created,updated,status,spec,manifest,automatic) VALUES(?,?,?,?,?,?,?)",
-        (identity,now,now,"queued",json.dumps(spec),json.dumps(manifest()),int(automatic)))
+        (identity,now,now,"queued",json.dumps(spec),json.dumps(metadata),int(automatic)))
     return identity
 
 
@@ -96,17 +101,29 @@ def _summary(identity,last_row,horizons,root):
         return summarize(trials,horizons)
 
 
-def report(identity,offset=0,limit=250):
+def report(identity,offset=0,limit=250,entry_filter="all"):
     if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=1000:
         raise DataError("Ungültige Ergebnisseite.",400)
     job = get_job(identity)
+    if entry_filter not in ("all","entries") or (entry_filter!="all" and job["spec"].get("entry_mode")!="tori"):
+        raise DataError("Ungültiger Einstiegsfilter.",400)
     with connection() as db:
         db.execute("BEGIN")
         total,last_row=db.execute("SELECT count(*),coalesce(max(rowid),0) FROM trials WHERE job_id=?",(identity,)).fetchone()
-        trials = [json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=? ORDER BY id LIMIT ? OFFSET ?",(identity,last_row,limit,offset))]
+        where = "job_id=? AND rowid<=?"
+        if entry_filter == "entries":
+            where += " AND EXISTS(SELECT 1 FROM json_each(json_extract(trials.result,'$.variants')) WHERE json_extract(value,'$.status')='observed')"
+        page_total = db.execute(f"SELECT count(*) FROM trials WHERE {where}",(identity,last_row)).fetchone()[0]
+        trials = [json.loads(r[0]) for r in db.execute(f"SELECT result FROM trials WHERE {where} ORDER BY json_extract(result,'$.startAt'),id LIMIT ? OFFSET ?",(identity,last_row,limit,offset))] if job["spec"].get("entry_mode")=="tori" else [json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=? ORDER BY id LIMIT ? OFFSET ?",(identity,last_row,limit,offset))]
+        if job["spec"].get("entry_mode") == "tori":
+            from tori_entries import summarize as entry_summary
+            # Mutable setup rows and their summary share one SQLite read snapshot.
+            summary = entry_summary(json.loads(r[0]) for r in db.execute("SELECT result FROM trials WHERE job_id=? AND rowid<=?", (identity,last_row)))
     job["completedTrials"]=total
-    return {"job": job, "summary": _summary(identity,last_row,tuple(job["spec"]["horizons"]),str(data_dir())), "trials":trials,
-        "page":{"offset":offset,"limit":limit,"total":total,"hasMore":offset+len(trials)<total}}
+    if job["spec"].get("entry_mode") != "tori":
+        summary = _summary(identity,last_row,tuple(job["spec"]["horizons"]),str(data_dir()))
+    return {"job": job, "summary": summary, "trials":trials,
+        "page":{"offset":offset,"limit":limit,"total":page_total,"hasMore":offset+len(trials)<page_total}}
 
 
 def events_for(identity, limit=250, cursor=None):
@@ -305,6 +322,12 @@ def run_job(identity, stop=None):
                 db.execute("UPDATE symbols SET dataset_id=?,plan=?,error=NULL WHERE job_id=? AND symbol=?",(dataset_id,json.dumps(plan),identity,symbol))
             if interrupted():
                 return False
+            if spec.get("entry_mode") == "tori":
+                if not run_entries(identity, dataset, spec, plan, interrupted, advancing):
+                    return False
+                with connection() as db:
+                    db.execute("UPDATE symbols SET done=1 WHERE job_id=? AND symbol=?",(identity,symbol))
+                continue
             first_index = min(plan["starts"])+1
             phase(identity, "events", symbol=symbol, completed=0, total=plan["discovery_end"]-first_index+1, unit="candles")
             events=list(causal_events(dataset,plan["discovery_end"],first_index=first_index,cancelled=interrupted,
@@ -332,6 +355,45 @@ def run_job(identity, stop=None):
             with connection() as db:
                 db.execute("UPDATE symbols SET done=1,error=? WHERE job_id=? AND symbol=?",(str(error),identity,symbol))
     return True
+
+
+def run_entries(identity, dataset, spec, plan, interrupted, advancing):
+    """Stable upserts allow deterministic replay after interruption, without duplicate setups."""
+    from tori_entries import EntryScanner
+    from operations import phase
+    pending = []
+    def flush():
+        if not pending:
+            return
+        with connection() as db:
+            for item in pending:
+                if "event" in item:
+                    event = item["event"]
+                    db.execute("INSERT OR IGNORE INTO events VALUES(?,?,?,?)", (identity,event["id"],dataset["id"],json.dumps(event,allow_nan=False)))
+                else:
+                    trial = item["trial"]
+                    db.execute("INSERT INTO trials VALUES(?,?,?) ON CONFLICT(job_id,id) DO UPDATE SET result=excluded.result",
+                               (identity,trial["id"],json.dumps(trial,allow_nan=False)))
+            db.execute("UPDATE jobs SET updated=? WHERE id=?",(time.time(),identity))
+        pending.clear()
+    def emit(item):
+        pending.append(item)
+        if len(pending) >= 100:
+            flush()
+    symbol = dataset["material"]["symbol"]
+    phase(identity, "entries", symbol=symbol, completed=0, total=plan["candles"], unit="candles")
+    scanner = EntryScanner(dataset,spec,plan,emit)
+    def progress(done,total):
+        advancing("entries",symbol=symbol,completed=done,total=total,unit="candles")
+    complete = scanner.advance(plan["discovery_end"], interrupted, progress)
+    if complete:
+        scanner.finish()
+    flush()
+    with connection() as db:
+        stored = json.loads(db.execute("SELECT plan FROM symbols WHERE job_id=? AND symbol=?",(identity,symbol)).fetchone()[0])
+        stored["coverage"] = scanner.coverage
+        db.execute("UPDATE symbols SET plan=? WHERE job_id=? AND symbol=?",(json.dumps(stored),identity,symbol))
+    return complete
 
 
 def claim_next():

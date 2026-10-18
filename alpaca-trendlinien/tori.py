@@ -22,6 +22,7 @@ def main():
         if name=="report":
             command.add_argument("--offset",type=int,default=0)
             command.add_argument("--limit",type=int,default=250)
+            command.add_argument("--entry-filter",choices=("all","entries"),default="all")
         if name=="events":
             command.add_argument("--limit",type=int,default=250)
             command.add_argument("--cursor")
@@ -51,7 +52,7 @@ def main():
     try:
         if args.command=="submit": result=jobs.submit(json.loads(Path(args.spec).read_text("utf-8-sig")))
         elif args.command=="status": result=jobs.get_job(args.id)
-        elif args.command=="report": result=jobs.report(args.id,args.offset,args.limit)
+        elif args.command=="report": result=jobs.report(args.id,args.offset,args.limit,args.entry_filter)
         elif args.command=="events": result=jobs.events_for(args.id,args.limit,args.cursor)
         elif args.command=="health":
             from operations import status

@@ -2,6 +2,8 @@
 
 Stand: **18.10.2026**. Status: **gespeicherte Diskussions- und Forschungsgrundlage**.
 
+Nachtrag: Ein separat wählbarer experimenteller Einstiegsmodus wurde inzwischen implementiert. Die untenstehenden Notizen bleiben als ursprüngliche Diskussionsgrundlage erhalten; aktueller Umfang, konkrete Definitionen und noch offene Teile stehen in [TORI-EINSTIEGSMODUS.md](TORI-EINSTIEGSMODUS.md). Ausstiege und A+/A-/B-Klassen wurden damit nicht aktiviert.
+
 Diese Datei hält die vom Nutzer eingereichte Zusammenfassung der Tori-Kriterien und die anschließende Einschätzung von Codex getrennt fest. Sie aktiviert keine Filter, verändert keine laufenden Untersuchungen und legt keine endgültigen Handelsregeln fest.
 
 ## 1. Herkunft und Einordnung
