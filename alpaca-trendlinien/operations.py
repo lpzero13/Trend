@@ -125,7 +125,9 @@ def status(*, now=None):
             except (ValueError, TypeError, AttributeError):
                 fetched_age = None
             source_ages[tf] = {"fetchAgeSeconds":fetched_age,"lastCloseAgeSeconds":max(0, now-source["lastClose"])}
-    return {"observedAt":now, "worker":{"state":state,"lockHeld":lock,
+    from storage import usage
+    from database import SCHEMA_VERSION
+    return {"observedAt":now, "storage":usage(),"databaseVersion":SCHEMA_VERSION,"worker":{"state":state,"lockHeld":lock,
             "heartbeatAt":worker.get("heartbeatAt"),"heartbeatAgeSeconds":heartbeat_age,
             "loopAgeSeconds":loop_age,
             "progressAgeSeconds":progress_age,"heartbeatTimeoutSeconds":heartbeat_timeout,

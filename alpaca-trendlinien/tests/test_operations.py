@@ -62,7 +62,9 @@ class OperationsTests(unittest.TestCase):
     def test_database_extension_preserves_existing_jobs_and_events(self):
         identity = jobs.submit({})["id"]
         self.add_events(identity,["old"])
-        with jobs.connection() as db: db.execute("DROP TABLE job_progress")
+        with jobs.connection() as db:
+            db.execute("DROP TABLE job_progress")
+            db.execute("PRAGMA user_version=0")
         self.assertEqual(jobs.events_for(identity)["items"], [{"id":"old"}])
         operations.phase(identity,"importing",symbol="TEST")
         self.assertEqual(jobs.get_job(identity)["progress"]["phase"], "importing")
@@ -167,6 +169,9 @@ class OperationsTests(unittest.TestCase):
                 threading.Event().wait(.03)
             self.assertEqual(operations.status()["worker"]["state"],"working")
             child.kill();child.wait(timeout=5)
+            deadline=time.monotonic()+3
+            while operations.status()["worker"]["state"]!="absent" and time.monotonic()<deadline:
+                threading.Event().wait(.03)
             self.assertEqual(operations.status()["worker"]["state"],"absent")
             with patch("jobs.import_dataset",side_effect=AssertionError("offline")):
                 jobs.worker_loop(threading.Event(),once=True)

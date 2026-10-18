@@ -9,7 +9,8 @@ from pathlib import Path
 import re
 import uuid
 
-from alpaca import load_bars, TIMEFRAMES
+from alpaca import load_bars
+from providers import TIMEFRAMES, AlpacaProvider, fetch_sources
 from models import Bar, DataError
 from settings import data_dir
 
@@ -30,6 +31,8 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
     normalized = {}
     for tf in TIMEFRAMES:
         bars, meta = sources[tf]
+        if meta.get("feed",feed)!=feed or meta.get("adjustment",adjustment)!=adjustment:
+            raise DataError("Gemischte Feeds oder Kursbereinigungen im Dataset sind nicht erlaubt.",422)
         if meta.get("warning") or meta.get("quality", {}).get("rejected", 0):
             raise DataError(f"{symbol}/{tf}: veraltete oder fehlerhafte Daten; kein Forschungsimport.", 422)
         if len(bars) < 3 or any(b.end <= b.time for b in bars):
@@ -39,17 +42,26 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
         normalized[tf] = [asdict(b) for b in bars]
     material = {"schema": SCHEMA, "symbol": symbol, "provider": provider, "feed": feed,
         "adjustment": adjustment, "timezone": "America/New_York", "basis": "bars",
-        "session": "provider-native; extended hours possible; conservative daily close at 16 ET",
+        "session": "provider-native; extended hours possible; daily closure follows stored normalization",
+        "normalization": {tf:meta.get("normalization","external-or-legacy") for tf,(_,meta) in sources.items()},
         "bars": normalized}
     identity = digest(material)
     path = path_for(identity)
     if not path.exists():
+        from data_quality import audit
         payload = {"id": identity, "material": material, "importedAt": datetime.now(timezone.utc).isoformat(),
+            "quality":audit({tf:rows for tf,(rows,_) in sources.items()},feed=feed,adjustment=adjustment),
             "sources": {tf: meta for tf, (_, meta) in sources.items()}}
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix("."+uuid.uuid4().hex+".tmp")
         temporary.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), "utf-8")
         temporary.replace(path)
+    quality = json.loads(path.read_text("utf-8")).get("quality")
+    if quality:
+        from database import connection
+        summary={**quality,"issues":[{k:v for k,v in issue.items() if k!="examples"} for issue in quality["issues"]]}
+        with connection() as db:
+            db.execute("INSERT OR IGNORE INTO dataset_quality VALUES(?,?)",(identity,json.dumps(summary)))
     return identity
 
 
@@ -68,11 +80,12 @@ def source_bars(dataset):
 
 
 def import_dataset(symbol, history_days=900, *, progress=None):
+    from storage import preflight
+    preflight(history_days=history_days, symbols=1)
     now = datetime.now(timezone.utc)
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        extra = {"progress":progress} if progress else {}
-        pending = {tf: pool.submit(load_bars, symbol, tf, now=now, history_days=history_days, **extra) for tf in TIMEFRAMES}
-        sources = {tf: result.result() for tf, result in pending.items()}
+    extra = {"progress":progress} if progress else {}
+    provider = AlpacaProvider(load_bars)
+    sources = fetch_sources(provider,symbol,now=now,history_days=history_days,**extra)
     identity = save_dataset(symbol, sources)
     from operations import record_dataset
     # Use this import's source metadata, even when identical candles reuse an older immutable dataset.

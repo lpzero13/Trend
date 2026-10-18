@@ -21,6 +21,10 @@ Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein
 - `events --id <id> --limit 250`: erste Ereignisseite als `{items, page}` lesen. Mit `--cursor <page.nextCursor>` fortsetzen, bis `hasMore` falsch ist. Standard 250, maximal 1.000; der Lesestand bleibt fest. Ein neuer Abruf ohne Cursor sieht inzwischen ergänzte Ereignisse. Frühere CLI-Parser für eine vollständige Liste müssen angepasst werden.
 - `cancel --id <id>`: einen ausdrücklich unerwünschten Auftrag abbrechen, Archiv erhalten.
 - `schedule`: bestehenden Zeitplan lesen; Änderungen nur entsprechend dem Auftrag des Nutzers vornehmen.
+- `storage`: Größen nach Datenkategorie und freien Plattenplatz lesen. Vor Imports wird zusätzlich konservativ Platz geprüft; ein Fehler 507 ist kein Providerfehler.
+- `backup --output <neuer-ordner>` / `verify-backup --path <backup>`: konsistente SQLite-/Dataset-/Snapshot-Sicherung außerhalb des aktiven Datenpfads erstellen und prüfen. Secrets, Cache und Browserzeichnungen sind nicht enthalten.
+- `restore --backup <backup> --target <neuer-ordner>`: ausschließlich in einen neuen Ordner außerhalb des aktiven Datenpfads wiederherstellen; kein automatischer Dienstwechsel. Zeitplan vor einem separaten Teststart prüfen. Vorgehen und Rolloutgrenzen in `BETRIEB-P2.md`.
+- `cleanup-preview`: ausschließlich Vorschau nicht referenzierter Datasets, keine Löschfunktion. Kandidaten nicht automatisch entfernen.
 
 Eine separate Installation kann alternativ dieselben Operationen über die in `FORSCHUNG.md` beschriebenen HTTP-Routen verwenden. Den bereitgestellten Bearer-Token als Header verwenden, niemals in URLs oder Berichte schreiben. Kein direkter Datenbankzugriff über Netzwerkfreigaben.
 
@@ -34,3 +38,5 @@ Eine separate Installation kann alternativ dieselben Operationen über die in `F
 6. Regeln zunächst als Hypothesen vorschlagen und Parameteränderungen als neue Experimente kennzeichnen. Reservierten Holdout nicht zur fortlaufenden Auswahl besserer Parameter benutzen.
 7. Keine heutigen Nachrichten, Kurskenntnisse oder LLM-Erinnerungen rückwirkend in historische Einstiegsentscheidungen einbringen. Der Rechenkern erzeugt Signale und Zahlen; der Agent beschreibt die gespeicherten Ergebnisse.
 8. Keine Brokerorders. Es existiert keine Orderfunktion in Tori.
+9. Datenqualitätshinweise im Bericht mitlesen. Ein Audit des gesamten Datasets ist kein zeitgerechter Einstiegsfilter und bestätigt keine Kapitalmaßnahmen. Ältere Datasets ohne Audit sind nicht automatisch geprüft. Neue US-Tageskerzen nutzen den versionierten XNYS-Kalender; alte Datasets behalten ihre gespeicherten Abschlüsse.
+10. Vollständige/unvollständige Horizonte und zeitliche Überlappungen getrennt nennen. `overlapping_entries` ist keine statistische Korrektur der Stichprobe. Vor Updates sichern; Schema 3 hat Vorwärtsmigrationen, keine automatische Rückwärtsmigration. Engine-Hash-Abweichungen nicht umgehen.

@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import threading
 import unittest
 import urllib.error
@@ -13,6 +15,9 @@ from alpaca import DataError
 class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.env = patch.dict(os.environ, {"TORI_DATA_DIR":cls.temp.name})
+        cls.env.start()
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -23,6 +28,8 @@ class ServerTests(unittest.TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         cls.thread.join()
+        cls.env.stop()
+        cls.temp.cleanup()
 
     def test_health_has_no_secrets(self):
         with patch('server.credentials', return_value=('TEST-KEY', 'TEST-SECRET')):

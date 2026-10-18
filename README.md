@@ -23,11 +23,11 @@ Weitere Dokumentation:
 
 Die manuelle Webansicht unter `/` und die Forschungsansicht unter `/research` sind implementiert. Ein Python-Worker bearbeitet gespeicherte Aufträge ohne offenen Browser. Zufällige historische Startpunkte, Ausbruch-/Retest-Varianten, unveränderliche Datasets, eine dauerhafte Queue und JSON-Schnittstellen sind vorhanden.
 
-Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Hermes hat die Containerinstallation und erste Betriebsszenarien laut Nutzerbericht geprüft. Neue P1-Änderungen sind lokal getestet; ihr Rollout im Zielcontainer steht noch aus.
+Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Hermes hat die Containerinstallation und erste Betriebsszenarien laut Nutzerbericht geprüft. Neue P1-/P2-Änderungen sind lokal getestet; ihr Rollout im Zielcontainer steht noch aus.
 
 ## Lokal unter Windows starten
 
-Python 3.11+ vorausgesetzt:
+Python 3.12 oder 3.13 empfohlen und lokal getestet:
 
 ```powershell
 cd alpaca-trendlinien
@@ -54,7 +54,9 @@ python -m unittest discover -s tests -q
 node --test tests/test_geometry.cjs tests/test_snapshot_view.cjs tests/test_measurements.cjs
 ```
 
-Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions führt die Tests auf Linux und Windows aus, ohne Alpaca-Zugangsdaten. Der aktuelle lokale Stand wurde mit 75 Python- und 24 JavaScript-Tests geprüft.
+Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions ist für Linux/Windows mit Python 3.12/3.13 eingerichtet, ohne Alpaca-Zugangsdaten. Lokal unter Windows: jeweils 98 Python-Tests mit Python 3.12 und 3.13 (je ein wegen fehlender Symlinkberechtigung übersprungen), dazu 24 JavaScript-Tests erfolgreich. Remote-CI und Containerabnahme bleiben gesondert zu prüfen.
+
+P2 ergänzt den US-Tageskalender, beschreibende Datenqualitätsprüfungen, Speicherinventur und Importprüfung, Schema-Migrationen sowie geprüfte Backup-/Restore-Werkzeuge. Bedienung, Updatehinweise und Grenzen: [BETRIEB-P2.md](alpaca-trendlinien/BETRIEB-P2.md). Die lokale Sicherung wurde in einen neuen Ordner wiederhergestellt und ein archivierter Auftrag daraus ohne Providerabruf identisch wiederholt.
 
 ## Was nicht im Repository liegt
 

@@ -289,7 +289,7 @@ def main():
         if os.environ.get("TORI_AUTO_ENABLED","1") == "1":
             jobs.ensure_default_schedule()
         worker=jobs.start_worker()
-    print(f"Tori Alpaca · Local: http://127.0.0.1:{args.port}", flush=True)
+    print(f"Tori Alpaca · Local: http://127.0.0.1:{server.server_port}", flush=True)
     print("Read-only market data. Stop with Ctrl+C.", flush=True)
     try:
         server.serve_forever()

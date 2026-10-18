@@ -27,6 +27,15 @@ def main():
             command.add_argument("--cursor")
     commands.add_parser("list")
     commands.add_parser("health",help="Lokaler Betriebszustand ohne Providerabruf")
+    commands.add_parser("storage",help="Speicherübersicht im gemeinsamen Datenordner")
+    commands.add_parser("cleanup-preview",help="Nur Vorschau; keine Dateien werden gelöscht")
+    backup_command=commands.add_parser("backup")
+    backup_command.add_argument("--output",required=True)
+    verification=commands.add_parser("verify-backup")
+    verification.add_argument("--path",required=True)
+    restoration=commands.add_parser("restore")
+    restoration.add_argument("--backup",required=True)
+    restoration.add_argument("--target",required=True)
     worker=commands.add_parser("worker")
     worker.add_argument("--once",action="store_true")
     schedule=commands.add_parser("schedule")
@@ -47,6 +56,21 @@ def main():
         elif args.command=="health":
             from operations import status
             result=status()
+        elif args.command=="storage":
+            from storage import usage
+            result=usage(fresh=True)
+        elif args.command=="cleanup-preview":
+            from storage import cleanup_preview
+            result=cleanup_preview()
+        elif args.command=="backup":
+            from maintenance import backup
+            result=backup(args.output)
+        elif args.command=="verify-backup":
+            from maintenance import verify
+            result=verify(args.path)
+        elif args.command=="restore":
+            from maintenance import restore
+            result=restore(args.backup,args.target)
         elif args.command=="cancel": result=jobs.cancel(args.id)
         elif args.command=="list": result=jobs.list_jobs()
         elif args.command=="schedule": result=jobs.schedule(json.loads(Path(args.spec).read_text("utf-8-sig")) if args.spec else None)

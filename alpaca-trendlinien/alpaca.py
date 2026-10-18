@@ -77,9 +77,8 @@ def credentials() -> tuple[str, str]:
 
 def bar_end(timestamp: int, timeframe: str) -> int:
     if timeframe == "1D":
-        # Conservative regular-session close; early-close days are accepted only after 16:00 ET.
-        date = datetime.fromtimestamp(timestamp, NY)
-        return int(date.replace(hour=16, minute=0, second=0, microsecond=0).timestamp())
+        from market_calendar import daily_end
+        return daily_end(timestamp)
     return timestamp + SECONDS[timeframe]
 
 
@@ -178,7 +177,8 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
                         "fetchedAt":datetime.fromtimestamp(live["fetched_at"], UTC).isoformat(),
                         "first":bars[0].time,"last":bars[-1].time,"lastClose":bars[-1].end,
                         "count":len(bars),"pages":live["pages"],"quality":quality,
-                        "mode":"historical-cache","warning":None}
+                        "mode":"historical-cache","warning":None,
+                        "normalization":"XNYS/calendar-4.13.2" if timeframe=="1D" else "native-duration-v1"}
         except (OSError, ValueError, KeyError, TypeError):
             pass
     with data_lock(symbol, timeframe + suffix):
@@ -283,6 +283,7 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
             "first": bars[0].time, "last": bars[-1].time, "lastClose": bars[-1].end,
             "count": len(bars), "pages": payload["pages"], "quality": quality,
             "mode": mode, "warning": warning,
+            "normalization":"XNYS/calendar-4.13.2" if timeframe=="1D" else "native-duration-v1",
         }
 
 

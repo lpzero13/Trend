@@ -45,6 +45,15 @@ function age(seconds) {
   if (seconds < 86400) return `${number(seconds / 3600)} h`;
   return `${number(seconds / 86400)} Tagen`;
 }
+function bytes(value) {
+  return value == null
+    ? "unbekannt"
+    : value < 1048576
+      ? `${number(value / 1024)} KiB`
+      : value < 1073741824
+        ? `${number(value / 1048576)} MiB`
+        : `${number(value / 1073741824)} GiB`;
+}
 function progressText(progress) {
   const d = progress?.detail || {};
   const unit =
@@ -87,6 +96,19 @@ function renderOperations(ops) {
     ? `${imported.symbol} · ${date(imported.checkedAt)} · ${imported.feed} / ${imported.adjustment}`
     : "Noch nicht erfasst";
   const dataset = ops.lastDataset;
+  const storage = ops.storage;
+  $("#ops-storage").textContent = storage
+    ? `${bytes(storage.totalBytes)} belegt · ${bytes(storage.freeBytes)} frei${storage.warning ? " · wenig freier Speicher" : ""}`
+    : "Noch nicht erfasst";
+  $("#storage-details").textContent = storage
+    ? `Datenbankschema ${ops.databaseVersion} · Stand ${date(storage.observedAt)} · ` +
+      Object.entries(storage.categories)
+        .map(
+          ([name, item]) =>
+            `${name}: ${bytes(item.bytes)} (${number(item.files)} Dateien)`,
+        )
+        .join(" · ")
+    : "Speicherübersicht nach Serverupdate verfügbar.";
   $("#ops-data").textContent = dataset
     ? `${dataset.symbol} · ` +
       Object.entries(ops.dataAge)
@@ -275,19 +297,40 @@ function renderReport(data) {
   ];
   if (errors.length)
     html += `<p class="note error-note">${errors.map(escapeHtml).join("<br>")}</p>`;
-  html += `<div class="table-wrap"><table><thead><tr><th>Testgruppe</th><th>Starts mit Entry / eindeutige Signale</th>${job.spec.horizons.map((h) => `<th>Nach ${h} Kerzen · Median netto</th>`).join("")}</tr></thead><tbody>`;
+  html += `<div class="table-wrap"><table><thead><tr><th>Testgruppe</th><th>Versuche mit Entry / eindeutige Einstiege</th>${job.spec.horizons.map((h) => `<th>Nach ${h} Kerzen · Median netto</th>`).join("")}</tr></thead><tbody>`;
   for (const variant of ["breakout", "retest"])
     for (const quality of ["provisional", "qualified"]) {
       const group = summary.groups[`${variant}_${quality}`];
-      html += `<tr><td>${variant === "breakout" ? "Ausbruch" : "Retest"} · ${quality === "qualified" ? "qualifiziert" : "vorläufig"}</td><td>${group?.observed || 0} / ${group?.uniqueSignals || 0}</td>${job.spec.horizons
+      html += `<tr><td>${variant === "breakout" ? "Ausbruch" : "Retest"} · ${quality === "qualified" ? "qualifiziert" : "vorläufig"}</td><td>${group?.observed || 0} / ${group?.uniqueEntries ?? group?.uniqueSignals ?? 0}<br><small>${group?.withoutEntry ?? 0} Versuche ohne Entry</small></td>${job.spec.horizons
         .map((h) => {
           const result = group?.horizons[String(h)];
-          return `<td class="${valueClass(result?.median_net_pct)}">${number(result?.median_net_pct)}${result?.n ? ` % <small>(n=${result.n}; ${result.positive} positiv)</small>` : ""}</td>`;
+          return `<td class="${valueClass(result?.median_net_pct)}">${number(result?.median_net_pct)}${result?.n ? ` % <small>(n=${result.n}; ${result.positive} positiv)</small>` : ""}<br><small>${result?.n_incomplete ?? 0} unvollständig · ${result?.overlapping_entries ?? 0} überlappend</small></td>`;
         })
         .join("")}</tr>`;
     }
   html +=
     '</tbody></table></div><p class="note">Netto = Kursänderung ab beobachtetem Einstieg abzüglich Kostenannahme je Seite. n zählt vollständige, eindeutige Einstiege. Keine Stop-Ausführung und keine Portfoliorendite. „Vorläufig“ enthält auch andere nicht vollständig qualifizierte Linienpaare; die exakten Kontakte stehen im Fallprotokoll.</p>';
+  html +=
+    '<p class="note"><b>Nur Entwicklungszeitraum; Holdout bleibt unberührt.</b> Wiederholte Starts können denselben Einstieg treffen. Auch eindeutige Einstiege sind keine unabhängigen Stichproben: „überlappend“ zählt zeitlich überlappende Beobachtungsfenster desselben Datasets. Andere Abhängigkeiten bleiben möglich. Unvollständige Fenster gehen nicht als Gewinn oder Verlust in den Median ein.</p>';
+  const qualityGroups = new Map();
+  let unknownQuality = 0;
+  for (const item of job.symbols) {
+    if (!item.dataQuality) {
+      unknownQuality++;
+      continue;
+    }
+    for (const issue of item.dataQuality.issues) {
+      const entry = qualityGroups.get(issue.kind) || {
+        message: issue.message || issue.kind,
+        count: 0,
+        symbols: [],
+      };
+      entry.count++;
+      if (entry.symbols.length < 10) entry.symbols.push(item.symbol);
+      qualityGroups.set(issue.kind, entry);
+    }
+  }
+  html += `<details class="case-details"><summary>Datenqualität & Grenzen</summary><p class="note">Beschreibendes Audit des gesamten Datenbestands, kein damaliger Einstiegsfilter. Rohkurse und Bereinigung, IEX-Einzelplatzdaten, heutiges Aktienuniversum und mögliche Kapitalmaßnahmen bleiben zu berücksichtigen. Kein automatischer Nachweis von Splits oder Dividenden. ${unknownQuality} Aktien ohne gespeichertes Audit.</p>${[...qualityGroups.values()].map((q) => `<p class="note">${escapeHtml(q.message)} · ${q.count} Aktien (${escapeHtml(q.symbols.join(", "))}${q.count > q.symbols.length ? ", …" : ""})</p>`).join("")}</details>`;
   html += `<p class="note">Einzelfälle ${data.page.total ? data.page.offset + 1 : 0}–${data.page.offset + trials.length} von ${data.page.total}. Gruppenergebnisse berücksichtigen alle Fälle.</p><div class="table-wrap"><table><thead><tr><th>Aktie / Start (Berlin)</th><th>Variante / Ergebnis</th><th>Entry</th><th>Verlauf / Gegenlauf</th><th>Chart</th></tr></thead><tbody>`;
   for (const trial of [...trials].sort(
     (a, b) => a.symbol.localeCompare(b.symbol) || a.startAt - b.startAt,

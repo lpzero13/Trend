@@ -211,27 +211,46 @@ def summarize(trials, horizons):
         trial_count+=1
         no_entry+=trial["status"]=="no_entry"
         for entry in trial["variants"]:
-            group = groups.setdefault(entry["group"], {"cases": 0, "observed": 0, "uniqueSignals": set(), "horizons": {}})
+            group = groups.setdefault(entry["group"], {"cases": 0, "observed": 0, "uniqueSignals": set(), "horizons": {},"reasons":{},"_entries":{}})
             group["cases"] += 1
             if entry["status"] != "observed":
+                reason=entry.get("reason","unknown")
+                group["reasons"][reason]=group["reasons"].get(reason,0)+1
                 continue
             group["observed"] += 1
             group["uniqueSignals"].add(entry["eventId"])
+            key=(entry["eventId"],entry["entryAt"])
+            group["_entries"][key]=trial.get("datasetId",trial.get("symbol","unknown"))
             for horizon in horizons:
                 measure = group["horizons"].setdefault(str(horizon), {})
                 # Deduplicate repeated origins that landed on the same entry.
                 outcome = entry["outcomes"][str(horizon)]
-                if outcome["complete"]:
-                    measure[(entry["eventId"], entry["entryAt"])] = outcome
+                measure[key] = outcome
     for group in groups.values():
         group["uniqueSignals"] = len(group["uniqueSignals"])
+        group["uniqueEntries"]=len(group["_entries"])
+        group["withoutEntry"]=group["cases"]-group["observed"]
         for key, measures in list(group["horizons"].items()):
-            values = list(measures.values())
+            values = [m for m in measures.values() if m["complete"]]
+            windows={}
+            unknown=overlap=0
+            for entry_key,measure in measures.items():
+                if measure.get("closedAt") is None:
+                    unknown+=1
+                else:
+                    windows.setdefault(group["_entries"][entry_key],[]).append((entry_key[1],measure["closedAt"]))
+            for intervals in windows.values():
+                last_end=None
+                for start,end in sorted(intervals):
+                    overlap+=last_end is not None and start<last_end
+                    last_end=max(last_end or end,end)
             group["horizons"][key] = {"n": len(values),
+                "n_total":len(measures),"n_incomplete":len(measures)-len(values),"overlapping_entries":overlap,"unknown_windows":unknown,
                 "positive": sum(x["net_return_pct"] > 0 for x in values),
                 "median_net_pct": statistics.median(x["net_return_pct"] for x in values) if values else None,
                 "median_mfe_pct": statistics.median(x["mfe_pct"] for x in values) if values else None,
                 "median_mae_pct": statistics.median(x["mae_pct"] for x in values) if values else None,
                 "ambiguous": sum(x["intrabar_ambiguous"] for x in values)}
+        group.pop("_entries")
     return {"trials": trial_count, "no_entry": no_entry, "groups": groups,
         "interpretation": "Explorative Beobachtungen, keine Portfoliorendite. Überlappende Fälle bleiben abhängig; Summen sind nach Signal/Einstieg dedupliziert. Der spätere Holdout bleibt unbenutzt."}

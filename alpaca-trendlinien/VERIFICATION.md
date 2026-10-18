@@ -125,6 +125,12 @@ Maschinenlesbare Nachweise: `artifacts/upgrade-live-verification.json` und `arti
 - 40 Python- und 21 Node-Tests bestanden. Neue Tests: mehrere gespeicherte Messungen und aktive Auswahl im JSON-Rundlauf, verlustfreies Löschen/Wiederherstellen, Löschen inaktiver Einträge, defekte/duplizierte gespeicherte Punkte, Schreibfehler ohne Verlust bestehender Daten und Unterscheidung Netzwerkfehler/HTTP-Anbieterfehler. Eigene JavaScript-Dateien auf Syntax geprüft.
 - Screenshot des geprüften Messungsdialogs: `artifacts/saved-measurements.png`. Regelentwurf separat in `LONG-KRITERIEN-ENTWURF.md`: Long, beide Einstiegsvarianten und beide Qualitätsgruppen entsprechend deiner Auswahl. Noch nicht in der Signallogik aktiviert.
 
+## P2: Betrieb und Datenqualität – 18.10.2026
+
+98 Python-Tests unter Windows jeweils mit Python 3.12 und 3.13.12 erfolgreich (je ein Symlinktest wegen fehlender Berechtigung übersprungen), 24 JavaScript-Tests erfolgreich. Kalender-/Rohkursgrenzen, transaktionale Migrationen, sichere Backup-/Restore-Ziele, Referenzschutz, knapper Speicher, Berichtszählung und ein echter Proxy-/Worker-Subprozess sind abgedeckt. Vorhandene Wiederaufnahmeprüfungen bleiben aktiv. CI auf Linux/Windows mit beiden Python-Versionen eingerichtet, noch kein Remote-Ergebnis für diesen lokalen Stand.
+
+Ein echtes lokales Backup mit zwei Datasets und fünf Snapshots wurde in einen neuen Ordner wiederhergestellt; ein daraus gepinnter Auftrag mit drei AMZN-Starts lieferte ohne Providerimport dieselben Fälle und dieselbe Zusammenfassung. Neue Speicher-/Berichtsansicht in Chrome geprüft. Keine Änderung am installierten Zielcontainer. Vollständige Nachweise, Ressourcenmessung und bewusste Grenzen in [BETRIEB-P2.md](BETRIEB-P2.md); lokale Screenshots/Backupdaten bleiben außerhalb Git. Neu normalisierte Tageskerzen verwenden jetzt den XNYS-Kalender; alte Datasets und ältere Aussagen unten zum damaligen Stand bleiben unverändert archiviert.
+
 ## Automatische Ereignisstudien und gemeinsamer Kern – 17.10.2026
 
 - Geometrie und Datenmodelle vom Provider gelöst; HTTP und Dataset-Chart verwenden `analysis_service.build_chart`. Der Forschungsstrom verwendet dieselbe kausale Brucherkennung wie der manuelle Chart. Snapshot-/Messungswerkzeuge bleiben erhalten.

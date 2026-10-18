@@ -20,47 +20,20 @@ from trendlines import RULES_VERSION
 def engine_hash():
     import hashlib
     value = hashlib.sha256()
-    for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py"):
+    for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
+                 "market_calendar.py","data_quality.py","providers.py","requirements.txt"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
 
-@contextmanager
-def connection():
-    folder = data_dir()/"research"
-    folder.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(folder/"jobs.sqlite3", timeout=10)
-    db.row_factory = sqlite3.Row
-    try:
-        db.execute("PRAGMA journal_mode=WAL")
-        db.execute("PRAGMA busy_timeout=10000")
-        db.executescript("""
-        CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, created REAL NOT NULL, updated REAL NOT NULL,
-          status TEXT NOT NULL, spec TEXT NOT NULL, manifest TEXT NOT NULL, universe TEXT,
-          current_symbol TEXT, error TEXT, automatic INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE IF NOT EXISTS symbols(job_id TEXT, symbol TEXT, dataset_id TEXT, plan TEXT,
-          done INTEGER DEFAULT 0, error TEXT, PRIMARY KEY(job_id,symbol));
-        CREATE TABLE IF NOT EXISTS trials(job_id TEXT, id TEXT, result TEXT, PRIMARY KEY(job_id,id));
-        CREATE TABLE IF NOT EXISTS events(job_id TEXT, id TEXT, dataset_id TEXT, event TEXT, PRIMARY KEY(job_id,id));
-        CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS events_job_sequence ON events(job_id);
-        CREATE TABLE IF NOT EXISTS job_progress(job_id TEXT PRIMARY KEY, phase TEXT NOT NULL,
-          phase_started REAL NOT NULL, progress_at REAL NOT NULL, detail TEXT NOT NULL);
-        """)
-        yield db
-        db.commit()
-    except BaseException:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+from database import connection
 
 
 def manifest():
     return {"studyVersion": STUDY_VERSION, "rulesVersion": RULES_VERSION, "engineHash": engine_hash(),
         "signalTimeframe": "4h", "contextTimeframe": "1D", "universeBasis": "present-day listed assets or explicit list; survivorship bias possible",
         "execution": "first provider 4h open at/after signal availability; extended hours possible",
-        "dailyFinality": "provider-native bars; conservative 16 ET cutoff, not historical publication vintages",
+        "dailyFinality": "daily bars use stored end; new Alpaca normalization uses versioned XNYS session close; no historical publication vintages",
         "outcomes": "fixed forward horizons, not portfolio P&L; initial stop is an observation threshold"}
 
 
@@ -74,6 +47,9 @@ def _insert_job(db, spec, automatic=False):
 
 def submit(spec):
     spec = validate_spec(spec)
+    from storage import preflight
+    pending=len([s for s in spec["symbols"] if s not in spec.get("dataset_ids",{})]) if spec.get("universe")!="all" else 0
+    preflight(history_days=spec["history_days"],symbols=pending)
     with connection() as db:
         identity = _insert_job(db,spec)
     return get_job(identity)
@@ -97,6 +73,9 @@ def get_job(identity, *, include_plans=True):
                 item["plan"] = json.loads(item["plan"]) if item["plan"] else None
             else:
                 item.pop("plan", None)
+            if include_plans and item["dataset_id"]:
+                quality=db.execute("SELECT summary FROM dataset_quality WHERE dataset_id=?",(item["dataset_id"],)).fetchone()
+                item["dataQuality"]=json.loads(quality[0]) if quality else None
         result["completedTrials"] = db.execute("SELECT count(*) FROM trials WHERE job_id=?",(identity,)).fetchone()[0]
         result["eventCount"] = db.execute("SELECT count(*) FROM events WHERE job_id=?",(identity,)).fetchone()[0]
         progress = db.execute("SELECT * FROM job_progress WHERE job_id=?", (identity,)).fetchone()
@@ -278,6 +257,8 @@ def run_job(identity, stop=None):
             universe = [item["symbol"] for item in catalog["items"]]
         else:
             universe = spec["symbols"]
+        from storage import preflight
+        preflight(history_days=spec["history_days"],symbols=sum(s not in spec.get("dataset_ids",{}) for s in universe))
         with connection() as db:
             db.execute("UPDATE jobs SET universe=?,updated=? WHERE id=?",(json.dumps(universe),time.time(),identity))
     last_check = [0,False]

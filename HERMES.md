@@ -56,6 +56,7 @@ Weitere Informationen:
 | [Anwendungs-README](alpaca-trendlinien/README.md) | Bedienung, Linienregeln, Windows-Start und Datenhinweise |
 | [FORSCHUNG.md](alpaca-trendlinien/FORSCHUNG.md) | Ablauf der Ereignisstudie, Ergebnisse, CLI und API |
 | [BETRIEB-P1.md](alpaca-trendlinien/BETRIEB-P1.md) | Ereignisseiten, Betriebszustand, Lastmessung und Kompatibilität beim Update |
+| [BETRIEB-P2.md](alpaca-trendlinien/BETRIEB-P2.md) | Kalender-/Qualitätsaudit, Speicherprüfung, Schema 3, Backup/Restore, Berichte und Deploymenttests |
 | [LONG-KRITERIEN-ENTWURF.md](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md) | Diskussionsgrundlage; Vorschläge sind keine als optimal belegten Grenzen |
 | [TORI-KRITERIEN-ARBEITSNOTIZ.md](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md) | Eingereichte Tori-Zusammenfassung vom 18.10.2026, separate Einschätzung, offene Definitionen und spätere Testideen; keine aktivierten Regeln |
 | [ARCHITEKTUR-V2-V3.md](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md) | ursprünglicher Umbauplan, teilweise umgesetzt; enthält auch spätere Arbeiten |
@@ -78,12 +79,14 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Forschungsansicht | Über die feste Hauptnavigation „Chart / Forschung“ erreichbar; Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
 | Betriebsanzeige | Getrennte Lebenszeichen und Arbeitsphasen, Fortschrittswarnung, Datenalter und Import-/Fehlerstände ohne Providerabruf im Healthcheck |
+| Datenqualität | Versionierter XNYS-Tageskalender, Rohkurs-/IEX-Hinweise, beschreibendes Audit neuer Datasets; keine automatische Verifikation von Kapitalmaßnahmen |
+| Datenbetrieb | Speicherinventur und Importprüfung, transaktionale Migrationen bis Schema 3, geprüfte Backup-/Restore-CLI und reine Bereinigungsvorschau |
 | Reproduzierbarkeit | Dataset-Prüfsummen, archivierte Parameter und Universen, Seed, Engine-/Regelversion und Ereignisse |
 | Hermes-Schnittstelle | CLI/JSON und authentifizierbare HTTP-Job-API; Berechnung benötigt keinen Browser und kein LLM |
 | Linux-Vorbereitung | systemd-Unit, externer persistenter Datenpfad, Token-/Host-Konfiguration und CLI-Wrapper |
 | Repository-Tests | Python-/JavaScript-Tests, GitHub Actions für Linux und Windows; keine Provider-Schlüssel für Unit-Tests |
 
-Laut Nutzerbericht vom 18.10.2026 hat Hermes die Anwendung inzwischen im Container installiert und einen echten Auftrag, eine Offline-Wiederholung und die Wiederaufnahme nach Worker-Abbruch geprüft. Die neuen P1-Änderungen wurden lokal unter Windows entwickelt und getestet; sie wurden von Codex nicht im Ziel-LXC installiert oder abgenommen. Die CI ersetzt keinen Installations-/Netzwerktest im Zielcontainer.
+Laut Nutzerbericht vom 18.10.2026 hat Hermes die Anwendung inzwischen im Container installiert und einen echten Auftrag, eine Offline-Wiederholung und die Wiederaufnahme nach Worker-Abbruch geprüft. Die neuen P1-/P2-Änderungen wurden lokal unter Windows entwickelt und getestet; sie wurden von Codex nicht im Ziel-LXC installiert oder abgenommen. Die CI ersetzt keinen Installations-/Netzwerktest im Zielcontainer.
 
 ## 4. Was noch nicht implementiert ist
 
@@ -181,7 +184,9 @@ Alpaca wird ausschließlich lesend angesprochen: historische Marktdaten und Wert
 
 Normale Chartabrufe laden standardmäßig 450 Kalendertage. Frische Daten werden gecacht; danach erfolgen inkrementelle Abrufe mit sieben Tagen Überlappung für Korrekturen. Ältere Providerrevisionen können außerhalb dieses Überlappungsfensters liegen. Die Forschungsimporte können andere explizite Historienlängen verwenden.
 
-Intraday-Abschluss wird aus Start plus Intervall bestimmt. Tageskerzen werden konservativ erst mit 16:00 New Yorker Zeit freigegeben. Verkürzte Handelstage und tatsächliche damalige Veröffentlichungslatenzen sind damit nicht vollständig modelliert. Zeitzonendaten sind als Python-Abhängigkeit festgelegt; Instrument-/Kalenderabgleich bleibt für spätere Provider wichtig.
+Intraday-Abschluss wird aus Start plus Intervall bestimmt. Neu normalisierte Tageskerzen verwenden den regulären XNYS-Schluss aus `exchange-calendars==4.13.2`, einschließlich Feiertagen, Sommerzeit und verkürzten Tagen. Alte unveränderliche Datasets behalten ihren gespeicherten Abschluss, gegebenenfalls den früheren konservativen 16-Uhr-Wert. Tatsächliche damalige Veröffentlichungslatenzen werden nicht rekonstruiert. Zeitzonen-/Kalenderversionen sind festgelegt; Instrument-/Kalenderabgleich bleibt für spätere Provider wichtig.
+
+Neue Datasets speichern ein beschreibendes Qualitätsaudit: fehlende Sitzungen, Schlussmodellunterschiede, große Kurslücken sowie Rohkurs-/IEX-Grenzen. Das ist keine verifizierte Split-/Dividendenhistorie und kein damaliger Einstiegsfilter. Ältere Datasets ohne Audit werden im Bericht als solche ausgewiesen. Der Providervertrag trennt Abruf von Signalen; ein EODHD-Adapter ist damit noch nicht implementiert. Details in BETRIEB-P2.md.
 
 Historische Abfragen verwenden heute verfügbare Anbieterbestände und Symbolzuordnungen. Alpacas `asof` zur Symbolzuordnung ist keine Versionierung damals publizierter Kursdaten. Rohkurse können Splits/Dividenden enthalten. Der heutige aktive Katalog ersetzt kein historisches Universum mit delisteten Titeln. Diese Grenzen müssen auch im Bericht von Hermes sichtbar bleiben.
 
@@ -237,6 +242,7 @@ Die Zeichenleiste und Entf/Strg+Z gelten für eigene Rays und Messungen. Neue un
 | `TORI_API_TOKEN` | gemeinsames Steuer-/Zugriffstoken für HTTP |
 | `TORI_AUTO_ENABLED` | steuert nur das erstmalige Einrichten des Standardzeitplans |
 | `TORI_API_REQUESTS_PER_MINUTE` | Prozessbudget für Marktdatenabrufe, Standard 150; an tatsächliche Providerfreigabe anpassen |
+| `TORI_MIN_FREE_BYTES` | Freiplatzreserve für Importprüfung, Standard 268435456 Bytes; zusätzlich konservative Umfangsschätzung |
 | `--no-worker` | nur Webserver starten; separater Worker übernimmt die Queue |
 
 **Wichtige Besonderheit:** `TORI_AUTO_ENABLED=0` pausiert keinen schon gespeicherten Zeitplan. Zum Pausieren die Webansicht oder die Schedule-API/CLI verwenden. Der tägliche Standard für MSFT/AMZN mit zehn Starts wird nur bei fehlender gespeicherter Einstellung eingerichtet.
@@ -251,7 +257,7 @@ Dieser Abschnitt ist eine **Anleitung für einen später autorisierten Rollout**
 
 ### 10.1 Voraussetzungen
 
-- Unterstütztes Linux mit systemd, Python 3.11+ inklusive `venv`, Git und CA-Zertifikaten.
+- Unterstütztes Linux mit systemd, Python 3.12 oder 3.13 inklusive `venv` (lokal geprüfte Versionen), Git und CA-Zertifikaten.
 - Ausgehendes HTTPS für Alpaca und für die Installation der Python-Abhängigkeit.
 - Persistenter lokaler Datenträger für `/var/lib/tori`.
 - Tatsächlich bereitgestellte Alpaca-Zugangsdaten und ein eigenes langes zufälliges Zugriffstoken.
@@ -365,13 +371,15 @@ Der Schedule läuft in Stundenabständen, standardmäßig 24. Er richtet keine b
 - Freier Speicher für unveränderliche Datenversionen und SQLite-WAL?
 - Wiederholte alte Datasets/Experimente als Wiederholungen erkennen, nicht als zusätzliche unabhängige Evidenz zählen.
 
-Ein aktiver Prozess oder eine gehaltene Worker-Sperre allein beweist keinen gesunden Datenfluss. Ein `running`-Auftrag kann beim Provider warten. Die neue Betriebsanzeige trennt Lebenszeichen, Hauptschleife und Arbeitsfortschritt. Überfällige Lebenszeichen und längerer fehlender Fortschritt erscheinen als Warnung, ohne Aufträge automatisch zu beenden. Healthchecks lesen ausschließlich lokale Daten. Details und Grenzwerte stehen in BETRIEB-P1.md. Externe Benachrichtigungen und umfassendes Speicher-Monitoring fehlen weiterhin.
+Ein aktiver Prozess oder eine gehaltene Worker-Sperre allein beweist keinen gesunden Datenfluss. Ein `running`-Auftrag kann beim Provider warten. Die neue Betriebsanzeige trennt Lebenszeichen, Hauptschleife und Arbeitsfortschritt. Überfällige Lebenszeichen und längerer fehlender Fortschritt erscheinen als Warnung, ohne Aufträge automatisch zu beenden. Healthchecks lesen ausschließlich lokale Daten. Details und Grenzwerte stehen in BETRIEB-P1.md. Speicher nach Datenkategorie und freier Plattenplatz werden angezeigt (30 Sekunden Cache); vor Imports erfolgt eine konservative Platzprüfung. Externe Benachrichtigungen fehlen weiterhin.
 
 ### Backups
 
 Datasets, Forschungsdatenbank, manuelle Snapshots und nötige Metadaten gemeinsam sichern. Credential-Dateien getrennt und geschützt sichern. Persönliche Browserzeichnungen benötigen eine eigene spätere Export-/Migrationslösung.
 
-Zum einfachen konsistenten Datenbackup den Dienst stoppen und `/var/lib/tori` vollständig kopieren/archivieren; danach wieder starten. Alternativ die SQLite-Backup-API für die Datenbank verwenden und auf einen dazu passenden Dataset-Bestand achten. Keine gerade beschriebene SQLite-Datei isoliert kopieren und dabei WAL-Dateien ignorieren. Wiederherstellung in einem anderen Verzeichnis/Container testen, nicht über den einzigen produktiven Bestand schreiben.
+Die neue CLI `backup --output <neuer-ordner>` verwendet die SQLite-Backup-API und sichert Datasets/Snapshots samt Prüfmanifest. `verify-backup --path <backup>` prüft Integrität; `restore --backup <backup> --target <neuer-ordner>` stellt ausschließlich außerhalb des aktiven Datenpfads wieder her und schaltet keinen Dienst um. Markt-/Katalogcache, Secrets, Logs und Browserzeichnungen sind nicht enthalten. Vollständige Befehle und Restore-Prüfung stehen in BETRIEB-P2.md. Beim Update von einer alten Version den Dienst stoppen und mit den bisherigen Mitteln konsistent sichern, bevor neuer Code die DB öffnet. Keine gerade beschriebene SQLite-Datei isoliert kopieren und dabei WAL-Dateien ignorieren.
+
+`storage` liefert die Größenübersicht. `cleanup-preview` schützt Dataset-Verweise in Jobs, Einstellungen, Ereignissen und Snapshots; es gibt keinen automatischen Löschbefehl. Nicht lesbare Referenzen blockieren die Vorschau.
 
 ### Codeupdate aus diesem Repository
 
@@ -383,7 +391,7 @@ Zum einfachen konsistenten Datenbackup den Dienst stoppen und `/var/lib/tori` vo
 6. Bei geänderter Unit `systemctl daemon-reload`, dann Dienst starten. Health, Datenpfad, Zeitplan und einen kleinen Auftrag prüfen.
 7. Neue Engine-Version nicht über alte unterbrochene Aufträge hinwegtäuschen. Fehlerhafte Altaufträge im Archiv lassen und bei Bedarf neue Experimente anlegen.
 
-Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichkeit prüfen. Es gibt noch kein formales automatisches Migrations-/Rollback-System. Ein altes Programm nicht blind gegen eine künftig geänderte Datenbank starten. Git-Commits identifizieren den Code; Datenbank- und Dataset-Backups gehören separat dazu.
+Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichkeit prüfen. Transaktionale Vorwärtsmigrationen sind bis Schema 3 implementiert; neuere Schemata werden abgewiesen. Es gibt keine automatische Rückwärtsmigration. Alte P1-Versionen besitzen diesen Schutz noch nicht: altes Programm nicht blind gegen eine geänderte Datenbank starten. Git-Commits identifizieren den Code; Datenbank- und Dataset-Backups gehören separat dazu.
 
 ## 13. Fehlerbehebung
 
@@ -406,7 +414,9 @@ Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichk
 
 ## 14. Nachweise und Testverfahren
 
-Der aktuelle lokale Stand wurde mit **75 Python- und 24 JavaScript-Tests** geprüft. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. Die zusätzlichen Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
+Der aktuelle lokale Stand wurde unter Windows mit **98 Python-Tests jeweils unter Python 3.12 und 3.13.12** sowie **24 JavaScript-Tests** geprüft; je Python-Lauf ein übersprungener Symlinktest wegen fehlender Windows-Berechtigung. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. P2 ergänzt Feiertage/Halbtage, Rohkursgrenzen, Migrationen, Backup/Restore, Platzprüfung, Überlappungen und einen echten Proxy-/Subprozess-Test mit externem Datenpfad. Die Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
+
+Zusätzlich wurde der echte lokale Datenbestand in einen neuen Ordner wiederhergestellt: zwei Datasets, fünf lesbare Snapshots und eine Offline-Wiederholung mit drei AMZN-Starts, identischen Fällen und identischer Zusammenfassung. P2-Messungen und Grenzen stehen in BETRIEB-P2.md.
 
 Zusätzlich gab es einen echten lokalen Alpaca-Lauf für MSFT/AMZN mit 900 Tagen Import und je zehn Starts: 20 Starts, einer ohne beobachteten Einstieg, 194 archivierte Linienereignisse. Ein anschließender CLI-Lauf mit denselben Datasets und ohne Zugangsdaten lieferte dieselben fachlichen Fälle und dieselbe Zusammenfassung. Das belegt die technische Reproduzierbarkeit dieses Versuchs, nicht Profitabilität oder Volluniversum-Eignung.
 
@@ -421,7 +431,7 @@ python -m unittest discover -s tests -q
 node --test tests/test_geometry.cjs tests/test_snapshot_view.cjs tests/test_measurements.cjs
 ```
 
-Die Repository-CI führt dieselben Suites auf Linux und Windows aus. Sie importiert keine echten Zugangsdaten und stellt keinen Container bereit. Das jeweils konkrete Ergebnis ist im Actions-Lauf des betreffenden Commits zu prüfen.
+Die Repository-CI ist für dieselben Suites auf Linux und Windows mit Python 3.12 und 3.13 eingerichtet. Sie importiert keine echten Zugangsdaten und stellt keinen Container bereit. Das jeweils konkrete Ergebnis ist im Actions-Lauf des betreffenden Commits zu prüfen; die lokale Ausführung bestätigt keinen Remote-Lauf.
 
 ## 15. Roadmap und nächste sinnvolle Schritte
 
@@ -445,7 +455,7 @@ Die konkrete Meldeplattform und relevanten Situationen sind noch festzulegen. Oh
 
 ### Späterer Ausbau
 
-Portfolioversuche, unabhängige Validierung, Monitoring, formale DB-Migrationen, Datenaufbewahrung/Archivierung, serverseitige Zeichnungen und bessere Berichtexporte. Bei gemessenem Bedarf Arbeit auf mehrere Prozesse/Worker aufteilen und Datenbankwahl prüfen; kein Ressourcenversprechen für das gesamte Aktienuniversum aus dem bisherigen Zweititeltest ableiten.
+Portfolioversuche, unabhängige Validierung, externe Überwachung, Datenaufbewahrung/Archivierung, regelmäßige Restore-Übungen im Zielcontainer, serverseitige Zeichnungen und bessere Berichtexporte. Vorwärtsmigrationen, Backup/Restore und Aufräumvorschau sind bereits implementiert. Bei gemessenem Bedarf Arbeit auf mehrere Prozesse/Worker aufteilen und Datenbankwahl prüfen; kein Ressourcenversprechen für das gesamte Aktienuniversum aus dem bisherigen Zweititeltest ableiten.
 
 ## 16. Arbeitsweise für Hermes
 
