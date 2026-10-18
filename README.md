@@ -13,6 +13,7 @@ Weitere Dokumentation:
 - [Bedienung der Chartoberfläche](alpaca-trendlinien/README.md)
 - [Forschungsmethode und JSON-Werkzeuge](alpaca-trendlinien/FORSCHUNG.md)
 - [Long-Kriterien als Diskussionsentwurf](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md)
+- [Tori-Vorgaben und ergänzende Testideen vom 18.10.2026](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md)
 - [Ursprünglicher Architekturplan V2/V3](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md)
 - [Prüfprotokoll und bekannte Grenzen](alpaca-trendlinien/VERIFICATION.md)
 - [Vorlage für Hermes als Auftraggeber/Auswerter](alpaca-trendlinien/integrations/hermes/SKILL.md)

@@ -56,6 +56,7 @@ Weitere Informationen:
 | [Anwendungs-README](alpaca-trendlinien/README.md) | Bedienung, Linienregeln, Windows-Start und Datenhinweise |
 | [FORSCHUNG.md](alpaca-trendlinien/FORSCHUNG.md) | Ablauf der Ereignisstudie, Ergebnisse, CLI und API |
 | [LONG-KRITERIEN-ENTWURF.md](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md) | Diskussionsgrundlage; Vorschläge sind keine als optimal belegten Grenzen |
+| [TORI-KRITERIEN-ARBEITSNOTIZ.md](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md) | Eingereichte Tori-Zusammenfassung vom 18.10.2026, separate Einschätzung, offene Definitionen und spätere Testideen; keine aktivierten Regeln |
 | [ARCHITEKTUR-V2-V3.md](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md) | ursprünglicher Umbauplan, teilweise umgesetzt; enthält auch spätere Arbeiten |
 | [VERIFICATION.md](alpaca-trendlinien/VERIFICATION.md) | bisherige Tests und bewusst genannte Grenzen |
 | [Hermes-Skillvorlage](alpaca-trendlinien/integrations/hermes/SKILL.md) | Bedienung der Werkzeuge durch einen Agenten, noch nicht im Agenten installiert |
