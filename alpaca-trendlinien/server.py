@@ -140,6 +140,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path == "/api/health":
+                from operations import status
                 try:
                     credentials()
                     configured = True
@@ -148,9 +149,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"app": APP_ID, "credentialsConfigured": configured,
                                        "rulesVersion": RULES_VERSION, "readOnly": True,
                                        "marketDataReadOnly": True, "localSnapshots": True,
-                                       "research":True,"studyVersion":jobs.STUDY_VERSION})
+                                       "research":True,"studyVersion":jobs.STUDY_VERSION,
+                                       "operations":status()})
             if path == "/api/research/jobs":
-                return self.send_json({"items":jobs.list_jobs(),"schedule":jobs.schedule(),"workerActive":jobs.worker_active()})
+                from operations import status
+                operational = status()
+                return self.send_json({"items":jobs.list_jobs(),"schedule":jobs.schedule(),"workerActive":operational["worker"]["lockHeld"],"operations":operational})
             if path == "/api/research/schedule":
                 return self.send_json(jobs.schedule())
             if path.startswith("/api/research/jobs/"):
@@ -159,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(jobs.get_job(parts[4]))
                 if len(parts)==6 and parts[5] in ("report","events"):
                     query=parse_qs(urlparse(self.path).query)
-                    return self.send_json(jobs.report(parts[4],int(query.get("offset",["0"])[0]),int(query.get("limit",["250"])[0])) if parts[5]=="report" else {"items":jobs.events_for(parts[4])})
+                    return self.send_json(jobs.report(parts[4],int(query.get("offset",["0"])[0]),int(query.get("limit",["250"])[0])) if parts[5]=="report" else jobs.events_for(parts[4],int(query.get("limit",["250"])[0]),query.get("cursor",[None])[0]))
                 raise DataError("Unbekannte Forschungsroute.",404)
             if path == "/api/dataset-chart":
                 query=parse_qs(urlparse(self.path).query)

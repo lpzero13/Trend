@@ -12,6 +12,7 @@ Weitere Dokumentation:
 
 - [Bedienung der Chartoberfläche](alpaca-trendlinien/README.md)
 - [Forschungsmethode und JSON-Werkzeuge](alpaca-trendlinien/FORSCHUNG.md)
+- [Betriebsanzeige, Ereignisseiten und Lastmessung](alpaca-trendlinien/BETRIEB-P1.md)
 - [Long-Kriterien als Diskussionsentwurf](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md)
 - [Tori-Vorgaben und ergänzende Testideen vom 18.10.2026](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md)
 - [Ursprünglicher Architekturplan V2/V3](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md)
@@ -22,7 +23,7 @@ Weitere Dokumentation:
 
 Die manuelle Webansicht unter `/` und die Forschungsansicht unter `/research` sind implementiert. Ein Python-Worker bearbeitet gespeicherte Aufträge ohne offenen Browser. Zufällige historische Startpunkte, Ausbruch-/Retest-Varianten, unveränderliche Datasets, eine dauerhafte Queue und JSON-Schnittstellen sind vorhanden.
 
-Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Ein echter Proxmox-Containerbetrieb ist vorbereitet, aber noch nicht als installiert und abgenommen bestätigt.
+Alpaca IEX ist die technische Testquelle. EODHD für europäische Aktien ist geplant, noch nicht implementiert. Ergebnisse sind explorative Kursbeobachtungen, kein vollständiger Portfolio-Backtest. Es gibt keine Brokerorders. Hermes hat die Containerinstallation und erste Betriebsszenarien laut Nutzerbericht geprüft. Neue P1-Änderungen sind lokal getestet; ihr Rollout im Zielcontainer steht noch aus.
 
 ## Lokal unter Windows starten
 
@@ -53,7 +54,7 @@ python -m unittest discover -s tests -q
 node --test tests/test_geometry.cjs tests/test_snapshot_view.cjs tests/test_measurements.cjs
 ```
 
-Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions führt die Tests auf Linux und Windows aus, ohne Alpaca-Zugangsdaten. Der lokale Ausgangsstand wurde mit 61 Python- und 21 JavaScript-Tests geprüft.
+Node.js wird für diese zusätzlichen Tests benötigt, nicht für den Anwendungsbetrieb. GitHub Actions führt die Tests auf Linux und Windows aus, ohne Alpaca-Zugangsdaten. Der aktuelle lokale Stand wurde mit 75 Python- und 24 JavaScript-Tests geprüft.
 
 ## Was nicht im Repository liegt
 

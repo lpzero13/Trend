@@ -28,6 +28,90 @@ const labels = {
   cancelled: "Abgebrochen",
   partial: "Teilweise abgeschlossen",
 };
+const phaseLabels = {
+  preparing: "Auftrag vorbereiten",
+  importing: "Kursdaten importieren",
+  validating: "Datenbestand prüfen",
+  events: "Linienereignisse berechnen",
+  saving_events: "Ereignisse speichern",
+  trials: "Zufallsstarts auswerten",
+  symbol_error: "Fehler bei einer Aktie",
+  ...labels,
+};
+function age(seconds) {
+  if (seconds == null) return "unbekannt";
+  if (seconds < 60) return `${Math.floor(seconds)} s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `${number(seconds / 3600)} h`;
+  return `${number(seconds / 86400)} Tagen`;
+}
+function progressText(progress) {
+  const d = progress?.detail || {};
+  const unit =
+    { candles: "Kerzen", trials: "Starts", events: "Ereignisse" }[d.unit] || "";
+  if (d.total != null)
+    return `${d.symbol || ""} · ${number(d.completed)} / ${number(d.total)} ${unit}`;
+  if (d.pages != null)
+    return `${d.symbol} · ${d.interval} · ${number(d.pages)} Seiten · ${number(d.rows)} Kerzen geladen`;
+  return d.symbol || "—";
+}
+function renderOperations(ops) {
+  if (!ops) {
+    $("#ops-worker").textContent = "Server für Betriebsanzeige neu starten";
+    return;
+  }
+  const w = ops.worker,
+    p = w.progress;
+  const names = {
+    absent: "Kein Worker aktiv",
+    unverified: "Worker noch ohne bestätigtes Lebenszeichen",
+    unresponsive: "Lebenszeichen überfällig",
+    stalled: "Länger kein Arbeitsfortschritt",
+    working: "Arbeitet",
+    idle: "Bereit · wartet auf Aufträge",
+  };
+  $("#ops-worker").textContent = names[w.state] || w.state;
+  $("#background-status").textContent =
+    `${["working", "idle"].includes(w.state) ? "●" : "⚠"} ${names[w.state] || w.state}`;
+  $("#ops-heartbeat").textContent = w.heartbeatAt
+    ? `${date(w.heartbeatAt)} · vor ${age(w.heartbeatAgeSeconds)}`
+    : "Noch nicht erfasst";
+  $("#ops-phase").textContent = p
+    ? `${phaseLabels[p.phase] || p.phase} · seit ${date(p.phase_started)}`
+    : w.state === "idle"
+      ? "Wartet auf Auftrag"
+      : "—";
+  $("#ops-progress").textContent = progressText(p);
+  const imported = ops.lastSuccessfulImport;
+  $("#ops-import").textContent = imported
+    ? `${imported.symbol} · ${date(imported.checkedAt)} · ${imported.feed} / ${imported.adjustment}`
+    : "Noch nicht erfasst";
+  const dataset = ops.lastDataset;
+  $("#ops-data").textContent = dataset
+    ? `${dataset.symbol} · ` +
+      Object.entries(ops.dataAge)
+        .map(
+          ([tf, d]) =>
+            `${tf}: Abruf vor ${age(d.fetchAgeSeconds)}, letzter Schluss vor ${age(d.lastCloseAgeSeconds)}`,
+        )
+        .join(" · ")
+    : "Noch kein Datenbestand erfasst";
+  $("#ops-warning").hidden = ![
+    "stalled",
+    "unresponsive",
+    "unverified",
+    "absent",
+  ].includes(w.state);
+  $("#ops-warning").textContent =
+    w.state === "stalled"
+      ? `Seit ${age(w.progressAgeSeconds ?? w.loopAgeSeconds)} kein bestätigter Fortschritt. Das ist ein Prüfhinweis, kein sicherer Stillstandsnachweis; der Auftrag wird nicht automatisch beendet.`
+      : `${names[w.state]}. Dienst und Worker-Protokoll prüfen.`;
+  const error = ops.lastError;
+  $("#ops-error").hidden = !error;
+  $("#ops-error").textContent = error
+    ? `Letzter protokollierter Fehler · ${date(error.updated)} · Auftrag ${error.id.slice(0, 8)}${error.symbol && !error.error ? " · " + error.symbol : ""}: ${error.error || error.symbol_error}`
+    : "";
+}
 const reasons = {
   search_timeout: "Kein Ausbruch im Suchfenster",
   search_censored: "Suchfenster am Reservierungsrand abgeschnitten",
@@ -176,6 +260,8 @@ function chartLink(trial, entry, future = false) {
   );
 }
 function renderReport(data) {
+  $("#export-events").href =
+    `/api/research/jobs/${data.job.id}/events?limit=250`;
   const { job, summary, trials } = data;
   $("#report-subtitle").textContent =
     `${job.id.slice(0, 8)} · ${labels[job.status] || job.status} · ${job.manifest.studyVersion}`;
@@ -258,12 +344,13 @@ async function refresh() {
         : schedule.enabled
           ? "● Automatik aktiv"
           : "Automatik pausiert";
+    renderOperations(data.operations);
     if (!selected && jobsCache.length) selected = jobsCache[0].id;
     $("#jobs-list").innerHTML = jobsCache.length
       ? jobsCache
           .map(
             (job) =>
-              `<button class="job-row ${job.id === selected ? "selected" : ""}" data-job="${job.id}"><b>${escapeHtml((job.universe || job.spec.symbols).slice(0, 3).join(", "))}${(job.universe || job.spec.symbols).length > 3 ? " …" : ""}</b><span class="status-pill ${job.status}">${labels[job.status] || job.status}</span><small>${date(job.created)} · ${job.automatic ? "Automatisch" : "Manuell"}<br>${job.completedTrials} Starts · ${job.current_symbol || `${job.symbols.filter((s) => s.done).length} Aktien bearbeitet`}</small></button>`,
+              `<button class="job-row ${job.id === selected ? "selected" : ""}" data-job="${job.id}"><b>${escapeHtml((job.universe || job.spec.symbols).slice(0, 3).join(", "))}${(job.universe || job.spec.symbols).length > 3 ? " …" : ""}</b><span class="status-pill ${job.status}">${labels[job.status] || job.status}</span><small>${date(job.created)} · ${job.automatic ? "Automatisch" : "Manuell"}<br>${job.completedTrials} Starts · ${escapeHtml(job.current_symbol || `${job.symbols.filter((s) => s.done).length} Aktien bearbeitet`)}${job.progress && ["running", "cancel_requested"].includes(job.status) ? `<br>${escapeHtml(phaseLabels[job.progress.phase] || job.progress.phase)} · ${escapeHtml(progressText(job.progress))}` : ""}</small></button>`,
           )
           .join("")
       : '<p class="note">Noch keine Aufträge.</p>';
@@ -291,6 +378,9 @@ async function refresh() {
     }
     $("#research-error").hidden = true;
   } catch (e) {
+    $("#ops-worker").textContent =
+      "Aktualisierung fehlgeschlagen · letzter Stand möglicherweise veraltet";
+    $("#background-status").textContent = "⚠ Aktualisierung fehlgeschlagen";
     showError(e);
   } finally {
     busy = false;

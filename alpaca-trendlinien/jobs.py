@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import time
 import uuid
+import base64
 from functools import lru_cache
 
 from datasets import digest, import_dataset, read_dataset
@@ -42,6 +43,9 @@ def connection():
         CREATE TABLE IF NOT EXISTS trials(job_id TEXT, id TEXT, result TEXT, PRIMARY KEY(job_id,id));
         CREATE TABLE IF NOT EXISTS events(job_id TEXT, id TEXT, dataset_id TEXT, event TEXT, PRIMARY KEY(job_id,id));
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS events_job_sequence ON events(job_id);
+        CREATE TABLE IF NOT EXISTS job_progress(job_id TEXT PRIMARY KEY, phase TEXT NOT NULL,
+          phase_started REAL NOT NULL, progress_at REAL NOT NULL, detail TEXT NOT NULL);
         """)
         yield db
         db.commit()
@@ -75,7 +79,7 @@ def submit(spec):
     return get_job(identity)
 
 
-def get_job(identity):
+def get_job(identity, *, include_plans=True):
     if not isinstance(identity,str) or len(identity)!=32:
         raise DataError("Ungültige Auftrags-ID.",400)
     with connection() as db:
@@ -85,19 +89,25 @@ def get_job(identity):
         result = dict(row)
         for key in ("spec","manifest","universe"):
             result[key] = json.loads(result[key]) if result[key] else None
-        result["symbols"] = [dict(r) for r in db.execute("SELECT * FROM symbols WHERE job_id=? ORDER BY symbol",(identity,))]
+        columns = "*" if include_plans else "symbol,dataset_id,done,error"
+        result["symbols"] = [dict(r) for r in db.execute(f"SELECT {columns} FROM symbols WHERE job_id=? ORDER BY symbol",(identity,))]
         for item in result["symbols"]:
-            item.pop("job_id")
-            item["plan"] = json.loads(item["plan"]) if item["plan"] else None
+            item.pop("job_id", None)
+            if include_plans:
+                item["plan"] = json.loads(item["plan"]) if item["plan"] else None
+            else:
+                item.pop("plan", None)
         result["completedTrials"] = db.execute("SELECT count(*) FROM trials WHERE job_id=?",(identity,)).fetchone()[0]
         result["eventCount"] = db.execute("SELECT count(*) FROM events WHERE job_id=?",(identity,)).fetchone()[0]
+        progress = db.execute("SELECT * FROM job_progress WHERE job_id=?", (identity,)).fetchone()
+        result["progress"] = {**dict(progress), "detail":json.loads(progress["detail"])} if progress else None
         return result
 
 
 def list_jobs():
     with connection() as db:
         ids = [r[0] for r in db.execute("SELECT id FROM jobs ORDER BY created DESC LIMIT 50")]
-    return [get_job(i) for i in ids]
+    return [get_job(i, include_plans=False) for i in ids]
 
 
 @lru_cache(maxsize=16)
@@ -120,10 +130,40 @@ def report(identity,offset=0,limit=250):
         "page":{"offset":offset,"limit":limit,"total":total,"hasMore":offset+len(trials)<total}}
 
 
-def events_for(identity):
-    get_job(identity)
+def events_for(identity, limit=250, cursor=None):
+    """Append-order keyset page, pinned to the first page's committed high-water mark."""
+    if not isinstance(identity, str) or len(identity) != 32 or type(limit) is not int or not 1 <= limit <= 1000:
+        raise DataError("Ungültige Ereignisseite (Limit 1–1000).", 400)
+    after, through = 0, None
+    if cursor is not None:
+        try:
+            if not isinstance(cursor, str) or not 1 <= len(cursor) <= 512:
+                raise ValueError()
+            token = json.loads(base64.b64decode(cursor, altchars=b"-_", validate=True))
+            if set(token) != {"v", "job", "after", "through"} or token["v"] != 1 or token["job"] != identity:
+                raise ValueError()
+            after, through = token["after"], token["through"]
+            if any(type(n) is not int for n in (after, through)) or not 0 <= after <= through <= 9223372036854775807:
+                raise ValueError()
+        except (ValueError, TypeError, UnicodeError):
+            raise DataError("Ungültiger Ereignis-Cursor für diesen Auftrag.", 400) from None
     with connection() as db:
-        return [json.loads(r[0]) for r in db.execute("SELECT event FROM events WHERE job_id=? ORDER BY dataset_id,id",(identity,))]
+        db.execute("BEGIN")
+        if not db.execute("SELECT 1 FROM jobs WHERE id=?", (identity,)).fetchone():
+            raise DataError("Forschungsauftrag nicht gefunden.", 404)
+        maximum = db.execute("SELECT coalesce(max(rowid),0) FROM events WHERE job_id=?", (identity,)).fetchone()[0]
+        if through is None:
+            through = maximum
+        elif through > maximum:
+            raise DataError("Ereignis-Lesestand ist nicht mehr verfügbar.", 409)
+        total = db.execute("SELECT count(*) FROM events WHERE job_id=? AND rowid<=?", (identity, through)).fetchone()[0]
+        rows = db.execute("SELECT rowid,event FROM events WHERE job_id=? AND rowid>? AND rowid<=? ORDER BY rowid LIMIT ?",
+                          (identity, after, through, limit+1)).fetchall()
+    more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = base64.urlsafe_b64encode(json.dumps({"v":1,"job":identity,"after":rows[-1][0],"through":through}, separators=(",", ":")).encode()).decode() if more else None
+    return {"items":[json.loads(r[1]) for r in rows],
+            "page":{"limit":limit,"total":total,"hasMore":more,"nextCursor":next_cursor,"snapshot":through,"order":"append"}}
 
 
 def get_trial(identity,trial_id,variant):
@@ -222,6 +262,8 @@ def worker_lock():
 
 def run_job(identity, stop=None):
     """Called by the single locked worker. Commits after every complete trial."""
+    from operations import phase, record_dataset
+    phase(identity, "preparing")
     job = get_job(identity)
     if job["manifest"]["engineHash"] != engine_hash():
         raise DataError("Engine-Version hat sich geändert. Bitte neuen Forschungsauftrag starten.",409)
@@ -239,6 +281,13 @@ def run_job(identity, stop=None):
         with connection() as db:
             db.execute("UPDATE jobs SET universe=?,updated=? WHERE id=?",(json.dumps(universe),time.time(),identity))
     last_check = [0,False]
+    last_progress = [0]
+    progress_lock = threading.Lock()
+    def advancing(name, **detail):
+        with progress_lock:
+            if time.monotonic()-last_progress[0] >= 2:
+                phase(identity, name, **detail)
+                last_progress[0] = time.monotonic()
     def interrupted():
         if stop and stop.is_set():
             return True
@@ -260,22 +309,33 @@ def run_job(identity, stop=None):
         try:
             dataset_id = saved["dataset_id"] if saved else None
             if not dataset_id:
-                dataset_id = spec.get("dataset_ids",{}).get(symbol) or import_dataset(symbol,spec["history_days"])
+                dataset_id = spec.get("dataset_ids",{}).get(symbol)
+                if not dataset_id:
+                    phase(identity, "importing", symbol=symbol)
+                    dataset_id = import_dataset(symbol,spec["history_days"],
+                        progress=lambda tf,pages,rows: advancing("importing",symbol=symbol,interval=tf,pages=pages,rows=rows))
+            phase(identity, "validating", symbol=symbol)
             dataset = read_dataset(dataset_id)
             if dataset["material"]["symbol"] != symbol:
                 raise DataError("Dataset gehört zu einer anderen Aktie.",422)
+            record_dataset(dataset)
             plan = json.loads(saved["plan"]) if saved and saved["plan"] else trial_plan(dataset,spec)
             with connection() as db:
                 db.execute("UPDATE symbols SET dataset_id=?,plan=?,error=NULL WHERE job_id=? AND symbol=?",(dataset_id,json.dumps(plan),identity,symbol))
             if interrupted():
                 return False
-            events=list(causal_events(dataset,plan["discovery_end"],first_index=min(plan["starts"])+1,cancelled=interrupted))
+            first_index = min(plan["starts"])+1
+            phase(identity, "events", symbol=symbol, completed=0, total=plan["discovery_end"]-first_index+1, unit="candles")
+            events=list(causal_events(dataset,plan["discovery_end"],first_index=first_index,cancelled=interrupted,
+                progress=lambda done,total: advancing("events",symbol=symbol,completed=done,total=total,unit="candles")))
             if interrupted():
                 return False
+            phase(identity, "saving_events", symbol=symbol, completed=len(events), unit="events")
             with connection() as db:
                 db.executemany("INSERT OR IGNORE INTO events VALUES(?,?,?,?)",[(identity,e["id"],dataset_id,json.dumps(e)) for e in events])
                 completed={r[0] for r in db.execute("SELECT id FROM trials WHERE job_id=?",(identity,))}
-            for index in plan["starts"]:
+            phase(identity, "trials", symbol=symbol, completed=0, total=len(plan["starts"]), unit="trials")
+            for position,index in enumerate(plan["starts"],1):
                 if interrupted():
                     return False
                 result=evaluate_trial(dataset,spec,plan,index,events)
@@ -283,9 +343,11 @@ def run_job(identity, stop=None):
                     with connection() as db:
                         db.execute("INSERT OR IGNORE INTO trials VALUES(?,?,?)",(identity,result["id"],json.dumps(result,allow_nan=False)))
                         db.execute("UPDATE jobs SET updated=? WHERE id=?",(time.time(),identity))
+                phase(identity, "trials", symbol=symbol, completed=position, total=len(plan["starts"]), unit="trials")
             with connection() as db:
                 db.execute("UPDATE symbols SET done=1 WHERE job_id=? AND symbol=?",(identity,symbol))
         except DataError as error:
+            phase(identity, "symbol_error", symbol=symbol, error=str(error))
             with connection() as db:
                 db.execute("UPDATE symbols SET done=1,error=? WHERE job_id=? AND symbol=?",(str(error),identity,symbol))
     return True
@@ -301,6 +363,7 @@ def claim_next():
 
 
 def worker_loop(stop, *, once=False):
+    from operations import monitor, phase
     with worker_lock() as locked:
         if not locked:
             return False
@@ -308,25 +371,31 @@ def worker_loop(stop, *, once=False):
         with connection() as db:
             db.execute("UPDATE jobs SET status='queued' WHERE status='running'")
             db.execute("UPDATE jobs SET status='cancelled' WHERE status='cancel_requested'")
-        while not stop.is_set():
-            schedule_due()
-            identity=claim_next()
-            if identity:
-                try:
-                    complete=run_job(identity,stop)
-                    current=get_job(identity)
-                    errors=sum(bool(s["error"]) for s in current["symbols"])
-                    finished_status="failed" if errors and errors==len(current["symbols"]) else "partial" if errors else "succeeded"
-                    status = "cancelled" if current["status"]=="cancel_requested" else (finished_status if complete else "queued")
-                    with connection() as db:
-                        db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE ? END,current_symbol=NULL,updated=? WHERE id=?",(status,time.time(),identity))
-                except Exception as error:
-                    message=str(error) if isinstance(error,DataError) else f"Interner Forschungsfehler ({type(error).__name__}); Auftrag bleibt zur Prüfung erhalten."
-                    with connection() as db:
-                        db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE 'failed' END,error=?,updated=? WHERE id=?",(message,time.time(),identity))
-            if once:
-                return True
-            stop.wait(1)
+        with monitor() as current_job:
+            while not stop.is_set():
+                current_job(None)
+                schedule_due()
+                identity=claim_next()
+                if identity:
+                    current_job(identity)
+                    try:
+                        complete=run_job(identity,stop)
+                        current=get_job(identity)
+                        errors=sum(bool(s["error"]) for s in current["symbols"])
+                        finished_status="failed" if errors and errors==len(current["symbols"]) else "partial" if errors else "succeeded"
+                        status = "cancelled" if current["status"]=="cancel_requested" else (finished_status if complete else "queued")
+                        with connection() as db:
+                            db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE ? END,current_symbol=NULL,updated=? WHERE id=?",(status,time.time(),identity))
+                        phase(identity, status)
+                    except Exception as error:
+                        message=str(error) if isinstance(error,DataError) else f"Interner Forschungsfehler ({type(error).__name__}); Auftrag bleibt zur Prüfung erhalten."
+                        with connection() as db:
+                            db.execute("UPDATE jobs SET status=CASE WHEN status='cancel_requested' THEN 'cancelled' ELSE 'failed' END,error=?,updated=? WHERE id=?",(message,time.time(),identity))
+                        phase(identity, "failed", error=message)
+                    current_job(None)
+                if once:
+                    return True
+                stop.wait(1)
     return True
 
 

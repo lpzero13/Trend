@@ -67,12 +67,18 @@ def source_bars(dataset):
     return {tf: [Bar(**b) for b in rows] for tf, rows in dataset["material"]["bars"].items()}
 
 
-def import_dataset(symbol, history_days=900):
+def import_dataset(symbol, history_days=900, *, progress=None):
     now = datetime.now(timezone.utc)
     with ThreadPoolExecutor(max_workers=3) as pool:
-        pending = {tf: pool.submit(load_bars, symbol, tf, now=now, history_days=history_days) for tf in TIMEFRAMES}
+        extra = {"progress":progress} if progress else {}
+        pending = {tf: pool.submit(load_bars, symbol, tf, now=now, history_days=history_days, **extra) for tf in TIMEFRAMES}
         sources = {tf: result.result() for tf, result in pending.items()}
-    return save_dataset(symbol, sources)
+    identity = save_dataset(symbol, sources)
+    from operations import record_dataset
+    # Use this import's source metadata, even when identical candles reuse an older immutable dataset.
+    dataset = read_dataset(identity)
+    record_dataset({**dataset,"sources":{tf:meta for tf, (_,meta) in sources.items()}}, imported=True)
+    return identity
 
 
 def chart_dataset(identity, timeframe, as_of=None, setup=None):

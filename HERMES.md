@@ -1,6 +1,6 @@
 # Hermes: Projektstand, Ziele und Containerbetrieb von Trend / Tori
 
-Stand: **17.10.2026**. Dieses Dokument ist der zentrale Einstieg für Hermes und künftige Entwickler. Es beschreibt den tatsächlich implementierten Stand und trennt ihn von Vorhaben. Änderungen am Verhalten, an Schnittstellen oder am Betrieb müssen hier nachvollzogen werden.
+Stand: **18.10.2026**. Dieses Dokument ist der zentrale Einstieg für Hermes und künftige Entwickler. Es beschreibt den tatsächlich implementierten Stand und trennt ihn von Vorhaben. Änderungen am Verhalten, an Schnittstellen oder am Betrieb müssen hier nachvollzogen werden.
 
 ## 1. Auftrag und langfristiges Ziel
 
@@ -55,6 +55,7 @@ Weitere Informationen:
 |---|---|
 | [Anwendungs-README](alpaca-trendlinien/README.md) | Bedienung, Linienregeln, Windows-Start und Datenhinweise |
 | [FORSCHUNG.md](alpaca-trendlinien/FORSCHUNG.md) | Ablauf der Ereignisstudie, Ergebnisse, CLI und API |
+| [BETRIEB-P1.md](alpaca-trendlinien/BETRIEB-P1.md) | Ereignisseiten, Betriebszustand, Lastmessung und Kompatibilität beim Update |
 | [LONG-KRITERIEN-ENTWURF.md](alpaca-trendlinien/LONG-KRITERIEN-ENTWURF.md) | Diskussionsgrundlage; Vorschläge sind keine als optimal belegten Grenzen |
 | [TORI-KRITERIEN-ARBEITSNOTIZ.md](alpaca-trendlinien/TORI-KRITERIEN-ARBEITSNOTIZ.md) | Eingereichte Tori-Zusammenfassung vom 18.10.2026, separate Einschätzung, offene Definitionen und spätere Testideen; keine aktivierten Regeln |
 | [ARCHITEKTUR-V2-V3.md](alpaca-trendlinien/ARCHITEKTUR-V2-V3.md) | ursprünglicher Umbauplan, teilweise umgesetzt; enthält auch spätere Arbeiten |
@@ -76,12 +77,13 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Manuelle Fixierung | unveränderliche lokale Stände mit damaligen Rohkerzen und Ankern |
 | Forschungsansicht | Über die feste Hauptnavigation „Chart / Forschung“ erreichbar; Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
+| Betriebsanzeige | Getrennte Lebenszeichen und Arbeitsphasen, Fortschrittswarnung, Datenalter und Import-/Fehlerstände ohne Providerabruf im Healthcheck |
 | Reproduzierbarkeit | Dataset-Prüfsummen, archivierte Parameter und Universen, Seed, Engine-/Regelversion und Ereignisse |
 | Hermes-Schnittstelle | CLI/JSON und authentifizierbare HTTP-Job-API; Berechnung benötigt keinen Browser und kein LLM |
 | Linux-Vorbereitung | systemd-Unit, externer persistenter Datenpfad, Token-/Host-Konfiguration und CLI-Wrapper |
 | Repository-Tests | Python-/JavaScript-Tests, GitHub Actions für Linux und Windows; keine Provider-Schlüssel für Unit-Tests |
 
-Eine Linux-Dienstvorlage ist **kein Nachweis einer tatsächlichen Proxmox-Installation**. Der bisherige echte Betrieb und die Browserprüfung fanden lokal unter Windows statt. Die CI kann zusätzlich die Testausführung auf Linux bestätigen, ersetzt aber keinen Installations-/Netzwerktest im Ziel-LXC.
+Laut Nutzerbericht vom 18.10.2026 hat Hermes die Anwendung inzwischen im Container installiert und einen echten Auftrag, eine Offline-Wiederholung und die Wiederaufnahme nach Worker-Abbruch geprüft. Die neuen P1-Änderungen wurden lokal unter Windows entwickelt und getestet; sie wurden von Codex nicht im Ziel-LXC installiert oder abgenommen. Die CI ersetzt keinen Installations-/Netzwerktest im Zielcontainer.
 
 ## 4. Was noch nicht implementiert ist
 
@@ -310,6 +312,7 @@ Als Benutzer mit Zugriff auf den gemeinsamen Datenordner:
 
 ```text
 tori-tool list
+tori-tool health
 tori-tool submit --spec /opt/tori/deploy/experiment.example.json
 tori-tool status --id <job-id>
 tori-tool report --id <job-id> --offset 0 --limit 250
@@ -328,7 +331,7 @@ TORI_DATA_DIR=/var/lib/tori /opt/tori/.venv/bin/python /opt/tori/tori.py list
 
 `worker --once` bearbeitet höchstens einen Auftrag; `worker` läuft dauerhaft. Eine OS-Sperre verhindert einen zweiten Worker auf derselben Queue. Normalerweise arbeitet bereits der Webdienst. `server.py --no-worker` ist für eine bewusst getrennte Web-/Worker-Konfiguration gedacht.
 
-Die CLI liefert JSON. Berichte enthalten Gesamtergebnisse und paginierte Einzelfälle; Standard 250 pro Seite, höchstens 1.000. Für weitere Fälle Offset erhöhen. Einzelfallseiten nicht als den gesamten Versuch missverstehen. Das Ereignisjournal wird derzeit als vollständige Antwort geliefert; sehr große Journale brauchen später ebenfalls Streaming/Seitennavigation.
+Die CLI liefert JSON. Berichte enthalten Gesamtergebnisse und paginierte Einzelfälle; Standard 250 pro Seite, höchstens 1.000. Für weitere Fälle Offset erhöhen. Einzelfallseiten nicht als den gesamten Versuch missverstehen. Das Ereignisjournal liefert jetzt über HTTP und CLI `{items, page}`, Standard 250, höchstens 1.000. `page.nextCursor` für weitere Seiten verwenden, bis `hasMore` falsch ist; der erste Lesestand bleibt trotz neuer Ereignisse stabil. Die CLI lieferte vorher eine vollständige Liste: bestehende Hermes-Parser anpassen. Eine einzelne Seite ist kein vollständiger Export. Details stehen in BETRIEB-P1.md.
 
 Für einen Offline-Auftrag `dataset_ids` explizit zuordnen. Die IDs müssen zum Symbol gehören und lokal vorhanden sein. Bei identischem Code, Dataset und Parametern sind die fachlichen Ergebnisse wiederholbar; Erstellungszeit und Auftrags-ID sind Laufmetadaten.
 
@@ -338,12 +341,12 @@ Alle folgenden Maschinenaufrufe tragen den Bearer-Header; Token nicht in der URL
 
 | Methode/Pfad | Ergebnis |
 |---|---|
-| `GET /api/health` | Anwendung, Regel-/Studienversion, Konfigurationsstatus |
-| `GET /api/research/jobs` | letzte 50 Aufträge, Zeitplan, aktive Worker-Sperre |
+| `GET /api/health` | Anwendung, Regel-/Studienversion, Konfigurationsstatus und `operations` ohne Anbieterabruf |
+| `GET /api/research/jobs` | letzte 50 Aufträge ohne große Symbolpläne, Zeitplan, Worker-Sperre und `operations` |
 | `POST /api/research/jobs` | validierte Parameter, Antwort HTTP 202 mit Job-ID |
 | `GET /api/research/jobs/<id>` | Status, Fortschritt, Manifest und Symbolstände |
 | `GET /api/research/jobs/<id>/report?offset=0&limit=250` | Zusammenfassung und Einzelfallseite |
-| `GET /api/research/jobs/<id>/events` | archivierte Ereignisse |
+| `GET /api/research/jobs/<id>/events?limit=250&cursor=...` | feste Ereignisseite mit Fortsetzungscursor; erste Seite ohne Cursor |
 | `POST /api/research/jobs/<id>/cancel` | Abbruch anfordern, Body `{}` |
 | `GET /api/research/schedule` | Zeitplan lesen |
 | `POST /api/research/schedule` | Zeitplan ändern, Body mit `enabled`, `interval_hours`, `spec` |
@@ -362,7 +365,7 @@ Der Schedule läuft in Stundenabständen, standardmäßig 24. Er richtet keine b
 - Freier Speicher für unveränderliche Datenversionen und SQLite-WAL?
 - Wiederholte alte Datasets/Experimente als Wiederholungen erkennen, nicht als zusätzliche unabhängige Evidenz zählen.
 
-Ein aktiver Prozess oder eine gehaltene Worker-Sperre allein beweist keinen gesunden Datenfluss. Ein `running`-Auftrag kann beim Provider warten. Es gibt noch kein umfassendes Monitoring mit Benachrichtigungen bei Stillstand oder Speicherknappheit.
+Ein aktiver Prozess oder eine gehaltene Worker-Sperre allein beweist keinen gesunden Datenfluss. Ein `running`-Auftrag kann beim Provider warten. Die neue Betriebsanzeige trennt Lebenszeichen, Hauptschleife und Arbeitsfortschritt. Überfällige Lebenszeichen und längerer fehlender Fortschritt erscheinen als Warnung, ohne Aufträge automatisch zu beenden. Healthchecks lesen ausschließlich lokale Daten. Details und Grenzwerte stehen in BETRIEB-P1.md. Externe Benachrichtigungen und umfassendes Speicher-Monitoring fehlen weiterhin.
 
 ### Backups
 
@@ -403,7 +406,7 @@ Für einen Rollback auf Codeebene zunächst alte/aktuelle DB-Schemaverträglichk
 
 ## 14. Nachweise und Testverfahren
 
-Der aktuelle lokale Stand wurde mit **61 Python- und 24 JavaScript-Tests** geprüft. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. Die zusätzlichen Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
+Der aktuelle lokale Stand wurde mit **75 Python- und 24 JavaScript-Tests** geprüft. Dazu zählen Geometrie gegen unabhängige Referenzsuche, Kerzenschluss-/DST-Grenzen, Schocks in Zukunftsdaten, Ereignisstrom/Chart-Vergleich, Retestzeitpunkt, Ausführungsverfügbarkeit, unveränderte Schutzmarken/Anker, Kostenbeobachtungen, OHLC-Mehrdeutigkeit, Deduplizierung, Offline-Wiederaufnahme, Ergebnisseiten, atomare Queueübernahme, Abbruch, Dateisperre, Authentifizierung und private HTTP-Pfade. Die zusätzlichen Zeichentests prüfen gemischte Linien-/Messänderungen, fehlgeschlagene Speicherung beim Rückgängigmachen und die Auswahl sichtbarer Messrahmen.
 
 Zusätzlich gab es einen echten lokalen Alpaca-Lauf für MSFT/AMZN mit 900 Tagen Import und je zehn Starts: 20 Starts, einer ohne beobachteten Einstieg, 194 archivierte Linienereignisse. Ein anschließender CLI-Lauf mit denselben Datasets und ohne Zugangsdaten lieferte dieselben fachlichen Fälle und dieselbe Zusammenfassung. Das belegt die technische Reproduzierbarkeit dieses Versuchs, nicht Profitabilität oder Volluniversum-Eignung.
 

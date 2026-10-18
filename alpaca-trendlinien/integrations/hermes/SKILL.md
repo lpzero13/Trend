@@ -14,10 +14,11 @@ Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein
 ## Werkzeuge
 
 - `list`: verfügbare Aufträge und Status als JSON lesen.
+- `health`: lokale Betriebsbereitschaft, getrennte Lebenszeichen/Fortschrittszeiten, Datenalter und letzte Fehler lesen; kein Providerabruf. Warnung bei länger fehlendem Fortschritt ist kein sicherer Deadlock-Nachweis.
 - `submit --spec <datei.json>`: einen validierten Forschungsauftrag einreichen. Parameterbeispiel: `/opt/tori/deploy/experiment.example.json`. Die Antwort enthält die Job-ID.
 - `status --id <id>`: Fortschritt, ausgelassene Aktien und Fehler prüfen. Längere Abrufe sind normal; Status in sinnvollen Abständen statt in enger Schleife lesen.
 - `report --id <id> --offset 0 --limit 250`: Gesamtauswertung plus paginierte Einzelfälle lesen. Für weitere Fälle Offset erhöhen. Die Gruppentabelle bezieht sich auf alle Fälle, nicht nur diese Seite.
-- `events --id <id>`: archivierte Linienereignisse lesen.
+- `events --id <id> --limit 250`: erste Ereignisseite als `{items, page}` lesen. Mit `--cursor <page.nextCursor>` fortsetzen, bis `hasMore` falsch ist. Standard 250, maximal 1.000; der Lesestand bleibt fest. Ein neuer Abruf ohne Cursor sieht inzwischen ergänzte Ereignisse. Frühere CLI-Parser für eine vollständige Liste müssen angepasst werden.
 - `cancel --id <id>`: einen ausdrücklich unerwünschten Auftrag abbrechen, Archiv erhalten.
 - `schedule`: bestehenden Zeitplan lesen; Änderungen nur entsprechend dem Auftrag des Nutzers vornehmen.
 

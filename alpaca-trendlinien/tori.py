@@ -22,7 +22,11 @@ def main():
         if name=="report":
             command.add_argument("--offset",type=int,default=0)
             command.add_argument("--limit",type=int,default=250)
+        if name=="events":
+            command.add_argument("--limit",type=int,default=250)
+            command.add_argument("--cursor")
     commands.add_parser("list")
+    commands.add_parser("health",help="Lokaler Betriebszustand ohne Providerabruf")
     worker=commands.add_parser("worker")
     worker.add_argument("--once",action="store_true")
     schedule=commands.add_parser("schedule")
@@ -39,7 +43,10 @@ def main():
         if args.command=="submit": result=jobs.submit(json.loads(Path(args.spec).read_text("utf-8-sig")))
         elif args.command=="status": result=jobs.get_job(args.id)
         elif args.command=="report": result=jobs.report(args.id,args.offset,args.limit)
-        elif args.command=="events": result=jobs.events_for(args.id)
+        elif args.command=="events": result=jobs.events_for(args.id,args.limit,args.cursor)
+        elif args.command=="health":
+            from operations import status
+            result=status()
         elif args.command=="cancel": result=jobs.cancel(args.id)
         elif args.command=="list": result=jobs.list_jobs()
         elif args.command=="schedule": result=jobs.schedule(json.loads(Path(args.spec).read_text("utf-8-sig")) if args.spec else None)

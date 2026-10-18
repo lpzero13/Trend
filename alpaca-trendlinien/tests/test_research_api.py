@@ -67,5 +67,28 @@ class ResearchApiTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:self.request('/data/research/jobs.sqlite3')
         self.assertEqual(error.exception.code,404)
 
+    def test_events_cursor_http_and_cli_return_the_same_bounded_page(self):
+        import jobs
+        import subprocess
+        import sys
+        import urllib.parse
+        identity=jobs.submit({})['id']
+        with jobs.connection() as db:
+            db.executemany('INSERT INTO events VALUES(?,?,?,?)',[(identity,str(i),'dataset',json.dumps({'id':str(i)})) for i in range(4)])
+        page=self.request('/api/research/jobs/'+identity+'/events?limit=2')[1]
+        cli=json.loads(subprocess.check_output([sys.executable,'tori.py','events','--id',identity,'--limit','2'],env=os.environ))
+        self.assertEqual(page,cli)
+        following=self.request('/api/research/jobs/'+identity+'/events?limit=2&cursor='+urllib.parse.quote(page['page']['nextCursor']))[1]
+        self.assertEqual([e['id'] for e in following['items']],['2','3'])
+        for query in ('limit=0','limit=1001','cursor=garbage'):
+            with self.assertRaises(urllib.error.HTTPError) as error:self.request('/api/research/jobs/'+identity+'/events?'+query)
+            self.assertEqual(error.exception.code,400)
+
+    def test_health_has_local_operating_state_without_market_download(self):
+        with patch('alpaca._request',side_effect=AssertionError('no provider call')):
+            value=self.request('/api/health')[1]
+        self.assertIn('heartbeatAgeSeconds',value['operations']['worker'])
+        self.assertEqual(value['operations']['readiness']['providerAuthentication'],'not_checked_by_health')
+
 
 if __name__=='__main__':unittest.main()

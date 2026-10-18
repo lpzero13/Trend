@@ -65,6 +65,8 @@ python tori.py analyze --dataset <dataset-id> --asof 2025-10-01T20:00:00Z
 
 Alle Werkzeuge geben JSON aus. Ein Standalone-Worker ist optional; der Webdienst startet bereits einen. Die Dateisperre verhindert Doppelarbeit. Mit `server.py --no-worker` lässt sich die Webansicht bei einem getrennten Worker betreiben.
 
+**Betriebszustand und Ereignisseiten:** [BETRIEB-P1.md](BETRIEB-P1.md) beschreibt die lokale Health-/Fortschrittsanzeige, Tests und Lastmessungen. `python tori.py health` beziehungsweise `operations` in `/api/health` liefert Lebenszeichen, Phasen, Datenalter und Fehler ohne Providerabfrage. `events --id <id> --limit 250` liefert jetzt `{items, page}` statt einer vollständigen Liste. Mit `--cursor <page.nextCursor>` weiterblättern, bis `hasMore` falsch ist; HTTP entsprechend mit URL-kodiertem `cursor`. Die Seiten behalten ihren ersten Lesestand trotz neuer Ereignisse. Standard 250, maximal 1.000 pro Seite. Auch Auftragslisten enthalten keine großen Zufallspläne mehr; der einzelne Statusabruf behält sie.
+
 **Linux-Dienst und CLI müssen denselben Datenordner verwenden.** Bei der mitgelieferten Unit ist das `/var/lib/tori`. Für direkte Hermes-Aufrufe als berechtigter Dienstbenutzer `tori` deshalb `TORI_DATA_DIR=/var/lib/tori /opt/tori/.venv/bin/python /opt/tori/tori.py ...` benutzen. Optional `deploy/tori-tool` als ausführbares `/usr/local/bin/tori-tool` installieren; es setzt diesen Standardpfad und benötigt für `submit/status/report` keine Alpaca-Schlüssel. Für einen Agenten in einem anderen Container ist die authentifizierte HTTP-Schnittstelle der einfachere Weg.
 
 Einzelfälle im Bericht sind auf 250 pro Seite begrenzt, damit ein großer Auftrag nicht die gesamte Webansicht blockiert. Gruppenergebnisse berücksichtigen den vollständigen Auftrag. Für weitere Fälle `report --offset 250 --limit 250` bzw. `?offset=250&limit=250` verwenden (maximal 1.000 pro Seite). JSON-Export enthält dieselbe paginierte Ansicht samt Seitenmetadaten; die UI bietet Weiter-/Zurückblättern.
@@ -89,7 +91,7 @@ Hermes darf Aufträge starten, deren Zustand lesen und Ergebnisse erklären. Die
 
 ## Installation in einem Linux-LXC auf Proxmox
 
-Vorbereitet, noch nicht auf einem entfernten Proxmox-System ausgeführt. Die manuelle Webansicht und der Worker laufen gemeinsam als Python-Dienst; Docker und eine lokale LLM-Inferenz sind dafür nicht erforderlich. Verwendet werden Python 3.11+ und die vorhandene `requirements.txt`.
+Hermes hat die Installation und erste Betriebsszenarien laut Nutzerbericht vom 18.10.2026 inzwischen im Container geprüft. Die neuen P1-Änderungen sind noch nicht dorthin ausgerollt. Die manuelle Webansicht und der Worker laufen gemeinsam als Python-Dienst; Docker und eine lokale LLM-Inferenz sind dafür nicht erforderlich. Verwendet werden Python 3.11+ und die vorhandene `requirements.txt`.
 
 1. Projekt nach `/opt/tori` kopieren, lokale Windows-`.venv`, Zugangsdaten, Logs und `.runtime` nicht übernehmen. Datasets/Forschung nur übernehmen, wenn der bisherige Bestand weitergeführt werden soll.
 2. Dienstbenutzer `tori` und `/etc/tori` anlegen. In `/opt/tori/.venv` eine Linux-Python-Umgebung erzeugen und `requirements.txt` installieren.

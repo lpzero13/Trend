@@ -144,7 +144,7 @@ def _request(params: dict, key: str, secret: str) -> dict:
 
 def load_bars(symbol: str, timeframe: str, *, force: bool = False,
               now: datetime | None = None, end: datetime | None = None,
-              history_days: int = 450) -> tuple[list[Bar], dict]:
+              history_days: int = 450, progress=None) -> tuple[list[Bar], dict]:
     if not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}", symbol):
         raise DataError("Bitte ein gültiges US-Aktiensymbol eingeben, etwa AAPL oder MSFT.", 400)
     if timeframe not in TIMEFRAMES:
@@ -243,6 +243,8 @@ def load_bars(symbol: str, timeframe: str, *, force: bool = False,
                     raise DataError("Alpaca lieferte ein unerwartetes Datenformat.")
                 rows.extend(result_bars.get(symbol) or [])
                 pages += 1
+                if progress:
+                    progress(timeframe, pages, len(rows))
                 token = result.get("next_page_token")
                 if not token:
                     break

@@ -32,6 +32,46 @@
         </p>
       </section>
       <section
+        class="research-card operations-card"
+        aria-labelledby="operations-title"
+      >
+        <h2 id="operations-title">Betriebszustand</h2>
+        <dl class="operations-grid">
+          <div>
+            <dt>Worker</dt>
+            <dd id="ops-worker">Wird geprüft …</dd>
+          </div>
+          <div>
+            <dt>Letztes Lebenszeichen</dt>
+            <dd id="ops-heartbeat">—</dd>
+          </div>
+          <div>
+            <dt>Arbeitsphase</dt>
+            <dd id="ops-phase">—</dd>
+          </div>
+          <div>
+            <dt>Fortschritt</dt>
+            <dd id="ops-progress">—</dd>
+          </div>
+          <div>
+            <dt>Letzter erfolgreicher Import / Cache-Prüfung</dt>
+            <dd id="ops-import">Noch nicht erfasst</dd>
+          </div>
+          <div>
+            <dt>Alter der verwendeten Quelldaten</dt>
+            <dd id="ops-data">—</dd>
+          </div>
+        </dl>
+        <p id="ops-warning" role="status" hidden></p>
+        <p id="ops-error" role="status" hidden></p>
+        <p class="note">
+          Lokale Zustandsprüfung ohne neue Anbieterabfrage. Ein Lebenszeichen
+          bestätigt keine aktuellen Provider-Zugangsdaten. Datenalter bezieht
+          sich auf den zuletzt verwendeten Bestand; Wochenenden und historische
+          Tests können große Abstände erklären.
+        </p>
+      </section>
+      <section
         class="research-card controls-card"
         aria-labelledby="study-title"
       >
@@ -181,6 +221,12 @@
             </div>
             <div id="report-actions" hidden>
               <a id="export-report" target="_blank" rel="noopener">JSON ↗</a
+              ><a
+                id="export-events"
+                target="_blank"
+                rel="noopener"
+                title="Erste Ereignisseite; page.nextCursor führt zur nächsten Seite"
+                >Journal JSON ↗</a
               ><button id="cancel-job">Abbrechen</button>
             </div>
           </div>

@@ -66,7 +66,7 @@ def trial_plan(dataset, spec):
         "available_starts": len(discovery), "requested_samples": spec["samples"], "actual_samples": len(sampled)}
 
 
-def causal_events(dataset, end_index, *, first_index=1, cancelled=lambda: False):
+def causal_events(dataset, end_index, *, first_index=1, cancelled=lambda: False, progress=None):
     """Complete stream for the requested prefix, unlike the chart's short event scan."""
     all_bars = source_bars(dataset)
     bars, daily = all_bars["4h"], all_bars["1D"]
@@ -105,6 +105,8 @@ def causal_events(dataset, end_index, *, first_index=1, cancelled=lambda: False)
             record["id"] = digest({"dataset": dataset["id"], "index": i, "kind": record["kind"], "rules": RULES_VERSION, "study": STUDY_VERSION})
             yield record
         previous = pair(bars[:i+1], rules)
+        if progress:
+            progress(i-first_index+1, min(end_index+1,len(bars))-first_index)
 
 
 def line_value(ray, index):
