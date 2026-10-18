@@ -77,6 +77,7 @@ Lokale Screenshots und Replay-Nachweise aus dem Prüfprotokoll sind absichtlich 
 | Historische Sicht | Datumswahl in New Yorker Zeit, tatsächlich vorhandene Kerzen vor-/zurückschalten, harte Stichtagsgrenzen |
 | Manuelle Fixierung | unveränderliche lokale Stände mit damaligen Rohkerzen und Ankern |
 | Forschungsansicht | Über die feste Hauptnavigation „Chart / Forschung“ erreichbar; Aufträge, Zeitplan, vier Qualitäts-/Einstiegsgruppen, Merkmale, Einzelfälle, Chartlinks und JSON-Berichte |
+| Forschungsseiten-Layout | Eigenes Dokumentlayout mit vertikalem Seitenscrollen und fest sichtbarer Navigation; die Scrollsperre des Vollbildcharts gilt dort nicht |
 | Automatisierung | Hintergrundworker, dauerhafte Queue, täglicher Standardzeitplan, Abbruch und Wiederaufnahme nach Prozessabbruch |
 | Betriebsanzeige | Getrennte Lebenszeichen und Arbeitsphasen, Fortschrittswarnung, Datenalter und Import-/Fehlerstände ohne Providerabruf im Healthcheck |
 | Datenqualität | Versionierter XNYS-Tageskalender, Rohkurs-/IEX-Hinweise, beschreibendes Audit neuer Datasets; keine automatische Verifikation von Kapitalmaßnahmen |
