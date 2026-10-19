@@ -1,5 +1,9 @@
 # Prüfung – 17.10.2026
 
+## Kontaktzonen und drei Code-Backtestrunden – 19.10.2026
+
+170 Python-Tests je unter 3.12/3.13 (ein Windows-Skip), 27 JavaScript-Tests, drei reale Entwicklungs-Backtests und eine getrennte spätere Validierung bestanden. Kein Browser verwendet. Details, Datenkonventionen, unvollständige Horizonte, unabhängige Nachrechnung und Grenzen: [KONTAKTZONEN-EXPERIMENTE.md](KONTAKTZONEN-EXPERIMENTE.md). Positive Einzelverläufe sind vorhanden; ein belastbarer Regelvorteil ist nicht nachgewiesen.
+
 ## Forschungslabor – 18.10.2026
 
 Die vollständige lokale Abnahme des zusätzlichen Labormodus steht in [FORSCHUNGSLABOR-UMSETZUNG.md](FORSCHUNGSLABOR-UMSETZUNG.md): 158 Python-Tests je unter 3.12/3.13 (ein Windows-Skip), 27 JavaScript-Tests, isolierter synthetischer Offline-Gesamtlauf ohne Providerabruf, Backup/Restore und anschließende Browserprüfung. Normale manuelle Ansicht mit gespeichertem AAPL-Bestand geprüft. SYNTHA/SYNTHB sind künstliche Testkurse und sichtbar als solche markiert. Kein Beleg für Handelsprofitabilität, Volluniversumskapazität oder einen Proxmox-Rollout. Frühere Marktstudien unten bleiben getrennte historische Ergebnisse.

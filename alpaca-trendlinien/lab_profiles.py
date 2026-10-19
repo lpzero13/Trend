@@ -7,7 +7,7 @@ import re
 
 from datasets import digest
 from models import DataError
-from tori_entries import EntryScanner, atr
+from tori_entries import EntryScanner, atr, check
 from trendlines import pair, rules_for, touch
 
 VERSION = "tori-lab-1"
@@ -21,12 +21,29 @@ PROFILES = {
     "room":{"label":"Grundsignal + Raum","description":"Bekannten Widerstand berücksichtigen; unbekannt bleibt unbekannt"},
     "retest_hold":{"label":"Tori mit eigener Retestbestätigung","description":"Beim Retest Halten statt Ausbruchskörper verlangen"},
     "atr_contacts":{"label":"Grundsignal mit ATR-Kontaktzone","description":"Explizite alternative Geometrie, kein Überschreiben der Referenz"},
+    "zone_measure":{"label":"Feste Kontaktzone · Messung","description":"Identische Grundsignale und Anker; ATR-Zone nur als Zusatzmerkmal"},
+    "zone_red3":{"label":"Feste Kontaktzone · Rot 3","description":"Grundsignal mit mindestens drei roten Kontaktepisoden"},
+    "zone_green3":{"label":"Feste Kontaktzone · Grün 3","description":"Grundsignal mit mindestens drei grünen Kontaktepisoden"},
+    "zone_both3":{"label":"Feste Kontaktzone · beide 3","description":"Grundsignal mit mindestens drei Kontaktepisoden je Linie"},
+    "zone_reference":{"label":"Referenz mit fester Kontaktzone","description":"Nur Kontaktmessung ersetzen; übrige Referenzprüfungen unverändert"},
+    "momentum_two":{"label":"Grundsignal + Momentum 2 aus 3","description":"Positiver Körper und zwei von drei Formmerkmalen; bestätigter Schluss bleibt Pflicht"},
+    "room_15":{"label":"Grundsignal + bekannter Raum 1,5R","description":"Nur bekannte Raumgrenze von 2R auf 1,5R ändern; unbekannter Raum blockiert dieses Profil"},
+    "risk_5":{"label":"Grundsignal + Safety bis 5 %","description":"Prozentgrenze 5 statt 3; ATR-Grenze und Safety unverändert; feste Kontaktzone nur messen"},
+    "momentum_two_risk5":{"label":"Momentum 2 aus 3 + Safety 5 %","description":"Vorab definierte Kombination; Kontaktzahl und Raum als Diagnose, keine Drei-Kontakt-Pflicht"},
 }
+ZONE_REQUIREMENTS = {"zone_measure": set(), "zone_red3": {"zone_red_contacts", "zone_green_contacts"},
+                     "zone_green3": {"zone_red_contacts", "zone_green_contacts"},
+                     "zone_both3": {"zone_red_contacts", "zone_green_contacts"},
+                     "zone_reference": {"zone_red_contacts", "zone_green_contacts"},
+                     "risk_5":set(),"momentum_two_risk5":set()}
 CORE = {"confirmed_anchors","ordered_safety","close_above_red","positive_risk","execution_above_trigger","interim_safety",
         "horizontal_confirmed","retest_held"}
 MOMENTUM = {"positive_body","body_atr","body_fraction","close_location"}
 ADDITIONS = {"daily":{"context"},"contacts3":{"red_contacts","green_contacts"},"momentum":MOMENTUM,
-             "risk":{"safety_distance_pct","safety_distance_atr"},"room":{"room","execution_room"}}
+             "risk":{"safety_distance_pct","safety_distance_atr"},"room":{"room","execution_room"},
+             "momentum_two":{"positive_body","momentum_two_of_three"},"room_15":{"room","execution_room"},
+             "risk_5":{"safety_distance_pct","safety_distance_atr"},
+             "momentum_two_risk5":{"positive_body","momentum_two_of_three","safety_distance_pct","safety_distance_atr"}}
 DEFAULTS = {"experiment_id":"","hypothesis":"Trendlinien-Einstiege und der Zusatznutzen ihrer Qualitätsmerkmale werden auf getrennten Zeiträumen untersucht.",
     "primary_horizon":10,"primary_metric":"mean_excess_pct","primary_family":"breakout","stage":"development",
     "profiles":["reference","baseline","daily","contacts3","retest_hold","atr_contacts"],
@@ -99,10 +116,14 @@ def validate(value, horizons):
 
 
 def profile_manifest(name, lab, tori):
-    return {"id":name,"version":VERSION,"definition":PROFILES[name],"tori":tori,
-            "contactToleranceATR":lab["contact_tolerance_atr"] if name=="atr_contacts" else 0,
+    result = {"id":name,"version":"entry-flex-2" if name in ("risk_5","momentum_two_risk5") else "contact-zone-1" if name in ZONE_REQUIREMENTS else "entry-flex-1" if name in ("momentum_two","room_15") else VERSION,"definition":PROFILES[name],"tori":tori,
+            "contactToleranceATR":lab["contact_tolerance_atr"] if name=="atr_contacts" or name in ZONE_REQUIREMENTS else 0,
             "lookbackDays":lab["line_lookback_days"] if name=="atr_contacts" else 365,
             "referenceUnchanged":name=="reference","hypothesis":lab["hypothesis"]}
+    if name in ("momentum_two","momentum_two_risk5"):result["momentumRule"]={"positiveBodyRequired":True,"votes":2,"of":["body_atr","body_fraction","close_location"]}
+    if name=="room_15":result["roomR"]=1.5
+    if name in ("risk_5","momentum_two_risk5"):result["safetyLimits"]={"pct":5,"atr":tori["max_safety_atr"],"stopUnchanged":True}
+    return result
 
 
 class LabScanner(EntryScanner):
@@ -110,6 +131,10 @@ class LabScanner(EntryScanner):
         self.profile, self.lab, self.shared = profile, spec["lab"], shared if shared is not None else {}
         self.family=None
         super().__init__(dataset,spec,plan,emit)
+        if profile=="room_15":
+            self.options={**self.options,"min_room_r":1.5}
+        if profile in ("risk_5","momentum_two_risk5"):
+            self.options={**self.options,"max_safety_pct":5}
         self.context_cache=self.shared.setdefault("context",{})
 
     def source_data(self,dataset):
@@ -145,6 +170,7 @@ class LabScanner(EntryScanner):
         return count
 
     def arm(self,i):
+        previous_count=len(self.cases)
         prefix=self.bars[:i];lines=self.lines(prefix)
         red,green=lines["red"],lines["green"]
         if red is None:self.coverage["withoutRed"]=self.coverage.get("withoutRed",0)+1
@@ -172,10 +198,31 @@ class LabScanner(EntryScanner):
                 self.cases[identity]=case
                 self.journal(case,"lab_rejected_missing_safety",current.end,reason="missing_safety")
                 self.save(case)
-        return super().arm(i)
+        super().arm(i)
+        if self.profile in ZONE_REQUIREMENTS:
+            from contact_zones import freeze
+            for case in list(self.cases.values())[previous_count:]:
+                if case["frozen"].get("green"):
+                    case["contactMeasurement"]=freeze(prefix,atr(prefix),self.lab["contact_tolerance_atr"])
+                    self.save(case)
 
     def base_checks(self,case,i,prefix):
         checks,quality,volatility,context=super().base_checks(case,i,prefix)
+        if self.profile in ZONE_REQUIREMENTS:
+            from contact_zones import measure
+            contacts=measure(case,prefix,self.options["contact_gap_bars"])
+            checks.append(check("contact_zone_available",case["contactMeasurement"]["tolerance"] is not None))
+            checks.append(check("contact_zone_definition",True,deepcopy(case["contactMeasurement"]),False))
+            for side in ("red","green"):
+                count=contacts[side]
+                threshold=3 if self.profile in ("zone_measure","zone_both3","zone_"+side+"3") else 2
+                if self.profile=="zone_reference" and side=="red":threshold=self.options["min_contacts"]
+                checks.append(check("zone_"+side+"_contacts",None if count is None else count>=threshold,count))
+        if self.profile in ("momentum_two","momentum_two_risk5"):
+            votes=[c["state"] for c in checks if c["name"] in MOMENTUM-{"positive_body"}]
+            passed,unknown=votes.count("pass"),votes.count("unknown")
+            state=True if passed>=2 else None if passed+unknown>=2 else False
+            checks.append(check("momentum_two_of_three",state,{"passed":passed,"unknown":unknown,"total":3}))
         if self.profile=="daily":
             state=context["structure"]["1D"]
             daily=next(c for c in checks if c["name"]=="context")
@@ -193,8 +240,12 @@ class LabScanner(EntryScanner):
         for c in checks:
             original=c.setdefault("referenceRequired",c["required"])
             if self.profile=="reference":required=original
+            elif self.profile=="zone_reference":
+                required=(original and c["name"] not in ("red_contacts","green_contacts")) or c["name"] in ZONE_REQUIREMENTS[self.profile]|{"contact_zone_available"}
+            elif self.profile in ZONE_REQUIREMENTS:
+                required=c["name"] in CORE|ZONE_REQUIREMENTS[self.profile]|ADDITIONS.get(self.profile,set())|({"contact_zone_available"} if ZONE_REQUIREMENTS[self.profile] else set())
             elif self.profile=="retest_hold":required=original and not (self.family=="retest" and c["name"] in MOMENTUM)
-            else:required=(original or self.profile=="room" and c["name"] in ("room","execution_room")) and c["name"] in CORE|ADDITIONS.get(self.profile,set())
+            else:required=(original or self.profile in ("room","room_15") and c["name"] in ("room","execution_room")) and c["name"] in CORE|ADDITIONS.get(self.profile,set())
             c["required"]=required
         return super().blocked(checks)
 

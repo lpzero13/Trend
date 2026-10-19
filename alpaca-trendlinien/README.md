@@ -121,3 +121,6 @@ Alpaca-Wertpapierverzeichnis: https://docs.alpaca.markets/us/reference/get-v2-as
 Bei „Verbindung zum lokalen Tori-Server fehlgeschlagen“ zuerst `Start-Tori.ps1` ausführen und anschließend ↻ oder die Seite neu laden. Wenn der Server läuft, aber Alpaca eine Anfrage ablehnt, wird die separate Anbieterfehlermeldung angezeigt.
 
 Diskussionsstand für spätere Long-Tests: `LONG-KRITERIEN-ENTWURF.md` (noch keine aktivierten Einstiegskriterien).
+
+
+**Kontaktzonen und drei Forschungsrunden (19.10.2026):** [Regeln, Auswertung und Schlussfolgerungen](KONTAKTZONEN-EXPERIMENTE.md), [vollständige Tabellen](KONTAKTZONEN-ERGEBNISSE.md). Neue Profile sind im Labor ausdrücklich wählbar; die bisherigen Standardprofile bleiben erhalten.

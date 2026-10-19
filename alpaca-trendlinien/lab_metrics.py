@@ -257,8 +257,14 @@ def cohort_bands(values):
         value=values.get(name)
         if type(value) not in (int,float) or not math.isfinite(value):return "unknown"
         return next((label for boundary,label in bands if value<boundary),bands[-1][1])
-    return {"red_contacts":number("red_contacts",[(3,"2"),(4,"3"),(math.inf,"4+")]),
+    result = {"red_contacts":number("red_contacts",[(3,"2"),(4,"3"),(math.inf,"4+")]),
             "green_contacts":number("green_contacts",[(3,"2"),(4,"3"),(math.inf,"4+")]),
             "age_days":number("line_age",[(7,"under7"),(21,"7to20"),(42,"21to41"),(math.inf,"42+")]),
             "safety_pct":number("safety_distance_pct",[(1,"under1"),(3,"1to3"),(math.inf,"3+")]),
             "context":str(values.get("context",{}).get("1D","unknown")) if isinstance(values.get("context",{}),dict) else "unknown"}
+    if "zone_red_contacts" in values:
+        for side in ("red","green"):
+            result["zone_"+side+"_contacts"]=number("zone_"+side+"_contacts",[(2,"under2"),(3,"2"),(4,"3"),(math.inf,"4+")])
+        red,green=values.get("zone_red_contacts"),values.get("zone_green_contacts")
+        result["zone_both3"]="unknown" if red is None or green is None else "yes" if min(red,green)>=3 else "no"
+    return result

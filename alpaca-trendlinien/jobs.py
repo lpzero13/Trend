@@ -22,7 +22,7 @@ def engine_hash():
     value = hashlib.sha256()
     for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
                  "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py", "tori_observations.py",
-                 "lab_data.py","lab_profiles.py","lab_metrics.py","lab_splits.py","lab_registry.py","lab_engine.py","lab_jobs.py","lab_execution.py"):
+                 "lab_data.py","lab_profiles.py","lab_metrics.py","lab_splits.py","lab_registry.py","lab_engine.py","lab_jobs.py","lab_execution.py","contact_zones.py"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
