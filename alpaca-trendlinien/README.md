@@ -12,6 +12,8 @@ Die feste Hauptnavigation oben bietet **Chart** für die manuelle Suche und **Fo
 
 **Zusätzliches Forschungslabor:** Unter **Labor** (`/lab`) stehen vollständige chronologische Scans, vergleichbare Regelprofile, verblindete Fallprüfung, Entwicklungs-/Validierungs-/Abschlussphasen und optionale Ausführungssimulationen bereit. [Anleitung und Modellgrenzen](FORSCHUNGSLABOR.md), [lokale Prüfnachweise](FORSCHUNGSLABOR-UMSETZUNG.md).
 
+**Neuer Offline-Ausstiegsvergleich:** [Sieben Ausstiegsmodelle auf denselben Einstiegen nach 5/10/20 Handelstagen](AUSSTIEGSVERGLEICH.md), einschließlich experimenteller Tori-Auslegung, Kosten, Fakeouts und nachvollziehbarer Geldbeträge pro Einzelposition. Wiederholbar über `tools/exit_study.py`, unabhängige Ausführungsprüfung über `tools/verify_exit_study.py`. Noch keine zusätzliche Webauswahl und keine neue Standardstrategie.
+
 ## Start unter Windows
 
 Im Projektordner mit Python 3.12 oder 3.13 (lokal geprüfte Versionen):
