@@ -65,7 +65,7 @@ def report(root, output):
     decision = json.loads((root/"decision-before-validation.json").read_text("utf-8"))
     summary.update(decision=decision, sourceReceipts=receipts, rules=manifest["rules"], costs=manifest["costs"])
     output = Path(output).resolve()
-    output.write_text("\n".join(lines)+"\n", "utf-8")
+    output.write_text("\n".join(lines).rstrip()+"\n", "utf-8")
     output.with_suffix(".json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), "utf-8")
     return summary
 
