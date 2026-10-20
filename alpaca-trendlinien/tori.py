@@ -18,6 +18,8 @@ def main():
     commands=parser.add_subparsers(dest="command",required=True)
     from lab_cli import add_commands
     add_commands(commands)
+    from strategy_cli import add_commands as add_strategy_commands
+    add_strategy_commands(commands)
     submit=commands.add_parser("submit",help="Forschungsauftrag einreichen")
     submit.add_argument("--spec",required=True)
     for name in ("status","report","events","cancel"):
@@ -54,7 +56,10 @@ def main():
     analyze.add_argument("--timeframe",choices=("1h","4h","1D"),default="4h")
     args=parser.parse_args()
     try:
-        if args.command.startswith("lab-"):
+        if args.command.startswith("strategy-"):
+            from strategy_cli import execute as execute_strategy
+            result=execute_strategy(args)
+        elif args.command.startswith("lab-"):
             from lab_cli import execute
             result=execute(args)
         elif args.command=="submit": result=jobs.submit(json.loads(Path(args.spec).read_text("utf-8-sig")))
