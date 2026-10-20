@@ -19,7 +19,7 @@ from strategy_portfolio import DEFAULTS as PORTFOLIO, simulate, validate as vali
 from tools.exit_study import freeze_cases
 
 ENGINE_FILES = ("safety_strategy.py", "strategy_portfolio.py", "strategy_research.py", "strategy_cli.py",
-                "strategy_verify.py", "models.py", "datasets.py", "tori_entries.py", "trendlines.py",
+                "strategy_verify.py", "strategy_run_lock.py", "strategy_identity.py", "models.py", "datasets.py", "tori_entries.py", "trendlines.py",
                 "lab_engine.py", "lab_profiles.py", "lab_data.py", "lab_metrics.py", "lab_splits.py",
                 "market_calendar.py", "exit_research.py", "tools/exit_study.py", "requirements.txt")
 RAW_COSTS = {"spread_bps": 5., "slippage_bps": 5., "fee_per_order": 0., "notional": 1000.}
@@ -148,6 +148,14 @@ def selection(result):
 def run_study(entry_path, output, stage="development", resume=False, progress=lambda x: None):
     if stage not in ("development", "validation"):
         raise DataError("Safety-Forschung verwendet Entwicklung und bekannte Validierung; finaler Holdout gesperrt.", 409)
+    from strategy_run_lock import study_lock
+    with study_lock(output):
+        return _run_study(entry_path, output, stage, resume, progress)
+
+
+def _run_study(entry_path, output, stage="development", resume=False, progress=lambda x: None):
+    if stage not in ("development", "validation"):
+        raise DataError("Safety-Forschung verwendet Entwicklung und bekannte Validierung; finaler Holdout gesperrt.", 409)
     source = json.loads(Path(entry_path).read_text("utf-8-sig"))
     if set(source["cohorts"])-{"development", "validation"} or stage not in source["cohorts"]:
         raise DataError("Ungültiger Einstiegsexport oder reservierte Phase.", 409)
@@ -267,11 +275,16 @@ def scan_candidates(dataset, cutoff, profile="momentum_two", since=None, history
     context = StrategyContext(sources, cutoff)
     observations = [{"entry": e, "contract": context.entry_contract(e), "kind": "historical_open_observed",
                      "brokerAction": None} for e in entries]
+    from strategy_identity import event_key
+    for observation in observations:
+        entry = observation["entry"]
+        observation["eventKey"] = event_key(dataset["material"], profile, entry["family"], entry["signalAt"])
     pending = []
     for case in scanner.cases.values():
         for e in case["variants"]:
             if e["status"] == "pending" and e["phase"] == "execution" and e.get("availableAt", 0) >= since:
                 pending.append({"id": digest({"setup": case["id"], "family": e["variant"], "signalAt": e["signalAt"]}),
+                    "eventKey": event_key(dataset["material"], profile, e["variant"], e["signalAt"]),
                     "symbol": dataset["material"]["symbol"], "family": e["variant"], "signalAt": e["signalAt"],
                     "availableAt": e["availableAt"], "kind": "confirmed_waiting_for_observed_open",
                     "red": case["frozen"]["red"], "green": case["frozen"]["green"],
@@ -282,4 +295,4 @@ def scan_candidates(dataset, cutoff, profile="momentum_two", since=None, history
             "latestSourceClose": sources["4h"][-1].end, "latestFineClose": sources["5m"][-1].end,
             "observations": observations, "pending": sorted(pending, key=lambda p: p["id"]),
             "eligibleObservations": sum(o["contract"]["eligible"] for o in observations),
-            "setupsReplayed": len(scanner.cases), "meaning": "Read-only historical/pending candidate events; stable IDs for caller deduplication. No outcome access, orders or promised live execution. Dataset freshness remains caller-visible."}
+            "setupsReplayed": len(scanner.cases), "meaning": "Read-only historical/pending events. Deduplicate notifications by eventKey across dataset refreshes; entry/contract IDs identify exact dataset versions. No outcome access, orders or promised live execution. Dataset freshness remains caller-visible."}

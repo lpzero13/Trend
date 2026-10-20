@@ -13,6 +13,8 @@ Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein
 
 ## Werkzeuge
 
+**Optionaler neuer Safety-Weg (20.10.2026, lokal):** `strategy-rules`, `strategy-export`, `strategy-study`, `strategy-report`, `strategy-verify`, `strategy-scan`; Vertrag und genaue Befehle in `SAFETY-STRATEGIEN.md`. Nicht mit bestehender Queue oder den Laborphasen verwechseln. Neue Strategie-Studien benötigen einen frischen Ausgabeordner und gepinnte echte IEX-Datasets; nach Import offline. `--resume` nur unter unveränderter Engine und Quelle, abgeschlossene Phasen nicht überschreiben. Kandidatenscan rekonstruiert chronologisch bis zum Stichtag, gibt historische Open-Ereignisse und noch nicht ausführbare Pending-Signale getrennt aus. Aktualität sichtbar prüfen, stabile IDs deduplizieren, keine rückwirkenden Orders/Meldungen aus historischen Treffern erzeugen. Die Varianten sind Forschungsmodelle, keine freigegebene Gewinnstrategie. Finaler Holdout bleibt geschlossen. Diese Vorlage wurde nicht in Hermes installiert.
+
 **Neuer lokaler Laborzweig, Gesamtabnahme noch offen:** `entry_mode: "lab"` und die `lab-*`-CLI-Kommandos ergänzen registrierte Experimente, zeitlich getrennte Entwicklung/Validierung/Abschlusstests und Walk-forward. Vollständiger Werkzeugvertrag und Daten-/Ausführungsgrenzen: `FORSCHUNGSLABOR.md`. Einstieg `lab-profiles`, `lab-experiments`, `lab-experiment --id …`; Folgeläufe mit `lab-run`. Regeln/Daten eines Experiments nicht überschreiben. Nach Validierung `lab-seal` mit begründeter Kandidatenauswahl; finalen Holdout nur als bewusst beauftragte einmalige Prüfung öffnen. Unterschiedliche Profile/Familien und Trainings-/Prüfabschnitte niemals zu einer scheinbar unabhängigen Stichprobe addieren. Optionale modellierte Depotwerte sind von Legacy-Ereignisstudien und realen Brokerergebnissen zu unterscheiden. Vor einem tatsächlichen Rollout Schema 4 und den offenen Abnahmeplan beachten. Diese Skillvorlage wurde dadurch nicht in Hermes installiert.
 
 - `list`: verfügbare Aufträge und Status als JSON lesen.
@@ -32,6 +34,8 @@ Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein
 Eine separate Installation kann alternativ dieselben Operationen über die in `FORSCHUNG.md` beschriebenen HTTP-Routen verwenden. Den bereitgestellten Bearer-Token als Header verwenden, niemals in URLs oder Berichte schreiben. Kein direkter Datenbankzugriff über Netzwerkfreigaben.
 
 ## Auswertung
+
+Beim neuen Safety-Scan `eventKey` für importübergreifende Deduplizierung verwenden; Entry-/Vertrags-IDs sind dagegen an eine exakte Datenversion gebunden. Pending und beobachteter Open derselben Bestätigung teilen den `eventKey`. Regel-/Profilwechsel bewusst getrennt halten. `strategy-report` unterscheidet Einzelpfad-R/1.000-USD-Werte von Cash-Portfolios. `incomplete` ist nur ein beobachteter Präfix, `marked_to_phase_end` kann offene Positionen enthalten. Ergebnisbilanz vom 20.10.2026: `SAFETY-ERGEBNISSE.md`; kein Kandidat für den produktiven Betrieb ausgewählt.
 
 1. Zwischen erfolgreich, teilweise erfolgreich, Fehler und unvollständigen Beobachtungen unterscheiden. Keine fehlenden Fälle als Erfolg zählen.
 2. Ausbruch und Retest sowie vorläufige/qualifizierte Linien getrennt betrachten. Exakte Kontakte, Abstand zu Grün und Tageskontext stehen in den Fallmerkmalen.

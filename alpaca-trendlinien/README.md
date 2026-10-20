@@ -2,7 +2,9 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
-Lokale Seite mit echten historischen IEX-Kursen von Alpaca, Kerzen für **1h, 4h und 1D** sowie der automatischen Tori-Linienberechnung. Manuelle Suche unter `/`, automatische Ereignisstudien unter `/research`. Hintergrundaufträge mit Zufallsstarts, unveränderlichen Datenbeständen und JSON-Werkzeugen für Hermes. Noch kein vollständiger Portfolio-Backtest und keine Orderfunktionen.
+Lokale Seite mit echten historischen IEX-Kursen von Alpaca, Kerzen für **1h, 4h und 1D** sowie der automatischen Tori-Linienberechnung. Manuelle Suche unter `/`, automatische Ereignisstudien unter `/research`. Hintergrundaufträge mit Zufallsstarts, unveränderlichen Datenbeständen und JSON-Werkzeugen für Hermes. Keine Orderfunktionen.
+
+**Neu lokal, 20.10.2026:** Separater [Safety-Strategie- und Kandidatenweg für Hermes](SAFETY-STRATEGIEN.md) über die CLI, mit Kosten, kausalen Ausstiegen, Kapital-/Risikoportfolio und unabhängiger Nachrechnung. [Bilanz auf 25 Aktien](SAFETY-ERGEBNISSE.md): noch keine als profitabel bestätigte Strategie. Webprofile und Zeitpläne werden nicht automatisch umgestellt; die bisherigen Ereignisstudien bleiben Kursbeobachtungen ohne Depot-P/L.
 
 **Neu:** [Automatische Forschung, Bedienung und Linux-/Hermes-Anbindung](FORSCHUNG.md). Der erste normale Serverstart richtet einen täglichen Forschungsauftrag für MSFT/AMZN ein, zehn Starts je Aktie; die Forschungsansicht kann diesen Zeitplan ändern oder pausieren. Aufträge laufen ohne offenen Browser.
 

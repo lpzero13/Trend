@@ -1,4 +1,14 @@
-# Prüfung – 17.10.2026
+# Prüfprotokoll
+
+## Safety-Strategien: 20.10.2026
+
+- **199 Python-Tests je unter Python 3.12/3.13 bestanden**, jeweils ein bestehender Windows-Symlink-Skip; **27 JavaScript-Tests bestanden**. Zusätzliche Prüfungen: kausale Safety-Wechsel, Docht/Schluss, Bestätigung/Latenz, Gaps, Stop-/Zielreihenfolge, unbekannte ATR, Zukunftsdaten, separate Decimal-/Eligibility-Gegenproben, Cash/Positionsrisiko, Datenlücken, Vorlauf und OS-Sperren.
+- Finale isolierte Studie `artifacts/safety-strategies-20261020-final`, Manifesthash `21415ae619bcb61fb6608b7179694f4f4c82236428eabc68b09e60c1c1e9f2d3`. 25 echte IEX-Aktien; 2.083 Entwicklungs- und 840 spätere Profil-/Familienfälle. Entwicklung 02.05.2025–18.03.2026; bereits bekannte spätere Phase 19.03.–02.07.2026. Finale Holdout-Ergebnisse nicht ausgewertet. Quellen `artifacts/safety-universe-20261020-b`; bisherige fünf IDs exakt erhalten, zusätzliche 20 Titel einmal importiert; danach offline.
+- Separater Auditor prüft **alle 35.076 Modellpfade, 288 Vergleichszeilen und 288 Portfolios**: Kontext/Zonen/Eligibility, Ereignisse/Bestätigungen/Wirksamkeit, ursprüngliche und aktive Safety, Füllungen, Decimal-P/L/R, Cash, Positionsgröße und 5m-Bewertung. `verification.json`, Verifierhash `e680c93c4cdebd480d8db4b5032b3491a5978f6b1711716b1d87af70752fd471`. Das bestätigt Modellkonsistenz, keine Börsen-/Brokerwahrheit.
+- Tatsächlicher Prozessabbruch nach erstem abgeschlossenem Dataset-Checkpoint des Fünfaktienlaufs, OS-Freigabe und `--resume` geprüft. `artifacts/safety-strategies-20261020-b/resume-verification.json`: Entries, Verträge, Pfade, Zeilen, Portfolios, Eligibility und Blocker entsprechen dem ununterbrochenen Lauf exakt. Zweiter Schreiber erhält 409.
+- Letzte Schleife: importübergreifender `eventKey`, weil eine aktualisierte Dataset-ID auch historische Entry-IDs verändert. Neue finale Studie statt Resume unter geändertem Code. `identity-regression.json` bestätigt identische Handelsresultate beider Phasen gegenüber der vorherigen 25-Aktien-Studie. Echte MSFT-Scans an zwei benachbarten Stichtagen: Schlüssel und archivierte Entries gleich, keine Providerabrufe (`artifacts/safety-scan-integration.json`).
+- IEX-Abdeckung und COST-Vorlauf geprüft, keine künstlichen OHLC-Balken. 7.239/2.707 unvollständige Modellpfade und 108/72 abgebrochene Portfolios; kein erfundenes volles Phasenergebnis. Abdeckung `artifacts/safety-universe-20261020-b/data-quality.json`. Dokumentation enthält positive und negative Teilgruppen, Selektions-/Abhängigkeitsgrenzen und bekannte spätere Phase. **Kein produktiver Kandidat ausgewählt.**
+- Ergebnisse und Quellenprüfsummen aus finalen JSON-Dateien; [Bilanz](SAFETY-ERGEBNISSE.md), [vollständige Tabellen](SAFETY-ERGEBNISTABELLEN.md), [Regeln/CLI](SAFETY-STRATEGIEN.md). Inline-Quellenanzeige per Renderer validiert, keine Browser-Sichtprüfung. Keine neue Browserprüfung der App; laufende Routen `/` und `/api/health` HTTP 200. Bestehende Web-/Queue-Defaults unverändert, kein Push/Rollout und keine Brokerorders. Private Artefakte/Marktdaten/Secrets bleiben außerhalb von Git.
 
 ## Kontaktzonen und drei Code-Backtestrunden – 19.10.2026
 

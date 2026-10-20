@@ -59,7 +59,9 @@ def execute(args):
                                timestamp(args.history_start) if args.history_start else None)
     if args.command == "strategy-verify":
         from strategy_verify import verify_study
-        return verify_study(Path(args.study).resolve())
+        from strategy_run_lock import study_lock
+        with study_lock(args.study):
+            return verify_study(Path(args.study).resolve())
     if args.command == "strategy-report":
         root = Path(args.study).resolve()
         manifest = json.loads((root/"manifest.json").read_text("utf-8"))
