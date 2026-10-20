@@ -14,8 +14,10 @@ Der neue Weg kann chronologisch Signale rekonstruieren, ursprüngliche Linien ar
 |---|---:|---:|
 | Profil-/Familienfälle | 2.083 | 840 |
 | Unterschiedliche Aktie/Zeit/Familie-Ereignisse über Profile hinweg | 1.299 | 529 |
+| Unterschiedliche Aktie/Einstiegszeitpunkte über Profile und Familien hinweg | 1.030 | 420 |
 | Fälle mit sämtlichen neuen Eintrittsprüfungen | 21 | 7 |
 | Davon unterschiedliche Aktie/Zeit/Familie-Ereignisse | 19 | 5 |
+| Davon unterschiedliche Aktie/Einstiegszeitpunkte | 18 | 5 |
 | Modellpfade: vier Modelle × drei Horizonte | 24.996 | 10.080 |
 | Geschlossene Modellpfade | 17.757 | 7.373 |
 | Unvollständige Modellpfade | 7.239 | 2.707 |
