@@ -2,6 +2,8 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
+**Interner Versuch, 21.10.2026:** [Zusätzliche Einstiegssuche und persistierter Beobachtungsscanner](EINSTIEGSSUCHE-ERGEBNISSE.md). Separate CLI-Module; kein automatischer Wechsel der Webanalyse. Der Vergleich findet mehr zusätzliche Zeitpunkte, bisher keine nachweislich besseren direkten Einstiege. Regeln, Ergebnisgrenzen und Wiederholungsbefehle sind dort dokumentiert.
+
 ## Chart manuell oder mit Tori-Analyse
 
 Die Weboberfläche startet **bei jedem Öffnen und Neuladen mit ausgeschalteter Tori-Analyse**. Die Kerzen werden angezeigt; Ray- und Messwerkzeug, gespeicherte eigene Zeichnungen, Zoom und historische Kerzenschritte bleiben nutzbar. Es erscheinen zunächst keine automatischen Trendlinien, Bruch-/Einstiegsmarker oder Tori-Infoboxen.

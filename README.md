@@ -10,6 +10,7 @@ Weboberfläche für die manuelle Aktienanalyse und Hintergrunddienst für reprod
 
 Weitere Dokumentation:
 
+- [Interne Einstiegssuche: zusätzliche Linien, Hermes-Frühwarnungen und empirische Bilanz](alpaca-trendlinien/EINSTIEGSSUCHE-ERGEBNISSE.md)
 - [Bedienung der Chartoberfläche](alpaca-trendlinien/README.md)
 - [Forschungslabor, Profile, Blindprüfung und getrennte Testphasen](alpaca-trendlinien/FORSCHUNGSLABOR.md)
 - [Forschungsmethode und JSON-Werkzeuge](alpaca-trendlinien/FORSCHUNG.md)
