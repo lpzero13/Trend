@@ -23,6 +23,8 @@ Weitere Dokumentation:
 
 ## Aktueller Stand
 
+Neu lokal am 21.10.2026: Die Chartoberfläche startet immer manuell, **Tori-Analyse aus**. Ein Toolbar-Knopf schaltet automatische Linien/Marker/Infobox gemeinsam ein oder aus; Ray- und Messwerkzeug sind unabhängig nutzbar. [Bedienung](alpaca-trendlinien/README.md). Diese neueste Änderung ist noch nicht im Container installiert.
+
 Neu lokal am 20.10.2026: [Safety-Strategien und kausaler Hermes-Kandidatenscan](alpaca-trendlinien/SAFETY-STRATEGIEN.md) als separater CLI-Weg, einschließlich kostenbehaftetem Cash-/Risiko-Portfoliomodell und unabhängigem Auditor. Bestehende Web-/Worker-Defaults bleiben erhalten; die folgenden früheren Rolloutangaben sind historisch. Keine Brokerorders und noch kein als profitabel bestätigter Handelsstandard.
 
 Die manuelle Webansicht unter `/` und die Forschungsansicht unter `/research` sind implementiert. Ein Python-Worker bearbeitet gespeicherte Aufträge ohne offenen Browser. Zufällige historische Startpunkte, Ausbruch-/Retest-Varianten, unveränderliche Datasets, eine dauerhafte Queue und JSON-Schnittstellen sind vorhanden.

@@ -10,7 +10,7 @@ from assets import cached_asset_name
 COMPANIES = {"AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "NVDA": "NVIDIA Corporation", "SPY": "SPDR S&P 500 ETF"}
 
 
-def build_chart(datasets, symbol, timeframe, cutoff, now, *, historical=False):
+def build_chart(datasets, symbol, timeframe, cutoff, now, *, historical=False, include_analysis=True):
     # Hard boundary even if an adapter or a cached provider response contains later rows.
     datasets = {tf: ([bar for bar in bars if bar.end <= int(cutoff.timestamp())], dict(meta))
                 for tf, (bars, meta) in datasets.items()}
@@ -21,11 +21,13 @@ def build_chart(datasets, symbol, timeframe, cutoff, now, *, historical=False):
     chart_bars, chart_meta = datasets[timeframe]
     # Source lanes retain their own last closed candle; the frontend projects anchors into its chart.
     reference = chart_bars[-1].time
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = {tf: pool.submit(analyze, bars, tf, bars[-1].time,
-                                  data_errors=meta["quality"]["rejected"] > 0)
-                   for tf, (bars, meta) in datasets.items()}
-        lanes = {tf: future.result() for tf, future in futures.items()}
+    lanes = {}
+    if include_analysis:
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {tf: pool.submit(analyze, bars, tf, bars[-1].time,
+                                      data_errors=meta["quality"]["rejected"] > 0)
+                       for tf, (bars, meta) in datasets.items()}
+            lanes = {tf: future.result() for tf, future in futures.items()}
     serialized = [asdict(bar) for bar in chart_bars]
     axis = [bar.time for bar in chart_bars]
     fingerprint = hashlib.sha256(json.dumps(serialized, sort_keys=True).encode()).hexdigest()[:16]
@@ -33,6 +35,7 @@ def build_chart(datasets, symbol, timeframe, cutoff, now, *, historical=False):
     result = {
         "symbol": symbol, "company": cached_asset_name(symbol) or COMPANIES.get(symbol, "US-Aktie / ETF"), "currency": "USD",
         "timeframe": timeframe, "bars": serialized, "axis": axis, "lanes": lanes,
+        "analysisEnabled": include_analysis,
         "sources": {tf: meta for tf, (_, meta) in datasets.items()},
         "latest": {"close": latest.close, "time": latest.time, "end": latest.end,
                    "change": latest.close - previous.close,

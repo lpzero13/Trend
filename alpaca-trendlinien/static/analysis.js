@@ -1,5 +1,5 @@
 /* Analysis cutoff and immutable automatic-line snapshots. */
-function bundleKey(symbol, asOf) {
+function bundleKey(symbol, asOf, enabled = state.analysisEnabled) {
   return (
     symbol +
     "|" +
@@ -9,8 +9,63 @@ function bundleKey(symbol, asOf) {
     "|" +
     (state.researchTrial || "") +
     "|" +
-    (state.researchVariant || "")
+    (state.researchVariant || "") +
+    "|analysis=" + (enabled ? "1" : "0")
   );
+}
+function hasToriAnalysis() {
+  return !!(state.analysisEnabled && state.data &&
+    state.data.analysisEnabled !== false && Object.keys(state.data.lanes || {}).length);
+}
+function analysisLabel(asOf) {
+  return state.analysisEnabled
+    ? (asOf ? "Historische Tori-Analyse" : "Tori-Analyse laden")
+    : (asOf ? "Historische Kursdaten" : "Kursdaten laden");
+}
+function updateToriControls() {
+  const ready = hasToriAnalysis();
+  const button = $("#tori-analysis");
+  button.textContent = `Tori-Analyse: ${state.analysisEnabled ? "An" : "Aus"}`;
+  button.setAttribute("aria-pressed", String(state.analysisEnabled));
+  button.title = state.analysisEnabled
+    ? "Automatische Tori-Linien, Marker und Infobox ausschalten"
+    : "Automatische Tori-Analyse einschalten";
+  button.disabled = state.stepping || !$("#loading").hidden;
+  $("#info-panel").hidden = !ready || !state.info;
+  $("#info-button").hidden = !ready;
+  $("#info-button").setAttribute("aria-pressed", String(ready && state.info));
+  $("#freeze-button").hidden = !state.analysisEnabled;
+  $("#axis-mode").hidden = !state.analysisEnabled;
+  $("#freeze-button").disabled = !ready || !$("#loading").hidden || !!state.researchJob;
+}
+async function toggleToriAnalysis() {
+  if (state.stepping) return;
+  if (state.analysisEnabled) {
+    const bundle = currentBundle();
+    state.analysisEnabled = false;
+    ++state.request;
+    $("#loading").hidden = true;
+    $("#error").hidden = true;
+    $("#details-dialog").close();
+    if (bundle) state.bundles.set(bundleKey(state.symbol, state.asOf), bundle);
+    automaticLines();
+    table();
+    updateAnalysisControls();
+    if (state.includeLines) chart.priceScale("right").applyOptions({ autoScale: true });
+    updateStepButtons();
+    return;
+  }
+  state.analysisEnabled = true;
+  state.info = true;
+  state.infoCollapsed = false;
+  updateToriControls();
+  const request = state.request + 1;
+  if (!(await load(state.symbol, false, state.asOf, true)) && request === state.request) {
+    state.analysisEnabled = false;
+    automaticLines();
+    table();
+    updateAnalysisControls();
+  }
 }
 function currentBundle() {
   return state.bundles.get(bundleKey(state.symbol, state.asOf));
@@ -149,34 +204,39 @@ async function refreshSavedList() {
   }
 }
 function updateAnalysisControls() {
+  updateToriControls();
   const data = state.data;
   if (!data) return;
-  const frozen = state.frozen;
+  const frozen = state.analysisEnabled ? state.frozen : null;
   $("#analysis-state").textContent =
     (data.historical
       ? "Historisch · " + dtLong(data.analysisCutoff) + " ET"
-      : "Aktuelle Analyse") +
-    (frozen
+      : state.analysisEnabled ? "Aktuelle Analyse" : "Aktuelle Kursdaten") +
+    (!state.analysisEnabled
+      ? " · Manuelle Ansicht · Tori-Analyse aus"
+      : frozen
       ? " · Fixiert: " + dtLong(frozen.analysisCutoff) + " ET"
       : data.researchSetup
         ? " · Signalstand"
         : " · Automatik");
-  if (state.datasetId)
+  if (state.datasetId && state.analysisEnabled)
     $("#analysis-state").textContent += data.researchSetup
       ? " · Forschungsfall: ursprüngliche Signallinien fixiert"
       : " · Unveränderlicher Forschungsbestand";
   $("#analysis-state").classList.toggle(
     "frozen",
-    !!frozen || !!data.researchSetup,
+    state.analysisEnabled && (!!frozen || !!data.researchSetup),
   );
   $("#freeze-button").textContent = frozen ? "Fixierung lösen" : "Fixieren";
   $("#freeze-button").setAttribute("aria-pressed", String(!!frozen));
-  $("#freeze-button").disabled = false;
+  $("#freeze-button").disabled = !hasToriAnalysis();
   $("#freeze-button").title = frozen
     ? "Automatische Linien wieder neu wählen lassen; der gespeicherte Stand bleibt erhalten"
     : "Automatische Linien mit Datenbasis lokal speichern und fixieren";
   $("#analysis-at").value = nyInput(data.analysisCutoff);
-  $("#axis-note").textContent = frozen
+  $("#axis-note").textContent = !state.analysisEnabled
+    ? "Handelspausen ausgeblendet"
+    : frozen
     ? "Fixierter Linienstand"
     : "Handelskerzen · gerade Linien";
   updateCollapsedInfo();
@@ -190,7 +250,7 @@ function updateStepButtons() {
   $("#symbol-button").disabled = state.stepping;
   $("#history-button").disabled = state.stepping || !$("#loading").hidden;
   $("#refresh-button").disabled = state.stepping || !$("#loading").hidden;
-  $("#freeze-button").disabled = disabled || !!state.researchJob;
+  $("#freeze-button").disabled = disabled || !hasToriAnalysis() || !!state.researchJob;
   if (state.researchJob)
     $("#freeze-button").textContent = state.data?.researchSetup
       ? "Signal fixiert"
@@ -198,8 +258,9 @@ function updateStepButtons() {
   $("#replay-interval").textContent = state.timeframe;
   $("#step-back").disabled =
     disabled ||
-    !!(state.frozen && state.data.analysisCutoff <= state.frozen.validFrom);
+    !!(state.analysisEnabled && state.frozen && state.data.analysisCutoff <= state.frozen.validFrom);
   $("#step-next").disabled = disabled;
+  updateToriControls();
 }
 async function stepAnalysis(direction) {
   if (!state.data || state.stepping) return;
@@ -230,7 +291,7 @@ async function stepAnalysis(direction) {
       return;
     if (!response.ok)
       throw Error(target.error || "Kerzenschritt nicht verfügbar.");
-    if (state.frozen && target.closedAt < state.frozen.validFrom)
+    if (state.analysisEnabled && state.frozen && target.closedAt < state.frozen.validFrom)
       throw Error(
         "Vor den fixierten Datenstand geht es nur nach dem Lösen der Fixierung.",
       );
@@ -259,7 +320,7 @@ async function stepAnalysis(direction) {
   }
 }
 async function toggleFreeze() {
-  if (!state.data) return;
+  if (!hasToriAnalysis()) return;
   const bundle = currentBundle();
   if (!bundle) return;
   $("#error").hidden = true;
@@ -290,7 +351,7 @@ async function toggleFreeze() {
   } catch (e) {
     if (request === state.request) showError(e.message);
   } finally {
-    if (request === state.request) $("#freeze-button").disabled = false;
+    if (request === state.request) updateStepButtons();
   }
 }
 async function openSavedSnapshot(identity) {
@@ -312,6 +373,7 @@ async function openSavedSnapshot(identity) {
     state.asOf = isoCutoff(bundle);
     write("tori-frozen:" + state.symbol, snapshot.id);
     state.bundles.set(bundleKey(state.symbol, state.asOf), bundle);
+    state.bundles.set(bundleKey(state.symbol, state.asOf, true), bundle);
     render(bundle, false);
     resetView();
   } catch (e) {
@@ -319,6 +381,7 @@ async function openSavedSnapshot(identity) {
   }
 }
 function setupAnalysisUI() {
+  updateToriControls();
   updateCollapsedInfo();
   $("#collapse-info").onclick = () => {
     state.infoCollapsed = !state.infoCollapsed;

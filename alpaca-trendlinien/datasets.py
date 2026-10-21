@@ -110,7 +110,7 @@ def import_dataset(symbol, history_days=900, *, progress=None):
     return identity
 
 
-def chart_dataset(identity, timeframe, as_of=None, setup=None):
+def chart_dataset(identity, timeframe, as_of=None, setup=None, *, include_analysis=True):
     from analysis_service import build_chart
     from snapshots import remember
     dataset = read_dataset(identity)
@@ -122,13 +122,13 @@ def chart_dataset(identity, timeframe, as_of=None, setup=None):
         raise DataError("Dataset-Zeitpunkt braucht eine Zeitzone.", 400)
     sources = {tf: (rows, {**dataset["sources"][tf], "mode": "immutable-dataset", "cached": True, "warning": None}) for tf, rows in bars.items() if tf in TIMEFRAMES}
     payload = build_chart(sources, dataset["material"]["symbol"], timeframe, cutoff,
-        datetime.now(timezone.utc), historical=True)
+        datetime.now(timezone.utc), historical=True, include_analysis=include_analysis)
     payload.update(datasetId=identity, provider=dataset["material"]["provider"], feed=dataset["material"]["feed"],
                    adjustment=dataset["material"]["adjustment"], session=dataset["material"]["session"],
                    dataKind=data_kind(dataset))
     if payload["dataKind"] == "synthetic":
         payload["company"] = payload["symbol"] + " · Synthetischer Test"
-    if setup:
+    if setup and include_analysis:
         from research import line_value
         signal=setup["signal"]
         if setup.get("entryMode") == "tori" and signal["closedAt"] > int(cutoff.timestamp()):
@@ -158,5 +158,6 @@ def chart_dataset(identity, timeframe, as_of=None, setup=None):
                     state["validRisk"]=False
                 if state["entryAt"] is None or state["entryAt"] > int(cutoff.timestamp()):
                     state["entryAt"]=state["entryPrice"]=None
-    remember(payload)
+    if include_analysis:
+        remember(payload)
     return payload

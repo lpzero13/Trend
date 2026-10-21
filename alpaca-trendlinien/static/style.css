@@ -157,6 +157,29 @@ button[aria-pressed="true"] {
 .toolbar-spacer {
   flex: 1;
 }
+.analysis-toggle {
+  white-space: nowrap;
+  font-weight: 650;
+}
+.chart-page {
+  display: flex;
+  flex-direction: column;
+}
+.chart-page > .toolbar {
+  height: auto;
+  min-height: 46px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  padding-block: 6px;
+}
+.chart-page > #workspace {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+.chart-page > footer {
+  flex-shrink: 0;
+}
 #workspace {
   position: relative;
   height: calc(100dvh - 114px);

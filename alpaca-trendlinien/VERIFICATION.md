@@ -1,5 +1,13 @@
 # Prüfprotokoll
 
+## Manueller Chartstart und Tori-Schalter: 21.10.2026
+
+- **204 Python-Tests je unter Python 3.12/3.13 bestanden**, jeweils ein bestehender Windows-Symlink-Skip. **35 JavaScript-Tests bestanden**; acht neue Controller-Interaktionstests führen tatsächliche `app.js`/`analysis.js` mit DOM-/Chartbibliotheks-Testdoubles aus. CI um diese Tests ergänzt. JavaScript-Syntax geprüft. Keine neue Browser-Sichtprüfung; Controller-Prüfung ist kein Nachweis visueller Layoutabnahme.
+- Default bei jedem Seitenstart aus, auch mit alten Browsereinstellungen, gespeicherter Fixierung und URL-Analyseflag. Manueller HTTP-Abruf führt keine automatische Linienanalyse aus und registriert keine neue fixierbare Analyse. Forschungslinks lösen im manuellen Modus keine Signalsuche aus. API-Standard ohne Flag bleibt aktiv und kompatibel; ungültige/doppelte Flags werden abgewiesen.
+- Umschalten blendet automatische Linien, Marker, Schutzmarken und Infobox gemeinsam ein/aus. Eigene Rays/Messungen, identische Kerzen und Zoom bleiben erhalten; Intervallwechsel aktiviert nichts. Archiv öffnen und historisches Laden aktivieren nichts. Alte Originalsignallinien erscheinen erst bei bewusstem Einschalten. Fehler erlauben die weitere manuelle Nutzung; verspätete Antworten schalten nichts wieder ein. Ein neuer manueller Abruf entwertet alte Analyse-Caches.
+- Laufenden lokalen Dienst im zuvor bestätigten Idle-Zustand aktualisiert, Port 8765. Tatsächliche HTTP-Prüfung auf unveränderlichem echtem AMZN-IEX-Dataset `663586f8097b6369e7122e5ef3f6bc5192daeedf04d1737ce54914107ffdaa59`, Stichtag 02.07.2026 20:00 UTC: 1.273 Vierstundenkerzen, beide Modi exakt gleiche Kerzen/Fingerprint und Kausalgrenze, aus: null Lanes/keine Analyse-ID; an: drei analysierte Intervalle. Kein Providerimport. Nachweis im ignorierten `artifacts/chart-toggle-http-proof.json`; Testlogs `chart-toggle-py312.log`, `chart-toggle-py313.log`, `chart-toggle-js.log`.
+- Forschungsregeln, bestehende Zeitpläne, Brokerfunktionen und Datenbankschema nicht geändert. Wegen geänderter Engine-Quelldateien alte Forschungsversuche weiterhin nicht unter neuem Code fortsetzen. Diese Änderung ist lokal, noch kein neuer GitHub-Upload oder Proxmox-Rollout.
+
 ## Safety-Strategien: 20.10.2026
 
 - **199 Python-Tests je unter Python 3.12/3.13 bestanden**, jeweils ein bestehender Windows-Symlink-Skip; **27 JavaScript-Tests bestanden**. Zusätzliche Prüfungen: kausale Safety-Wechsel, Docht/Schluss, Bestätigung/Latenz, Gaps, Stop-/Zielreihenfolge, unbekannte ATR, Zukunftsdaten, separate Decimal-/Eligibility-Gegenproben, Cash/Positionsrisiko, Datenlücken, Vorlauf und OS-Sperren.

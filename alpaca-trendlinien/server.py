@@ -48,7 +48,7 @@ def parse_cutoff(value: str, now: datetime) -> datetime:
         raise DataError("Ungültiger oder durch die Zeitumstellung mehrdeutiger Analysezeitpunkt (New York).", 400) from None
 
 
-def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None) -> dict:
+def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None, *, include_analysis=True) -> dict:
     if timeframe not in TIMEFRAMES:
         raise DataError("Erlaubte Intervalle: 1h, 4h und 1D.", 400)
     if not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}", symbol):
@@ -61,9 +61,17 @@ def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str |
             kwargs["end"] = cutoff
         futures = {tf: pool.submit(load_bars, symbol, tf, **kwargs) for tf in TIMEFRAMES}
         datasets = {tf: future.result() for tf, future in futures.items()}
-    result = build_chart(datasets, symbol, timeframe, cutoff, now, historical=bool(as_of))
-    remember(result)
+    result = build_chart(datasets, symbol, timeframe, cutoff, now, historical=bool(as_of), include_analysis=include_analysis)
+    if include_analysis:
+        remember(result)
     return result
+
+
+def chart_analysis_requested(query):
+    values = query.get("analysis", ["1"])
+    if len(values) != 1 or values[0] not in ("0", "1"):
+        raise DataError("Analyse mit analysis=0 oder analysis=1 auswählen.", 400)
+    return values[0] == "1"
 
 
 def step_payload(symbol, timeframe, as_of, direction):
@@ -169,20 +177,21 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(jobs.report(parts[4],int(query.get("offset",["0"])[0]),int(query.get("limit",["250"])[0]),query.get("entry_filter",["all"])[0]) if parts[5]=="report" else jobs.events_for(parts[4],int(query.get("limit",["250"])[0]),query.get("cursor",[None])[0]))
                 raise DataError("Unbekannte Forschungsroute.",404)
             if path == "/api/dataset-chart":
-                query=parse_qs(urlparse(self.path).query)
+                query=parse_qs(urlparse(self.path).query,keep_blank_values=True)
+                include_analysis=chart_analysis_requested(query)
                 setup=None
                 dataset_id=query.get("dataset",[""])[0]
-                if "job" in query and "trial" in query:
+                if include_analysis and "job" in query and "trial" in query:
                     trial,setup=jobs.get_trial(query["job"][0],query["trial"][0],query.get("variant",["breakout"])[0])
                     if trial["datasetId"]!=dataset_id:
                         raise DataError("Forschungsfall gehört zu einem anderen Dataset.",400)
-                return self.send_json(chart_dataset(dataset_id,query.get("timeframe",["4h"])[0],query.get("asof",[None])[0],setup))
+                return self.send_json(chart_dataset(dataset_id,query.get("timeframe",["4h"])[0],query.get("asof",[None])[0],setup,include_analysis=include_analysis))
             if path == "/api/chart":
-                query = parse_qs(urlparse(self.path).query)
+                query = parse_qs(urlparse(self.path).query,keep_blank_values=True)
                 return self.send_json(chart_payload(query.get("symbol", ["AAPL"])[0].strip().upper(),
                                                     query.get("timeframe", ["4h"])[0],
                                                     query.get("refresh", ["0"])[0] == "1",
-                                                    query.get("asof", [None])[0]))
+                                                    query.get("asof", [None])[0],include_analysis=chart_analysis_requested(query)))
             if path == "/api/step":
                 query=parse_qs(urlparse(self.path).query)
                 if "dataset" in query:

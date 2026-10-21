@@ -2,6 +2,18 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
+## Chart manuell oder mit Tori-Analyse
+
+Die Weboberfläche startet **bei jedem Öffnen und Neuladen mit ausgeschalteter Tori-Analyse**. Die Kerzen werden angezeigt; Ray- und Messwerkzeug, gespeicherte eigene Zeichnungen, Zoom und historische Kerzenschritte bleiben nutzbar. Es erscheinen zunächst keine automatischen Trendlinien, Bruch-/Einstiegsmarker oder Tori-Infoboxen.
+
+Mit **„Tori-Analyse: Aus“** einschalten: Der Knopf wechselt auf **„Tori-Analyse: An“**, die bestehende automatische Chartanalyse wird geladen und Linien/Marker/Infobox erscheinen. Erneuter Klick blendet diese wieder aus, ohne eigene Zeichnungen oder Messungen zu löschen. Die Infobox ist nach dem Einschalten zunächst ausgeklappt. Die Wahl gilt für die laufende Seite, auch bei Intervall-/Aktienwechseln; beim Neuladen ist Tori wieder aus. URL-Parameter und alte Browsereinstellungen aktivieren die Analyse nicht automatisch.
+
+Auch Forschungslinks und über „Datum“ geöffnete Fixierungen starten ohne Tori-Einblendungen. Ein gespeicherter Stand wird ausdrücklich über Datum gewählt; alte Fixierungen werden beim manuellen Seitenstart nicht automatisch geladen. Beim Einschalten einer ausdrücklich geöffneten Fixierung werden deren ursprüngliche Linien verwendet. Ohne aktivierte Analyse ist „Fixieren“ ausgeblendet. Datum/Replay bleiben bedienbar; die Fixierungsgrenze für Linien greift wieder bei aktiver Analyse.
+
+Im Hintergrund fordert die Oberfläche zunächst `/api/chart?…&analysis=0` beziehungsweise `/api/dataset-chart?…&analysis=0` an. Die Antwort enthält Kerzen und Quellenmetadaten, `analysisEnabled: false`, leere `lanes` und keine neue `analysisId`. Linienberechnung und Signaloverlays werden übersprungen. Einschalten verwendet `analysis=1`; Ausschalten benötigt keinen neuen Abruf. Neue manuelle Kursabrufe entwerten ältere Analyse-Caches derselben Ansicht. Fehlt `analysis`, bleibt das frühere API-Verhalten aktiv; bestehende CLI-/Forschungsaufrufe werden nicht still umgestellt.
+
+Der Schalter betrifft die vorhandene automatische **Chartanalyse** mit Intervalllinien, Kontakten, Qualität und Bruchmarkierungen. Er startet keine Forschungsaufträge oder Safety-Portfolios und ändert keine laufenden Zeitpläne. Der neue Safety-Kandidatenscan bleibt der separat dokumentierte CLI-Forschungsweg.
+
 Lokale Seite mit echten historischen IEX-Kursen von Alpaca, Kerzen für **1h, 4h und 1D** sowie der automatischen Tori-Linienberechnung. Manuelle Suche unter `/`, automatische Ereignisstudien unter `/research`. Hintergrundaufträge mit Zufallsstarts, unveränderlichen Datenbeständen und JSON-Werkzeugen für Hermes. Keine Orderfunktionen.
 
 **Neu lokal, 20.10.2026:** Separater [Safety-Strategie- und Kandidatenweg für Hermes](SAFETY-STRATEGIEN.md) über die CLI, mit Kosten, kausalen Ausstiegen, Kapital-/Risikoportfolio und unabhängiger Nachrechnung. [Bilanz auf 25 Aktien](SAFETY-ERGEBNISSE.md): noch keine als profitabel bestätigte Strategie. Webprofile und Zeitpläne werden nicht automatisch umgestellt; die bisherigen Ereignisstudien bleiben Kursbeobachtungen ohne Depot-P/L.

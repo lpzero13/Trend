@@ -60,6 +60,7 @@ const state = {
     : "4h",
   range: 30,
   data: null,
+  analysisEnabled: false,
   bundles: new Map(),
   visible: { "1D": true, "4h": true, "1h": true },
   request: 0,
@@ -140,7 +141,7 @@ const candles = chart.addSeries(LC.CandlestickSeries, {
     const to = visible
       ? RayGeometry.timeAt(axis, Math.min(axis.length + 7, visible.to))
       : state.data.reference;
-    for (const tf of state.includeLines ? lanes() : []) {
+    for (const tf of state.includeLines && hasToriAnalysis() ? lanes() : []) {
       if (!state.visible[tf]) continue;
       for (const kind of ["red", "green"]) {
         const r = state.data.lanes[tf][kind];
@@ -307,7 +308,11 @@ function storedRays(symbol) {
 }
 function automaticLines() {
   rayLayer.automatic = [];
-  if (!state.data) return;
+  if (!hasToriAnalysis()) {
+    markerPlugin.setMarkers([]);
+    rayLayer.update();
+    return;
+  }
   const markers = [];
   for (const tf of lanes()) {
     if (!state.visible[tf]) continue;
@@ -400,7 +405,11 @@ function automaticLines() {
 }
 function table() {
   const data = state.data;
-  if (!data) return;
+  if (!hasToriAnalysis()) {
+    $("#line-table").replaceChildren();
+    $("#layer-controls").replaceChildren();
+    return;
+  }
   const tfs = lanes();
   const rows = [
     [
@@ -516,7 +525,7 @@ function view(bundle, tf) {
     ...bundle,
     ...selected,
     timeframe: tf,
-    lanes: structuredClone(source.lanes),
+    lanes: structuredClone(source.lanes || {}),
   };
   data.axis = data.bars.map((bar) => bar.time);
   for (const lane of Object.values(data.lanes)) {
@@ -666,15 +675,17 @@ async function load(
   if (!state.stepping) $("#replay-status").textContent = "";
   updateStepButtons();
   $("#loading-text").textContent =
-    `${symbol}: ${asOf ? "Historische Analyse" : "Kursdaten laden"} …`;
+    `${symbol}: ${analysisLabel(asOf)} …`;
   $("#refresh-button").disabled = true;
   $("#freeze-button").disabled = true;
   $("#history-button").disabled = true;
   const started = performance.now(),
-    key = bundleKey(symbol, asOf);
+    analysis = state.analysisEnabled,
+    key = bundleKey(symbol, asOf, analysis);
   try {
-    const frozen = await frozenForSymbol(symbol);
+    const frozen = analysis ? await frozenForSymbol(symbol) : null;
     let data = state.bundles.get(key);
+    let fetched = false;
     if (
       !data ||
       force ||
@@ -684,6 +695,7 @@ async function load(
         symbol,
         timeframe: state.timeframe,
         refresh: force ? "1" : "0",
+        analysis: analysis ? "1" : "0",
       });
       if (asOf) params.set("asof", asOf);
       if (state.datasetId) params.set("dataset", state.datasetId);
@@ -697,8 +709,14 @@ async function load(
       );
       data = await response.json();
       if (!response.ok) throw Error(data.error || "Datenabruf fehlgeschlagen.");
+      fetched = true;
     }
     if (id !== state.request) return false;
+    if (!analysis && fetched) {
+      // A new manual import invalidates older overlays for the same view.
+      state.bundles.delete(bundleKey(symbol, asOf, true));
+      state.bundles.delete(bundleKey(symbol, isoCutoff(data), true));
+    }
     assertFrozenCompatible(data, frozen);
     const preserve =
       symbol === state.symbol &&
@@ -721,7 +739,7 @@ async function load(
     showError(e.message);
     if (!state.data) $("#company").textContent = `${symbol} · Keine Kursdaten`;
     $("#connection").textContent = state.data
-      ? "⚠ Bisherige Analyse bleibt sichtbar"
+      ? "⚠ Bisherige Chartansicht bleibt sichtbar"
       : "Keine Kursdaten";
     return false;
   } finally {
@@ -731,6 +749,7 @@ async function load(
       $("#freeze-button").disabled = !state.data || !!state.researchJob;
       $("#history-button").disabled = false;
       updateStepButtons();
+      updateToriControls();
     }
   }
 }
@@ -805,7 +824,7 @@ function renderAssets() {
   );
 }
 function details() {
-  if (!state.data) return;
+  if (!hasToriAnalysis()) return;
   const data = state.data;
   $("#detail-symbol").textContent = `${data.symbol} · ${data.company}`;
   $("#details-content").innerHTML =
@@ -884,12 +903,13 @@ $("#theme-button").onclick = () => {
   write("tori-theme", state.theme);
   theme();
 };
-$("#info-panel").hidden = !state.info;
+$("#info-panel").hidden = true;
 $("#info-button").setAttribute("aria-pressed", String(state.info));
 $("#info-button").onclick = () => {
+  if (!hasToriAnalysis()) return;
   state.info = !state.info;
   write("tori-info", state.info);
-  $("#info-panel").hidden = !state.info;
+  updateToriControls();
   $("#info-button").setAttribute("aria-pressed", String(state.info));
   rayLayer.update();
 };
@@ -1006,5 +1026,6 @@ $("#ticker").textContent = state.symbol;
 theme();
 updateDrawingSummary();
 setupAnalysisUI();
+$("#tori-analysis").onclick = toggleToriAnalysis;
 setupMeasurements();
 load(state.symbol);

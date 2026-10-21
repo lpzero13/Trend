@@ -17,7 +17,7 @@
     <script defer src="/measurements.js"></script>
     <script defer src="/app.js"></script>
   </head>
-  <body>
+  <body class="chart-page">
     <nav class="app-navigation" aria-label="Hauptnavigation">
       <span class="brand">tori<span>.</span></span>
       <a href="/" aria-current="page">Chart</a>
@@ -42,6 +42,7 @@
       </div>
       <select
         id="axis-mode"
+        hidden
         class="axis-select"
         aria-label="Linienbasis"
         title="Linienbasis: Abstände zwischen Handelskerzen"
@@ -51,9 +52,17 @@
       </select>
       <div class="toolbar-spacer"></div>
       <button
+        id="tori-analysis"
+        class="analysis-toggle"
+        type="button"
+        aria-pressed="false"
+        aria-controls="info-panel"
+        title="Automatische Tori-Analyse einschalten"
+      >Tori-Analyse: Aus</button>
+      <button
         id="history-button"
-        title="Analyse zu einem vergangenen Zeitpunkt"
-        aria-label="Analysezeitpunkt auswählen"
+        title="Chart zu einem vergangenen Zeitpunkt anzeigen"
+        aria-label="Chartzeitpunkt auswählen"
       >
         Datum
       </button>
@@ -76,6 +85,7 @@
       </div>
       <button
         id="freeze-button"
+        hidden
         title="Automatische Linien mit Datenbasis lokal speichern und fixieren"
         aria-pressed="false"
       >
@@ -95,6 +105,7 @@
         ◐</button
       ><button
         id="info-button"
+        hidden
         title="Infobox ein-/ausblenden"
         aria-label="Infobox ein-/ausblenden"
         aria-pressed="true"
@@ -177,6 +188,7 @@
       </div>
       <aside
         id="info-panel"
+        hidden
         class="info-panel"
         aria-label="Trendlinien-Infobox"
       >
@@ -276,7 +288,7 @@
     <dialog id="history-dialog" aria-labelledby="history-title">
       <div class="dialog-header">
         <div>
-          <h1 id="history-title">Analysezeitpunkt</h1>
+          <h1 id="history-title">Chartzeitpunkt</h1>
           <p>Datum und Uhrzeit in New York (ET)</p>
         </div>
         <button
@@ -291,9 +303,9 @@
           >Nur bis dahin abgeschlossene Kerzen verwenden</label
         ><input type="datetime-local" id="analysis-at" required step="60" />
         <div class="history-actions">
-          <button type="submit">Zu diesem Zeitpunkt analysieren</button
+          <button type="submit">Zu diesem Zeitpunkt springen</button
           ><button type="button" id="live-analysis">
-            Zur aktuellen Analyse
+            Zur aktuellen Ansicht
           </button>
         </div>
       </form>

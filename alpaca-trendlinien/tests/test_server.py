@@ -83,6 +83,27 @@ class ServerTests(unittest.TestCase):
             urllib.request.urlopen(self.url + '/api/assets?offset=invalid')
         self.assertEqual(error.exception.code, 400)
 
+    def test_chart_analysis_flag_is_optional_and_explicit(self):
+        for query, enabled in [("", True), ("&analysis=0", False), ("&analysis=1", True)]:
+            with patch("server.chart_payload", return_value={"analysisEnabled": enabled}) as chart:
+                with urllib.request.urlopen(self.url + "/api/chart?symbol=TEST" + query) as response:
+                    self.assertEqual(json.load(response)["analysisEnabled"], enabled)
+                chart.assert_called_once_with("TEST", "4h", False, None, include_analysis=enabled)
+        for value in ("", "true", "no", "1&analysis=0"):
+            with patch("server.chart_payload") as chart:
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(self.url + "/api/chart?symbol=TEST&analysis=" + value)
+                self.assertEqual(error.exception.code, 400)
+                chart.assert_not_called()
+
+    def test_manual_dataset_link_does_not_resolve_a_research_signal(self):
+        with patch("server.chart_dataset", return_value={"analysisEnabled": False}) as chart, \
+             patch("server.jobs.get_trial", side_effect=AssertionError("No signal lookup")) as trial:
+            with urllib.request.urlopen(self.url + "/api/dataset-chart?dataset=pinned&job=job&trial=trial&analysis=0") as response:
+                self.assertFalse(json.load(response)["analysisEnabled"])
+            trial.assert_not_called()
+            chart.assert_called_once_with("pinned", "4h", None, None, include_analysis=False)
+
     def post_snapshot(self, body=b'{}', **headers):
         return urllib.request.urlopen(urllib.request.Request(self.url+'/api/snapshots', data=body,
             headers={'Origin':self.url, 'Content-Type':'application/json', **headers}, method='POST'))
