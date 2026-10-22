@@ -1,5 +1,13 @@
 # Prüfprotokoll
 
+## Reservierter Zeitvergleich und Beobachter: 22.10.2026
+
+- **256 Python-Tests je 3.12/3.13**, jeweils ein bestehender Windows-Symlink-Skip; **35 JS-Tests** bestanden. Elf neue Tests prüfen Beobachtungs-Wiederaufnahme, Zukunftsimmunität, idempotenten atomaren Speicherweg, geänderte alte Daten/Engine/Zeit, neue Dataset-ID bei identischem Präfix, unveränderliche geschlossene Pfade, ungeklärte Datenlöcher, gemeinsame Entscheidungstore und fehlende Entwicklungsmerkmale. Keine Webänderung/Browserprüfung.
+- Vorabvertrag `e7f4112bb6e6fc14ccd6976d83202e2179874a08ab0255acbb4d9b0305e9be14`, privater Lauf `artifacts/retest-independent-20261022-a`: 25 Aktien, zwei Geometrien, alle 50 Signalzustände vor Ergebnisauswertung eingefroren; Beginn aus gespeichertem Zustand am 02.07.2026. Danach einmaliger Vergleich auf 06.07.–16.10.2026. Zeitabschnitt danach nicht mehr als frischer Holdout verwendbar. Keine neuen Parameter/Entrygrenzen daraus ausgewählt.
+- Separates Kalender-/ATR-/Decimal-Orakel und Cash-/Risikoauditor prüfen **43 Fälle / 86 Exitpfade, 109 ATR-Ereignisse und vier Modellportfolios**. Gepaarte R-Differenzen zusätzlich aus Decimal-Summen nachgerechnet. Datenqualität nur anhand vorab gespeicherter erwarteter/vorhandener 5m-Slots, relevante 4h-Vorgeschichte pro Entry; keine erfundenen Kerzen oder Auswahl nach zukünftiger Pfadvollständigkeit.
+- AAPL/AMZN-Technikreplay: gespeicherter Zwischenstand am 18.08. und Fortsetzung bis 16.10. identisch zu Einmallauf und eingefrorenem Ergebnisarchiv; drei AMZN-/keine AAPL-Retests, gleiche Ereignis-IDs, Wiederholungsaufruf ohne neue Ereignisse. Zwei flache private Beispielzustände für zukünftige Beobachtung vorbereitet. Das ist keine prospektive Performance, kein laufender Scheduler/Benachrichtigungsdienst.
+- Hauptbefund: Zonen nur fünf von 16 positiv, beide Modell-Depots −2,91 %, maximaler 5m-Drawdown −6,22 %; ATR-Vorabtor nicht bestanden. Separate kleine Hüllenreferenz positiv; kein Modell nachträglich automatisch zum Standard erklärt. Entwicklungsmerkmale nur beschreibend aus alten 36 Fällen, kein trainierter Filter. [Vollständige Bilanz](RETEST-BEOBACHTUNG-ERGEBNISSE.md).
+
 ## Drei zusätzliche Retest-Exitvarianten: 22.10.2026
 
 - **245 Python-Tests je unter 3.12/3.13**, jeweils ein bestehender Windows-Symlink-Skip; **35 JS-Tests bestanden**. 16 neue Gegenbeispiele für unveränderte Zone, Docht/Schluss, Latenz/Overnight, ursprünglichen Stop bis Exit, Nettokosten-/Nullgrenze am fünften Schluss, positive Fortsetzung, Aktivierung nur per Schluss, ATR-Monotonie/Gap, Missing-Quelle/-Pfad, Verfügbarkeit, Zukunftsimmunität und separate Oracle-Negativproben. Keine neue Browserprüfung oder Webänderung.
