@@ -39,7 +39,7 @@ def usage(*, fresh=False):
     with _lock:
         old=_cache.get(str(root))
         if old and not fresh and time.monotonic()-old[0]<30: return old[1]
-        categories={key:{"bytes":0,"files":0} for key in ("market","datasets","snapshots","research","catalog","other")}
+        categories={key:{"bytes":0,"files":0} for key in ("market","datasets","snapshots","research","forward","catalog","other")}
         skipped=0
         if root.exists():
             for folder, dirs, names in os.walk(root,followlinks=False):
@@ -63,7 +63,7 @@ def usage(*, fresh=False):
         return result
 
 
-def references(db, root):
+def references(db, root, *, forward_root=None):
     """Fail closed: unknown or broken reference documents disable cleanup candidates."""
     refs=set()
     def scan(value):
@@ -90,6 +90,24 @@ def references(db, root):
     for path in (root/"snapshots").glob("*.json"):
         if path.is_symlink(): raise DataError("Snapshot-Link: Referenzen nicht sicher bestimmbar.",409)
         scan(json.loads(path.read_text("utf-8")))
+    watch = (forward_root or root)/"forward/watch.sqlite3"
+    if watch.exists():
+        import sqlite3
+        from contextlib import closing
+        from datasets import digest
+        if watch.is_symlink() or watch.parent.is_symlink():
+            raise DataError("Beobachtungsdatenbank-Link: Referenzen nicht sicher bestimmbar.",409)
+        try:
+            with closing(sqlite3.connect(watch.as_uri()+"?mode=ro",uri=True)) as state:
+                if state.execute("PRAGMA user_version").fetchone()[0] != 1:
+                    raise ValueError("unknown watch schema")
+                for row in state.execute("SELECT state,checksum FROM lanes"):
+                    value=json.loads(row[0])
+                    if digest(value)!=row[1]:raise ValueError("watch checksum")
+                    scan(value)
+                refs.update(r[0] for r in state.execute("SELECT dataset FROM cases UNION SELECT dataset FROM imports WHERE dataset IS NOT NULL"))
+        except (sqlite3.Error,ValueError,KeyError,TypeError) as error:
+            raise DataError("Beobachtungsreferenzen nicht vollständig lesbar; keine Bereinigung oder Sicherung freigegeben.",409) from error
     return refs
 
 

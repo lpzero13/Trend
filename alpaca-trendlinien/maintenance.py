@@ -33,7 +33,7 @@ def checked_dataset(path):
 
 
 def valid_relative(name):
-    return name=="research/jobs.sqlite3" or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|snapshots/[a-f0-9]{24}\.json",name))
+    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|snapshots/[a-f0-9]{24}\.json",name))
 
 
 def new_target(target):
@@ -58,9 +58,15 @@ def backup(target):
         db_path=stage/"research/jobs.sqlite3"
         with connection() as source, closing(sqlite3.connect(db_path)) as destination:
             source.backup(destination)
+        watch=root/"forward/watch.sqlite3"
+        if watch.exists():
+            if watch.is_symlink() or watch.parent.is_symlink():raise DataError("Beobachtungsdatenbank darf kein Link sein.",409)
+            (stage/"forward").mkdir()
+            with closing(sqlite3.connect(watch.as_uri()+"?mode=ro",uri=True)) as source, closing(sqlite3.connect(stage/"forward/watch.sqlite3")) as destination:
+                source.backup(destination)
         # All referenced datasets were published before their references committed to SQLite.
         with closing(sqlite3.connect(db_path)) as snapshot:
-            refs=references(snapshot,root)
+            refs=references(snapshot,root,forward_root=stage)
         paths=[p for area in ("datasets","snapshots") for p in (root/area).glob("*.json")]
         present={p.stem for p in paths if p.parent.name=="datasets"}
         if not refs<=present: raise DataError("Referenziertes Dataset fehlt; kein unvollständiges Backup erstellt.",409)
@@ -95,6 +101,9 @@ def verify(folder):
             if any(p.is_symlink() for p in (path,path.parent)) or not path.resolve().is_relative_to(root): raise ValueError()
             if not path.is_file() or path.stat().st_size!=meta["bytes"] or checksum(path)!=meta["sha256"]: raise ValueError()
             if name.startswith("datasets/"): checked_dataset(path)
+        if "forward/watch.sqlite3" in value["files"]:
+            with closing(sqlite3.connect((root/"forward/watch.sqlite3").as_uri()+"?mode=ro",uri=True)) as watch:
+                if watch.execute("PRAGMA integrity_check").fetchone()[0]!="ok":raise ValueError()
         with closing(sqlite3.connect((root/"research/jobs.sqlite3").as_uri()+"?mode=ro",uri=True)) as db:
             if db.execute("PRAGMA integrity_check").fetchone()[0]!="ok": raise ValueError()
             version=db.execute("PRAGMA user_version").fetchone()[0]

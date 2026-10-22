@@ -2,6 +2,8 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
+**Neue lokale Beobachtung, 22.10.2026:** Menü **Beobachtung** (`/watch`) zeigt neue Fälle beider unveränderter Geometrien mit damaligen Linien, bewusst zuschaltbarem Verlauf und manuellen Urteilen. Separater Hintergrunddienst mit gespeichertem Beginn, konsistentem Erstimport, späteren inkrementellen Updates, Journal und Wiederaufnahme. [Regeln, CLI, Start/Stop und Betriebsgrenzen](FORWARD-BEOBACHTUNG.md). Lokal gestartet; Erstimport aller 25 Aktien abgeschlossen, beide Geometrien werden im Hintergrund beobachtet. Noch keine prospektive Erfolgsbilanz. Kein automatischer Handel oder Proxmox-Rollout.
+
 **Unabhängiger Vergleich und Beobachtung, 22.10.2026:** [Bilanz, Werkzeuge und Hermes-Vertrag](RETEST-BEOBACHTUNG-ERGEBNISSE.md). Bisher reservierter Abschnitt Juli–Oktober einmalig mit eingefrorenen Regeln ausgewertet: Zonen-Retests diesmal negativ, ATR-Risikohypothese nicht bestätigt. [Vorabplan](RETEST-BEOBACHTUNG-PLAN.md), [alle Tabellen](RETEST-BEOBACHTUNG-TABELLEN.md). Neuer persistierter Offline-Beobachter für ursprüngliche Entries und beide Exitpfade; Wiederaufnahme geprüft, noch kein prospektiver Dauerdienst. Webstandard bleibt unverändert.
 
 **Weitere interne Exits, 22.10.2026:** [Orange-Zonen-Fehlschlag, Fünf-Tage-Zeitexit und ATR-Gewinnschutz](RETEST-EXIT-VARIANTEN-ERGEBNISSE.md), jeweils gegen die feste Safety. Regeln vorab fixiert, nacheinander getestet; kein neuer Webstandard. Keine klare Ertragsverbesserung bei den Zonen, ATR als weiter zu prüfende Risikovariante. Private Laufdaten/Marktdatasets werden nicht versioniert.

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de" class="watch-document">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tori · Beobachtung</title><link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/watch.css">
+  <script defer src="/vendor/lightweight-charts.js"></script><script defer src="/api.js"></script>
+  <script defer src="/watch-view.js"></script><script defer src="/watch.js"></script>
+</head>
+<body class="watch-page">
+  <header class="watch-header"><a class="brand" href="/">tori<span>.</span></a>
+    <nav class="app-navigation" aria-label="Hauptnavigation"><a href="/">Chart</a><a href="/research">Forschung</a><a href="/lab">Labor</a><a href="/watch" aria-current="page">Beobachtung</a></nav>
+    <button id="watch-theme" aria-label="Hell/Dunkel wechseln">◐</button>
+  </header>
+  <main>
+    <h1>Neue Fälle. Ursprüngliche Linien.</h1>
+    <p>Strenge Hülle und Kontaktzone als getrennte Hypothesen. Nur Long-Beobachtung; keine Orders. Die Regeln bleiben unverändert.</p>
+    <section class="watch-card" aria-label="Betriebszustand"><strong id="watch-status" role="status">Beobachtung wird geprüft …</strong>
+      <p id="watch-progress"></p><p id="watch-error" role="alert"></p><details><summary>Datenstände der Aktien</summary><div id="watch-imports"></div></details>
+    </section>
+    <div class="watch-layout">
+      <section class="watch-card"><h2>Kandidaten zur Sichtprüfung</h2>
+        <div class="watch-controls"><label>Geometrie<select id="watch-model"><option value="">Beide</option><option value="hull_exact">Strenge Hülle</option><option value="swing_zone">Kontaktzone</option></select></label>
+          <label>Phase<select id="watch-phase"><option value="">Alle</option><option value="near">Annäherung</option><option value="breakout">Ausbruch</option><option value="pullback">Rücklauf</option><option value="retest">Retest bestätigt</option><option value="bounce">Grün-Reaktion</option></select></label>
+          <button id="watch-refresh">Liste aktualisieren</button></div>
+        <p id="watch-count"></p><div id="watch-cases"></div><button id="watch-more" hidden>Weitere Fälle</button>
+      </section>
+      <section class="watch-card"><h2 id="watch-case-title">Fall auswählen</h2>
+        <p id="watch-explanation">Die erste Ansicht zeigt ausschließlich die damals abgeschlossenen 4h-Kerzen und ursprünglichen Linien.</p>
+        <label><input id="watch-latest" type="checkbox" disabled>Späteren Verlauf bis zum gespeicherten Datenstand einblenden</label>
+        <div id="watch-chart" aria-label="Kerzen mit eingefrorenen ursprünglichen Linien"></div>
+        <p id="watch-line-key">Rot: ursprüngliche Aktionslinie · Grün: damals bekannte Safety · Orange: gebrochene Aktionslinie</p>
+        <p id="watch-case-meta"></p><a id="watch-open-chart" href="/" hidden>Im manuellen Chart öffnen</a>
+        <pre id="watch-outcomes" hidden></pre>
+        <form id="watch-review"><h3>Manuelles Urteil</h3>
+          <label>Bewertung<select id="watch-verdict" required disabled><option value="unclear">Unklar</option><option value="interesting">Interessant</option><option value="reject">Ablehnen</option></select></label>
+          <label>Notiz<textarea id="watch-note" rows="3" maxlength="2000" disabled></textarea></label>
+          <p id="watch-review-context">Bewertungen verändern die Berechnung nicht. Verlaufssicht wird mitprotokolliert.</p>
+          <button id="watch-save" disabled>Urteil speichern</button><span id="watch-saved" role="status"></span>
+        </form>
+      </section>
+    </div>
+  </main>
+</body></html>

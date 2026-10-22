@@ -1,0 +1,30 @@
+[Unit]
+Description=Tori frozen prospective observation (no orders)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=900
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=tori
+Group=tori
+WorkingDirectory=/opt/tori
+EnvironmentFile=/etc/tori/tori.env
+Environment=TORI_DATA_DIR=/var/lib/tori
+Environment=TORI_API_REQUESTS_PER_MINUTE=40
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/tori/.venv/bin/python /opt/tori/tools/forward_watch.py run --id ${TORI_WATCH_RUN_ID}
+Restart=on-failure
+RestartSec=60
+StateDirectory=tori
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tori
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
