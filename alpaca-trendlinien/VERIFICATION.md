@@ -1,5 +1,12 @@
 # Prüfprotokoll
 
+## Retest-Exit-/Kapitalvergleich: 22.10.2026
+
+- **229 Python-Tests je unter 3.12/3.13 bestanden**, jeweils ein bestehender Windows-Symlink-Skip; **35 JS-Tests bestanden**. Neun neue gezielte Tests: nur einmal gepufferter Archivstop, kein Diagonal-Schlussexit, Pivotbestätigung und Wirksamkeitslatenz, keine Stoplockerung/Ankermutation, Gaps/Kosten/fehlende Pfade, Zukunftsimmunität, kausale Historienauswahl, Entryverfügbarkeit und getrennte Struktur-/Stopzähler. Keine neuen Browserkomponenten oder visuelle Abnahme.
+- Isolierter finaler Lauf `artifacts/retest-exits-20261022-b`, Vertrag `44b6b5f2a5c701a78a930c097c94a99d7787e9634402147dca0f02fd71873298`: 155 unveränderte Retest-Fälle, 310 Stopmodellpfade und acht chronologische Cash-/Risikoledger. Separater Prüfer rekonstruiert alle Pfade, 35 Strukturereignisse, Anfangsstop/Historienauswahl, Decimal-P/L/R und Kapitalentscheidungen. Negativproben verwerfen verfälschte P/L, Ausführungspreise, Historienflags und Wirksamkeitszeiten. Alle 155 Fall-/Pfadaufzeichnungen vor und nach reiner Statistikzählerpräzisierung identisch; erneuter Checkpointlauf liefert bytegleiches Entwicklungsergebnis und Entscheidung. Private Belege: `verification.json`, `negative-checks.json`, `resume-proof.json` im Laufordner.
+- Hauptgruppe nur zum Signal bekannte vollständige 4h-Vorgeschichte samt ATR-Vorlauf, Kalendergrenze zehn Sitzungen; Zukunftspfadvollständigkeit nicht zur Depot-Entryauswahl verwendet. Lückenfälle und unvollständige Abschlüsse separat, finalen Holdout nicht ausgewertet. Beide Phasen waren schon bekannt. Positive Zonen-Retests hängen in der Entwicklung stark an großen Einzelgewinnern, Nachziehen nur sehr geringer bzw. später negativer Effekt. [Regeln und Ergebnisaussagen](RETEST-EXIT-ERGEBNISSE.md). Modellkonsistenz ist weder echte Ausführung noch bewiesene zukünftige Profitabilität.
+- Bestehende Entry-/Web-/Worker-/Safety-Engines nicht geändert; neue isolierte Module/Werkzeuge. Keine Providerabrufe, Brokerorders, Nachrichten, Containeränderungen oder neuer Upload. Keine privaten Datasets/Artefakte eingecheckt.
+
 ## Interne Einstiegssuche: 21.10.2026
 
 - 220 Python-Tests je unter 3.12/3.13 bestanden, jeweils ein bestehender Windows-Symlink-Skip; 35 JS-Tests bestanden. 16 neue gezielte Gegenbeispiele für Geometrie, Reaktionszählung, Kausalität, Latenz, Drift, Retest, unveränderte Anker, Safety, fehlende Ausführung, Wiederaufnahme, idempotenten Offline-Scanner und manuelle Bewertung. Keine neue Browserprüfung; Webcode und laufender Dienst nicht umgestellt.

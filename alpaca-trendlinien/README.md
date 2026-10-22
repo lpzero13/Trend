@@ -2,6 +2,8 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
+**Interner Versuch, 22.10.2026:** [Retest-Exit-/Kapitalvergleich](RETEST-EXIT-ERGEBNISSE.md) auf unveränderten archivierten Entries: fester Stop gegen bestätigtes Stopnachziehen, zehn Sitzungen, vollständige Vorgeschichte und Datenlücken getrennt. Eigene CLI, keine Umstellung der Oberfläche. Zonen-Retests im begrenzten bekannten Datensatz positiv; Nachziehen bisher kein überzeugender Vorteil, keine validierte Handelsfreigabe.
+
 **Interner Versuch, 21.10.2026:** [Zusätzliche Einstiegssuche und persistierter Beobachtungsscanner](EINSTIEGSSUCHE-ERGEBNISSE.md). Separate CLI-Module; kein automatischer Wechsel der Webanalyse. Der Vergleich findet mehr zusätzliche Zeitpunkte, bisher keine nachweislich besseren direkten Einstiege. Regeln, Ergebnisgrenzen und Wiederholungsbefehle sind dort dokumentiert.
 
 ## Chart manuell oder mit Tori-Analyse
