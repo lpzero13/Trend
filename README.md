@@ -10,6 +10,7 @@ Weboberfläche für die manuelle Aktienanalyse und Hintergrunddienst für reprod
 
 Weitere Dokumentation:
 
+- [Drei weitere Retest-Exitideen: Vergleich und Verbesserungsvorschläge](alpaca-trendlinien/RETEST-EXIT-VARIANTEN-ERGEBNISSE.md)
 - [Retest mit fester oder nachgezogener Safety: interner Exit-/Kapitalvergleich](alpaca-trendlinien/RETEST-EXIT-ERGEBNISSE.md)
 - [Interne Einstiegssuche: zusätzliche Linien, Hermes-Frühwarnungen und empirische Bilanz](alpaca-trendlinien/EINSTIEGSSUCHE-ERGEBNISSE.md)
 - [Bedienung der Chartoberfläche](alpaca-trendlinien/README.md)

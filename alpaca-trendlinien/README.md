@@ -2,6 +2,8 @@
 
 Repository und zentrale Hermes-/Container-Dokumentation: [Trend](https://github.com/lpzero13/Trend) · [HERMES.md](../HERMES.md). Dieses Verzeichnis ist die Anwendung innerhalb des Repositories.
 
+**Weitere interne Exits, 22.10.2026:** [Orange-Zonen-Fehlschlag, Fünf-Tage-Zeitexit und ATR-Gewinnschutz](RETEST-EXIT-VARIANTEN-ERGEBNISSE.md), jeweils gegen die feste Safety. Regeln vorab fixiert, nacheinander getestet; kein neuer Webstandard. Keine klare Ertragsverbesserung bei den Zonen, ATR als weiter zu prüfende Risikovariante. Private Laufdaten/Marktdatasets werden nicht versioniert.
+
 **Interner Versuch, 22.10.2026:** [Retest-Exit-/Kapitalvergleich](RETEST-EXIT-ERGEBNISSE.md) auf unveränderten archivierten Entries: fester Stop gegen bestätigtes Stopnachziehen, zehn Sitzungen, vollständige Vorgeschichte und Datenlücken getrennt. Eigene CLI, keine Umstellung der Oberfläche. Zonen-Retests im begrenzten bekannten Datensatz positiv; Nachziehen bisher kein überzeugender Vorteil, keine validierte Handelsfreigabe.
 
 **Interner Versuch, 21.10.2026:** [Zusätzliche Einstiegssuche und persistierter Beobachtungsscanner](EINSTIEGSSUCHE-ERGEBNISSE.md). Separate CLI-Module; kein automatischer Wechsel der Webanalyse. Der Vergleich findet mehr zusätzliche Zeitpunkte, bisher keine nachweislich besseren direkten Einstiege. Regeln, Ergebnisgrenzen und Wiederholungsbefehle sind dort dokumentiert.
