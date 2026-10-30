@@ -20,9 +20,10 @@ from trendlines import RULES_VERSION
 def engine_hash():
     import hashlib
     value = hashlib.sha256()
-    for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "jobs.py",
+    for name in ("models.py", "trendlines.py", "analysis_service.py", "research.py", "datasets.py", "parquet_store.py", "jobs.py",
                  "market_calendar.py","data_quality.py","providers.py","requirements.txt", "tori_entries.py", "tori_observations.py",
-                 "lab_data.py","lab_profiles.py","lab_metrics.py","lab_splits.py","lab_registry.py","lab_engine.py","lab_jobs.py","lab_execution.py","contact_zones.py"):
+                 "lab_data.py","lab_profiles.py","lab_metrics.py","lab_splits.py","lab_registry.py","lab_engine.py","lab_jobs.py","lab_execution.py","contact_zones.py",
+                 "fan_geometry.py", "fan_master.py", "fan_observer.py", "fan_execution.py", "fan_study.py", "fan_jobs.py", "weekly_chart.py"):
         value.update(name.encode()+b"\0"+(ROOT/name).read_bytes())
     return value.hexdigest()
 
@@ -42,6 +43,18 @@ def _insert_job(db, spec, automatic=False):
     identity = uuid.uuid4().hex
     now = time.time()
     metadata = manifest()
+    if spec.get("entry_mode") == "fan":
+        from fan_study import VERSION as fan_version
+        from fan_geometry import VERSION as geometry_version
+        from fan_geometry import profile
+        from dataclasses import asdict
+        from fan_master import VERSION as master_version
+        metadata.update(studyVersion=fan_version, rulesVersion=master_version if spec["fan"]["geometry_variants"] == ["master"] else geometry_version, entryMode="fan",
+                        engineProfiles={variant:asdict(profile(variant,spec["fan"]["geometry"])) for variant in spec["fan"]["geometry_variants"]},
+                        signalTimeframe=spec["fan"]["timeframe"], contextTimeframe="separate source lanes; no implicit bias gate",
+                        execution="next expected regular 5m open after confirmation + latency; conditional paper entry; missing open is unavailable",
+                        outcomes="independent fixed/higher-low stop paths and 5/10/20-session observations; no portfolio return",
+                        fan=spec["fan"])
     if spec.get("entry_mode")=="lab":
         from lab_profiles import VERSION, profile_manifest
         metadata.update(studyVersion=VERSION,entryMode="lab",experimentId=spec["lab"]["experiment_id"],
@@ -123,6 +136,9 @@ def report(identity,offset=0,limit=250,entry_filter="all"):
     if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=1000:
         raise DataError("Ungültige Ergebnisseite.",400)
     job = get_job(identity)
+    if job["spec"].get("entry_mode") == "fan":
+        from fan_jobs import report as fan_report
+        return fan_report(job, offset, limit, entry_filter)
     if job["spec"].get("entry_mode")=="lab":
         from lab_jobs import report as lab_report
         return lab_report(job,offset,limit,entry_filter)
@@ -308,6 +324,9 @@ def run_job(identity, stop=None):
     if job["manifest"]["engineHash"] != engine_hash():
         raise DataError("Engine-Version hat sich geändert. Bitte neuen Forschungsauftrag starten.",409)
     spec = job["spec"]
+    if spec.get("entry_mode") == "fan":
+        from fan_jobs import run
+        return run(job, stop)
     if spec.get("entry_mode")=="lab":
         from lab_jobs import run
         return run(job,stop)

@@ -1,6 +1,33 @@
 /* Pure coordinate math: straight rays use logical candle positions. */
 const axisSteps = new WeakMap();
 const RayGeometry = {
+  validBasis(basis) {
+    return basis?.version === 'drawing-axis-2' && Array.isArray(basis.axis) && basis.axis.length >= 2 &&
+      basis.axis.every((t,i,a)=>Number.isFinite(t) && (!i || t>a[i-1]));
+  },
+  capture(axis) { return {version:'drawing-axis-2',axis:[...axis]}; },
+  color(value) { return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : '#3988ee'; },
+  pixelAt(scale, logical) {
+    if (!Number.isFinite(logical)) return null;
+    // Bundled Lightweight Charts returns 0 for fractional logicalToCoordinate
+    // arguments. Interpolate between supported integer candle coordinates.
+    const i=Math.floor(logical),a=scale.logicalToCoordinate(i);
+    if(logical===i || a===null)return a;
+    const b=scale.logicalToCoordinate(i+1);
+    return b===null ? null : a+(b-a)*(logical-i);
+  },
+  logicalAtPixel(scale,pixel) {
+    const guess=scale.coordinateToLogical(pixel);
+    if(guess===null)return null;
+    const i=Math.floor(guess),a=scale.logicalToCoordinate(i),b=scale.logicalToCoordinate(i+1);
+    return a===null || b===null || a===b ? guess : i+(pixel-a)/(b-a);
+  },
+  bounds(extension, a, b, from, to) {
+    const left = Math.min(a,b), right = Math.max(a,b);
+    const start = ['left','both','horizontal'].includes(extension) ? from : Math.max(from,left);
+    const end = ['right','both','horizontal',undefined].includes(extension) ? to : Math.min(to,right);
+    return start < end ? {start,end} : null;
+  },
   step(axis) {
     if (axisSteps.has(axis)) return axisSteps.get(axis);
     const counts = new Map();
@@ -43,13 +70,23 @@ const RayGeometry = {
     return axis[i] + (logical - i) * (axis[i + 1] - axis[i]);
   },
   candleValue(axis, ray, time) {
+    return this.valueAtLogical(axis,ray,this.logicalAt(axis,time));
+  },
+  valueAtLogical(axis,ray,logical) {
+    // The two saved time/price anchors are authoritative. Reproject them into
+    // the displayed interval and join them with one straight line. Replaying
+    // the original interval's per-candle prices here would create a stairway.
+    // Legacy basis metadata is retained for compatibility, never resampled.
     const a = ray.a.logical ?? this.logicalAt(axis, ray.a.time),
       b = ray.b.logical ?? this.logicalAt(axis, ray.b.time);
     if (a === null || b === null || Math.abs(b - a) < 1e-10) return null;
     return (
       ray.a.price +
-      ((ray.b.price - ray.a.price) * (this.logicalAt(axis, time) - a)) / (b - a)
+      ((ray.b.price - ray.a.price) * (logical - a)) / (b - a)
     );
+  },
+  drawingPoints(axis, ray, start, end) {
+    return [start,end];
   },
   measure(axis, a, b) {
     return {
@@ -136,16 +173,17 @@ class RayLayer {
   timeAt(logical) {
     return RayGeometry.timeAt(this.axis(), logical);
   }
-  point(anchor) {
+  axisFor(ray) {
+    return ray?.basis ? this.drawingAxes?.[this.timeframe] || this.axis() : this.axis();
+  }
+  point(anchor, axis=this.axis()) {
     return {
-      x: this.chart
-        .timeScale()
-        .logicalToCoordinate(anchor.logical ?? this.logicalAt(anchor.time)),
+      x: RayGeometry.pixelAt(this.chart.timeScale(),anchor.logical ?? RayGeometry.logicalAt(axis,anchor.time)),
       y: this.series.priceToCoordinate(anchor.price),
     };
   }
   anchor(point) {
-    const logical = this.chart.timeScale().coordinateToLogical(point.x),
+    const logical = RayGeometry.logicalAtPixel(this.chart.timeScale(),point.x),
       price = this.series.coordinateToPrice(point.y);
     if (
       logical === null ||
@@ -154,7 +192,8 @@ class RayLayer {
       price <= 0
     )
       return null;
-    return { time: Math.round(this.timeAt(logical)), price };
+    const axis=this.measureActive ? this.axis() : this.drawingAxes?.[this.timeframe] || this.axis();
+    return { time: Math.round(RayGeometry.timeAt(axis,logical)), price };
   }
   coords(event) {
     const r = this.host.getBoundingClientRect();
@@ -170,27 +209,43 @@ class RayLayer {
     );
   }
   line(ray) {
-    const a = this.point(ray.a),
-      b = this.point(ray.b);
+    const axis=this.axisFor(ray),a = this.point(ray.a,axis),
+      b = this.point(ray.b,axis);
     return [a, b];
   }
   hit(p) {
     for (const ray of [...this.items].reverse()) {
+      if (!this.visible(ray)) continue;
       const [a, b] = this.line(ray);
       for (const key of ["a", "b"]) {
         const q = key === "a" ? a : b;
         if (q.x === null || q.y === null) continue;
         if (Math.hypot(p.x - q.x, p.y - q.y) < 10) return { ray, key };
       }
-      const logical = this.chart.timeScale().coordinateToLogical(p.x);
-      const time = this.timeAt(logical);
+      const logical = RayGeometry.logicalAtPixel(this.chart.timeScale(),p.x);
+      const axis=this.axisFor(ray),time = RayGeometry.timeAt(axis,logical);
       const y = this.series.priceToCoordinate(
-        RayGeometry.candleValue(this.axis(), ray, time),
+        RayGeometry.candleValue(axis, ray, time),
       );
-      if (time >= ray.a.time && y !== null && Math.abs(p.y - y) < 8)
+      const bounds=RayGeometry.bounds(ray.extend, RayGeometry.logicalAt(axis,ray.a.time),RayGeometry.logicalAt(axis,ray.b.time),logical-.01,logical+.01);
+      if (bounds && y !== null && Math.abs(p.y - y) < 8)
         return { ray, key: "line" };
     }
     return null;
+  }
+  visible(ray) {
+    return !Number.isFinite(this.cutoff) || !Number.isFinite(ray.observedAt) || ray.observedAt <= this.cutoff;
+  }
+  changeExtension(extension) {
+    if (!['right','left','both','segment','horizontal'].includes(extension)) return;
+    this.extension=extension;
+    const ray=this.items.find(r=>r.id===this.selected);
+    if (ray) {
+      this.remember();ray.extend=extension;
+      ray.observedAt=this.cutoff;
+      if (extension==='horizontal') ray.b.price=ray.a.price;
+      this.commit();
+    }
   }
   snapshot() {
     return JSON.stringify(this.items);
@@ -226,6 +281,26 @@ class RayLayer {
     this.draft = null;
     this.undoStack = [];
     this.update();
+  }
+  bindAxes(axes) {
+    this.drawingAxes=axes;
+    let changed=false;
+    for(const ray of this.items) {
+      if (RayGeometry.validBasis(ray.basis)) continue;
+      const axis=axes[ray.timeframe];
+      // Never reinterpret an old 1D drawing using the currently selected 1h axis.
+      if (!axis || axis.length<2) continue;
+      ray.basis=RayGeometry.capture(axis);changed=true;
+    }
+    if(changed) this.commit();
+  }
+  changeColor(value) {
+    const color=RayGeometry.color(value);
+    this.color=color;
+    const ray=this.items.find(r=>r.id===this.selected);
+    if(ray && ray.color!==color) {
+      this.remember();ray.color=color;this.commit();
+    } else this.update();
   }
   remove() {
     if (!this.selected) return;
@@ -282,7 +357,7 @@ class RayLayer {
           0,
           Math.min(
             axis.length - 1,
-            Math.round(this.chart.timeScale().coordinateToLogical(p.x)),
+            Math.round(RayGeometry.logicalAtPixel(this.chart.timeScale(),p.x)),
           ),
         );
       anchor.time = axis[i];
@@ -304,7 +379,7 @@ class RayLayer {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!this.draft) {
-        this.draft = { a: anchor, b: anchor };
+        this.draft = { a: anchor, b: anchor, extend:this.extension || 'right' };
         this.onHint?.("Zweiten Punkt setzen · Escape zum Abbrechen");
       } else if (Math.abs(anchor.time - this.draft.a.time) >= 1) {
         this.remember();
@@ -314,7 +389,12 @@ class RayLayer {
           a: points[0],
           b: points[1],
           timeframe: this.timeframe,
+          basis: RayGeometry.capture(this.drawingAxes?.[this.timeframe] || this.axis()),
+          color: RayGeometry.color(this.color),
+          extend:this.extension || 'right',
+          observedAt:this.cutoff,
         };
+        if (ray.extend==='horizontal') ray.b.price=ray.a.price;
         this.items.push(ray);
         this.selected = ray.id;
         this.measurementSelected = false;
@@ -360,7 +440,7 @@ class RayLayer {
           0,
           Math.min(
             axis.length - 1,
-            Math.round(this.chart.timeScale().coordinateToLogical(p.x)),
+            Math.round(RayGeometry.logicalAtPixel(this.chart.timeScale(),p.x)),
           ),
         );
         b.time = axis[i];
@@ -373,6 +453,7 @@ class RayLayer {
       const a = this.anchor(p);
       if (a) {
         this.draft.b = a;
+        if (this.draft.extend==='horizontal') this.draft.b.price=this.draft.a.price;
         this.update();
       }
     }
@@ -408,8 +489,12 @@ class RayLayer {
       )
         return;
       d.ray[d.key] = anchor;
+      if (d.ray.extend==='horizontal') other.price=anchor.price;
     }
     d.changed = true;
+    // Rebase only after an intentional edit, never on load/zoom/interval switch.
+    d.ray.basis=RayGeometry.capture(this.drawingAxes?.[this.timeframe] || this.axis());
+    d.ray.timeframe=this.timeframe;
     event.preventDefault();
     event.stopImmediatePropagation();
     this.update();
@@ -418,6 +503,7 @@ class RayLayer {
     if (!this.drag) return;
     if (this.drag.changed) {
       this.remember(this.drag.before);
+      this.drag.ray.observedAt=this.cutoff;
       this.commit();
     }
     this.drag = null;
@@ -478,19 +564,21 @@ class RayLayer {
     const draw = (ray, color, width, dash, label) => {
       if (ray.a.time === ray.b.time) return;
       const scale = this.chart.timeScale();
-      const from = scale.coordinateToLogical(0),
-        to = scale.coordinateToLogical(size.width);
+      const axis=this.axisFor(ray);
+      const from = RayGeometry.logicalAtPixel(scale,0),
+        to = RayGeometry.logicalAtPixel(scale,size.width);
       if (from === null || to === null) return;
-      const start = Math.max(from, ray.a.logical ?? this.logicalAt(ray.a.time));
-      if (start >= to) return;
-      const points = [start, to].map((logical) => ({
+      const bounds=RayGeometry.bounds(ray.extend,ray.a.logical ?? RayGeometry.logicalAt(axis,ray.a.time),ray.b.logical ?? RayGeometry.logicalAt(axis,ray.b.time),from,to);
+      if (!bounds) return;
+      const {start,end}=bounds;
+      const points = RayGeometry.drawingPoints(axis,ray,start,end).map((logical) => ({
         logical,
-        price: RayGeometry.candleValue(this.axis(), ray, this.timeAt(logical)),
+        price: RayGeometry.valueAtLogical(axis, ray, logical),
       }));
       ctx.beginPath();
       let started = false;
       points.forEach((point, i) => {
-        const x = scale.logicalToCoordinate(point.logical),
+        const x = RayGeometry.pixelAt(scale,point.logical),
           y = this.series.priceToCoordinate(point.price);
         if (x === null || y === null || !Number.isFinite(y)) return;
         if (!started) {
@@ -506,17 +594,17 @@ class RayLayer {
       if (label) {
         ctx.font = "600 12px Arial";
         const w = ctx.measureText(label).width + 14;
-        const labelPoint = this.point(ray.labelAt || ray.b);
+        const labelPoint = this.point(ray.labelAt || ray.b,axis);
         let x = ray.labelEdge
           ? size.width - w - 12
           : Math.max(45, Math.min(size.width - w - 6, labelPoint.x + 10));
-        const visibleStart = scale.logicalToCoordinate(start) ?? 0;
+        const visibleStart = RayGeometry.pixelAt(scale,start) ?? 0;
         const priceY = (x) =>
           this.series.priceToCoordinate(
             RayGeometry.candleValue(
-              this.axis(),
+              axis,
               ray,
-              this.timeAt(scale.coordinateToLogical(Math.max(x, visibleStart))),
+              RayGeometry.timeAt(axis,RayGeometry.logicalAtPixel(scale,Math.max(x, visibleStart))),
             ),
           );
         // If the right endpoint is outside the price pane, label the visible segment.
@@ -524,7 +612,7 @@ class RayLayer {
         if (!Number.isFinite(y) || y < 12 || y > size.height - 12) {
           for (
             let candidate = x;
-            candidate >= Math.max(45, scale.logicalToCoordinate(start));
+            candidate >= Math.max(45, RayGeometry.pixelAt(scale,start));
             candidate -= 24
           ) {
             const value = priceY(candidate);
@@ -554,27 +642,28 @@ class RayLayer {
     };
     for (const r of this.automatic) draw(r, r.color, r.width, r.dash, r.label);
     for (const r of this.items) {
+      if (!this.visible(r)) continue;
       draw(
         r,
-        "#3988ee",
+        RayGeometry.color(r.color),
         r.id === this.selected ? 2.5 : 2,
         [],
         `${r.timeframe} · Eigen`,
       );
       if (r.id === this.selected) {
         for (const anchor of [r.a, r.b]) {
-          const p = this.point(anchor);
+          const p = this.point(anchor,this.axisFor(r));
           ctx.beginPath();
           ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
           ctx.fillStyle = "#fff";
           ctx.fill();
-          ctx.strokeStyle = "#3988ee";
+          ctx.strokeStyle = RayGeometry.color(r.color);
           ctx.lineWidth = 2;
           ctx.stroke();
         }
       }
     }
-    if (this.draft) draw(this.draft, "#3988ee", 2, [5, 4], "");
+    if (this.draft) draw(this.draft, RayGeometry.color(this.color), 2, [5, 4], "");
     const occupied = this.labelObstacles?.() || [];
     const overlaps = (a, b) =>
       a.x < b.x + b.w + 5 &&

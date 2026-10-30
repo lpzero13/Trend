@@ -1,0 +1,382 @@
+// Datei: tori_trendline_master.pine
+//@version=5
+// Tori Master - Stichtagsanalyse inkl. Kerzen-Stepper (+/- Kerzen per Pfeiltaste), 29.10.2026.
+indicator("Tori Master - Stichtag & Faecher", shorttitle="Tori Master Fix", overlay=true, max_lines_count=100, max_labels_count=50)
+
+// ============================================================================
+// 0. ZEITPUNKT, KERZEN-STEPPER UND RECHENBUDGET
+// ============================================================================
+grpTime = "0. Zeitpunkt und Rechenbudget"
+useCustomDate = input.bool(true, "Historischen Stichtag verwenden", group=grpTime)
+targetDate = input.time(timestamp("07 Apr 2026 00:00 +0000"), "Basis-Stichtag (Datum & Uhrzeit)", confirm=false, group=grpTime, tooltip="Basis-Datum auswaehlen oder blaue Linie im Chart ziehen. Zum schnellen Weiterklicken einfach das Feld darunter nutzen!")
+stepBars = input.int(0, "⏩ Kerzen weiterblaettern (+/- Schritte)", minval=-500, maxval=1000, step=1, group=grpTime, tooltip="QoL-Trick: Klicke einmal in dieses Zahlenfeld und druecke auf der Tastatur die Pfeiltaste nach OBEN (↑) oder UNTEN (↓), um Kerze fuer Kerze vor- und zurueckzuspulen (ueberspringt Wochenenden automatisch!).")
+includeTargetBar = input.bool(true, "Gezogene Stichtags-Kerze einschliessen", group=grpTime, tooltip="Aktiv: Wertet exakt die Kerze aus, auf der die blaue Linie steht (bzw. den ganzen Kalendertag bei 00:00 Uhr).")
+showStepLine = input.bool(true, "Gestrichelte Stichtags-Markierung zeichnen", group=grpTime, tooltip="Zeichnet die blaue Hilfslinie samt Datums-Schildchen an der aktuell ausgewerteten Kerze.")
+maxSafetyDays = input.int(320, "Suchhorizont Safety Lines (Kalendertage)", minval=10, maxval=700, group=grpTime)
+maxActionDays = input.int(150, "Suchhorizont Widerstaende (Kalendertage)", minval=10, maxval=700, group=grpTime)
+maxScanBars = input.int(1800, "Maximal untersuchte Kerzen", minval=200, maxval=4000, group=grpTime)
+maxPivots = input.int(80, "Maximal gespeicherte Pivots je Seite", minval=20, maxval=150, group=grpTime)
+futureBars = input.int(40, "Linienvorschau in Kerzen", minval=10, maxval=150, group=grpTime)
+
+// ============================================================================
+// 1. LINIEN UND KONTAKTE
+// ============================================================================
+grpGeo = "1. Linien und Kontakte"
+pivotLen = input.int(2, "Pivot: Kerzen links und rechts", minval=1, maxval=6, group=grpGeo)
+wickTolAtr = input.float(0.15, "Erlaubte Dochtverletzung in ATR", minval=0, maxval=0.5, step=0.05, group=grpGeo)
+matteAtr = input.float(0.45, "Kontakttoleranz in ATR", minval=0.05, maxval=1, step=0.05, group=grpGeo)
+minTouchDist = input.int(5, "Mindestabstand der Kontakte in Kerzen", minval=2, maxval=20, group=grpGeo)
+minLineDays = input.float(7, "Mindestalter fuer A+ in Kalendertagen", minval=0, maxval=120, step=1, group=grpGeo)
+ignoreLast = input.int(2, "Separates Ausbruchsfenster in Kerzen", minval=1, maxval=5, group=grpGeo)
+maxFanLevels = input.int(4, "Maximale Faecherlinien je Seite", minval=1, maxval=5, group=grpGeo)
+
+// ============================================================================
+// 2. DARSTELLUNG UND AUSBRUCH
+// ============================================================================
+grpConfirm = "2. Darstellung und Ausbruch"
+showSma = input.bool(true, "SMA 200 und SMA 50 anzeigen", group=grpConfirm)
+sma200Color = input.color(color.gray, "Farbe SMA 200", group=grpConfirm)
+cleanBreakAtr = input.float(0.15, "Schlusskurspuffer fuer Ausbruch in ATR", minval=0.05, maxval=0.6, step=0.05, group=grpConfirm)
+showLabels = input.bool(true, "Linien beschriften", group=grpConfirm)
+boxSizeInput = input.string("Klein", "Textgroesse Infobox", options=["Klein", "Normal"], group=grpConfirm)
+
+// ============================================================================
+// 3. HYPOTHETISCHE POSITIONSGROESSE
+// ============================================================================
+grpRisk = "3. Hypothetische Positionsgroesse"
+depotCapital = input.float(10000, "Kapital IN KURSWAeHRUNG", minval=100, step=500, group=grpRisk)
+riskPercent = input.float(1, "Geplantes Stop-Risikobudget in %", minval=0.1, maxval=5, step=0.1, group=grpRisk)
+stopBufferPct = input.float(0.3, "Stop-Puffer unter Safety in %", minval=0, maxval=2, step=0.1, group=grpRisk)
+safetyChoice = input.string("Engste gueltige", "Safety fuer Positionsmodell", options=["Engste gueltige", "Haupt-Safety"], group=grpRisk)
+
+// ============================================================================
+// BASISBERECHNUNGEN & ZEIT-/STEPPER-FILTER
+// ============================================================================
+float atr = ta.atr(14)
+float sma200 = ta.sma(close, 200)
+float sma50 = ta.sma(close, 50)
+float ph = ta.pivothigh(high, pivotLen, pivotLen)
+float pl = ta.pivotlow(low, pivotLen, pivotLen)
+
+bool isMidnight = (targetDate % 86400000 == 0) or (hour(targetDate, syminfo.timezone) == 0 and minute(targetDate, syminfo.timezone) == 0)
+int effectiveTarget = (includeTargetBar and isMidnight) ? (targetDate + 86399000) : targetDate
+bool baseDateAllows = not useCustomDate or (includeTargetBar ? (time <= effectiveTarget) : (not na(time_close) and time_close <= targetDate))
+
+// Zählt echte Handelskerzen nach dem Basis-Stichtag für das Vorwärtsspulen (+stepBars)
+var int postTargetBars = 0
+if barstate.isconfirmed and not na(atr) and not baseDateAllows
+    postTargetBars += 1
+
+bool dateAllowsBar = not useCustomDate or (baseDateAllows or (stepBars > 0 and postTargetBars <= stepBars))
+
+plot(showSma and dateAllowsBar ? sma200 : na, "SMA 200", color=sma200Color, linewidth=2)
+plot(showSma and dateAllowsBar ? sma50 : na, "SMA 50", color=color.purple)
+
+var int[] bars = array.new_int()
+var int[] opensAt = array.new_int()
+var int[] closesAt = array.new_int()
+var float[] highs = array.new_float()
+var float[] lows = array.new_float()
+var float[] tops = array.new_float()
+var float[] bottoms = array.new_float()
+var float[] closes = array.new_float()
+var float[] atrs = array.new_float()
+var float[] smas = array.new_float()
+
+var int[] highBars = array.new_int()
+var int[] highTimes = array.new_int()
+var int[] highKnown = array.new_int()
+var float[] highVals = array.new_float()
+var float[] highAtrs = array.new_float()
+var int[] lowBars = array.new_int()
+var int[] lowTimes = array.new_int()
+var int[] lowKnown = array.new_int()
+var float[] lowVals = array.new_float()
+var float[] lowAtrs = array.new_float()
+var line[] drawnLines = array.new_line()
+var label[] drawnLabels = array.new_label()
+var bool pivotCapHit = false
+
+f_trimPivots(int[] pBars, int[] pTimes, int[] pKnown, float[] pVals, float[] pAtrs, int firstBar) =>
+    while array.size(pBars) > 0
+        if array.get(pBars, 0) >= firstBar and array.size(pBars) <= maxPivots
+            break
+        array.shift(pBars)
+        array.shift(pTimes)
+        array.shift(pKnown)
+        array.shift(pVals)
+        array.shift(pAtrs)
+
+int maxHorizonDays = math.max(maxSafetyDays, maxActionDays)
+
+if barstate.isconfirmed and dateAllowsBar and not na(atr)
+    array.push(bars, bar_index)
+    array.push(opensAt, time)
+    array.push(closesAt, time_close)
+    array.push(highs, high)
+    array.push(lows, low)
+    array.push(tops, math.max(open, close))
+    array.push(bottoms, math.min(open, close))
+    array.push(closes, close)
+    array.push(atrs, atr)
+    array.push(smas, sma200)
+    int cutoffTime = time_close - maxHorizonDays * 86400000
+    while array.size(bars) > 0
+        if array.size(bars) <= maxScanBars and array.get(closesAt, 0) >= cutoffTime
+            break
+        array.shift(bars)
+        array.shift(opensAt)
+        array.shift(closesAt)
+        array.shift(highs)
+        array.shift(lows)
+        array.shift(tops)
+        array.shift(bottoms)
+        array.shift(closes)
+        array.shift(atrs)
+        array.shift(smas)
+    if not na(ph) and not na(atr[pivotLen])
+        array.push(highBars, bar_index - pivotLen)
+        array.push(highTimes, time[pivotLen])
+        array.push(highKnown, bar_index)
+        array.push(highVals, ph)
+        array.push(highAtrs, atr[pivotLen])
+    if not na(pl) and not na(atr[pivotLen])
+        array.push(lowBars, bar_index - pivotLen)
+        array.push(lowTimes, time[pivotLen])
+        array.push(lowKnown, bar_index)
+        array.push(lowVals, pl)
+        array.push(lowAtrs, atr[pivotLen])
+    pivotCapHit := array.size(highBars) > maxPivots or array.size(lowBars) > maxPivots
+    int firstBar = array.get(bars, 0)
+    f_trimPivots(highBars, highTimes, highKnown, highVals, highAtrs, firstBar)
+    f_trimPivots(lowBars, lowTimes, lowKnown, lowVals, lowAtrs, firstBar)
+
+f_price(float p) =>
+    na(p) ? "-" : str.tostring(p, format.mintick)
+
+f_tf() =>
+    timeframe.isintraday and timeframe.multiplier % 60 == 0 ? str.tostring(timeframe.multiplier / 60) + "h" : timeframe.period
+
+// ============================================================================
+// ROBUSTER HUELLKURVEN- & FAECHER-ALGORITHMUS
+// ============================================================================
+f_fan(bool roof, int[] pBars, int[] pTimes, int[] pKnown, float[] pVals, float[] pAtrs, int refBar, float refClose, int validRow, int sideMaxDays) =>
+    float selectedPrice = na
+    int selectedTouches = 0
+    float selectedAge = na
+    int selectedAnchor = na
+    float selectedValue = na
+    float selectedSlope = na
+    float outerPrice = na
+    int outerTouches = 0
+    line selectedLineObj = na
+    int n = array.size(pBars)
+    int root = na
+    float extreme = na
+    int knownUntil = array.get(bars, validRow)
+    int sideCutoff = array.get(closesAt, validRow) - sideMaxDays * 86400000
+
+    if n >= 2
+        for i = 0 to n - 2
+            float v = array.get(pVals, i)
+            int b = array.get(pBars, i)
+            if array.get(pKnown, i) <= knownUntil and array.get(pTimes, i) >= sideCutoff and (refBar - b) >= minTouchDist and (na(extreme) or (roof ? v > extreme : v < extreme))
+                extreme := v
+                root := i
+        if na(root)
+            for i = 0 to n - 2
+                float v = array.get(pVals, i)
+                int b = array.get(pBars, i)
+                if array.get(pKnown, i) <= knownUntil and (refBar - b) >= 2 and (na(extreme) or (roof ? v > extreme : v < extreme))
+                    extreme := v
+                    root := i
+
+    int level = 0
+    float previousSlope = na
+    int current = root
+    while not na(current) and current < n - 1 and level < maxFanLevels
+        int barA = array.get(pBars, current)
+        float valueA = array.get(pVals, current)
+        int reqStep = level == 0 ? minTouchDist : math.max(2, minTouchDist - 2)
+
+        float slopeBound = na
+        int boundBar = na
+        for k = 0 to validRow
+            int b = array.get(bars, k)
+            if b > barA + pivotLen
+                float allowance = wickTolAtr * array.get(atrs, k)
+                float bodyAllow = 0.05 * array.get(atrs, k)
+                float boundary = roof ? math.max(array.get(tops, k) - bodyAllow, array.get(highs, k) - allowance) : math.min(array.get(bottoms, k) + bodyAllow, array.get(lows, k) + allowance)
+                float bound = (boundary - valueA) / float(b - barA)
+                if na(slopeBound) or (roof ? bound > slopeBound : bound < slopeBound)
+                    slopeBound := bound
+                    if b - barA >= reqStep
+                        boundBar := b
+
+        float bestSlope = na
+        int bestTouches = 0
+        int bestNext = na
+
+        for j = current + 1 to n - 1
+            int barB = array.get(pBars, j)
+            float valueB = array.get(pVals, j)
+            if array.get(pKnown, j) <= knownUntil and barB - barA >= reqStep
+                float rawSlope = (valueB - valueA) / float(barB - barA)
+                float candidateSlope = rawSlope
+                if not na(slopeBound) and (roof ? rawSlope < slopeBound : rawSlope > slopeBound)
+                    float hullAtB = valueA + slopeBound * float(barB - barA)
+                    if math.abs(hullAtB - valueB) <= matteAtr * array.get(pAtrs, j)
+                        candidateSlope := slopeBound
+
+                bool directionOK = roof ? candidateSlope < 0 : candidateSlope > 0
+                bool steeper = na(previousSlope) or (roof ? candidateSlope < previousSlope - 1e-6 : candidateSlope > previousSlope + 1e-6)
+                bool envelopeOK = na(slopeBound) or (roof ? candidateSlope >= slopeBound - 1e-10 : candidateSlope <= slopeBound + 1e-10)
+
+                if directionOK and steeper and envelopeOK
+                    int touches = 1
+                    int lastTouch = barA
+                    int nextAnchor = na
+                    for m = current + 1 to n - 1
+                        int b = array.get(pBars, m)
+                        float projected = valueA + candidateSlope * float(b - barA)
+                        if array.get(pKnown, m) <= knownUntil and math.abs(array.get(pVals, m) - projected) <= matteAtr * array.get(pAtrs, m)
+                            nextAnchor := m
+                            if b - lastTouch >= reqStep
+                                touches += 1
+                                lastTouch := b
+                    if touches >= 2 and (na(bestSlope) or (roof ? candidateSlope > bestSlope : candidateSlope < bestSlope) or (math.abs(candidateSlope - bestSlope) < 1e-10 and touches > bestTouches))
+                        bestSlope := candidateSlope
+                        bestTouches := touches
+                        bestNext := nextAnchor
+
+        if na(bestSlope) and level == 0 and not na(slopeBound) and not na(boundBar)
+            bool dirOK = roof ? slopeBound < 0 : slopeBound > 0
+            if dirOK
+                bestSlope := slopeBound
+                bestTouches := 2
+                bestNext := na
+
+        if na(bestSlope)
+            break
+
+        float nowPrice = valueA + bestSlope * float(refBar - barA)
+        float ageDays = (array.get(closesAt, validRow) - array.get(pTimes, current)) / 86400000.0
+        if nowPrice > 0
+            int x1 = math.max(barA, last_bar_index - 9999)
+            int x2 = refBar + futureBars
+            float y1 = valueA + bestSlope * float(x1 - barA)
+            float y2 = valueA + bestSlope * float(x2 - barA)
+            color col = roof ? (level == 0 ? color.maroon : level == 1 ? color.red : level == 2 ? color.orange : color.rgb(255, 190, 0)) : (level == 0 ? color.rgb(30, 136, 229) : level == 1 ? color.rgb(0, 160, 136) : color.lime)
+            bool qualified = bestTouches >= 3 and ageDays >= minLineDays
+            line ln = line.new(x1, y1, x2, y2, xloc=xloc.bar_index, color=col, width=2, style=qualified ? line.style_solid : line.style_dashed)
+            array.push(drawnLines, ln)
+            if showLabels
+                string txt = f_tf() + (roof ? " Widerstand " : " Safety ") + str.tostring(level + 1) + " | " + (qualified ? "A+" : "vorlaeufig") + "\n" + str.tostring(bestTouches) + " Kontakte / " + str.tostring(ageDays, "#.0") + " Tage"
+                array.push(drawnLabels, label.new(x2, y2, txt, style=label.style_label_left, color=col, textcolor=color.white, size=size.small))
+            if level == 0
+                outerPrice := nowPrice
+                outerTouches := bestTouches
+            bool choose = roof ? (na(selectedPrice) or math.abs(nowPrice - refClose) < math.abs(selectedPrice - refClose)) : (nowPrice < refClose and (na(selectedPrice) or nowPrice > selectedPrice))
+            if choose
+                selectedPrice := nowPrice
+                selectedTouches := bestTouches
+                selectedAge := ageDays
+                selectedAnchor := barA
+                selectedValue := valueA
+                selectedSlope := bestSlope
+                selectedLineObj := ln
+
+        previousSlope := bestSlope
+        current := bestNext
+        level += 1
+
+    if not na(selectedLineObj)
+        line.set_width(selectedLineObj, 3)
+
+    [selectedPrice, selectedTouches, selectedAge, selectedAnchor, selectedValue, selectedSlope, outerPrice, outerTouches]
+
+// ============================================================================
+// AUSWERTUNG & DASHBOARD
+// ============================================================================
+var table dash = table.new(position.top_right, 2, 13, bgcolor=color.rgb(30, 33, 42), border_width=1, border_color=color.gray)
+
+f_cell(int row, string title, string value, color valueColor) =>
+    table.cell(dash, 0, row, title, text_color=color.white, text_size=boxSizeInput == "Normal" ? size.normal : size.small, text_halign=text.align_left)
+    table.cell(dash, 1, row, value, text_color=valueColor, text_size=boxSizeInput == "Normal" ? size.normal : size.small, text_halign=text.align_left)
+
+if barstate.islastconfirmedhistory or (barstate.islast and barstate.isconfirmed)
+    while array.size(drawnLines) > 0
+        line.delete(array.pop(drawnLines))
+    while array.size(drawnLabels) > 0
+        label.delete(array.pop(drawnLabels))
+    table.clear(dash, 0, 0, 1, 12)
+    int count = array.size(bars)
+    string stepTxt = stepBars == 0 ? "" : (stepBars > 0 ? " (+" + str.tostring(stepBars) + " Kerzen)" : " (" + str.tostring(stepBars) + " Kerzen)")
+    string mode = useCustomDate ? ("Stichtag" + stepTxt) : "Letzter Kerzenschluss"
+    f_cell(0, "Tori Master | " + f_tf(), mode, color.aqua)
+    if count < ignoreLast + 3
+        f_cell(1, "Keine Analyse", "Zu wenig bekannte Kerzen / Datum vor geladener Historie", color.orange)
+        f_cell(2, "Datumseingabe", "Zahnrad > Eingaben > 0. Zeitpunkt", color.white)
+    else
+        // Unterstützt auch Rückwärtsschritte (stepBars < 0) relativ zum Basis-Stichtag
+        int backOffset = (useCustomDate and stepBars < 0) ? math.min(math.abs(stepBars), count - (ignoreLast + 4)) : 0
+        int last = count - 1 - backOffset
+        int refBar = array.get(bars, last)
+        int refTime = array.get(closesAt, last)
+        float refClose = array.get(closes, last)
+        float refAtr = array.get(atrs, last)
+        float refSma = array.get(smas, last)
+        bool tooFarLeft = refBar < last_bar_index - 9999
+        if tooFarLeft
+            f_cell(1, "Datum ausserhalb Zeichenbereich", "Bitte Bar Replay bis zum Stichtag verwenden", color.orange)
+            f_cell(2, "Grund", "TradingView: bar_index-Zeichnungen max. 9999 Kerzen zurueck", color.white)
+        else
+            [action, actionTouches, actionAge, actionBarA, actionValueA, actionSlope, unusedRoof, unusedRoofTouches] = f_fan(true, highBars, highTimes, highKnown, highVals, highAtrs, refBar, refClose, last - ignoreLast, maxActionDays)
+            [tightSafety, tightTouches, tightAge, unusedBar, unusedValue, unusedSlope, mainSafety, mainTouches] = f_fan(false, lowBars, lowTimes, lowKnown, lowVals, lowAtrs, refBar, refClose, last, maxSafetyDays)
+            float chosenSafety = safetyChoice == "Haupt-Safety" ? mainSafety : tightSafety
+            bool validSafety = not na(chosenSafety) and chosenSafety > 0 and chosenSafety < refClose
+            float stop = validSafety ? math.floor(chosenSafety * (1 - stopBufferPct / 100) / syminfo.mintick) * syminfo.mintick : na
+            float unitRisk = not na(stop) and stop > 0 and stop < refClose ? refClose - stop : na
+            float shares = not na(unitRisk) ? math.floor(math.min(depotCapital * riskPercent / 100 / unitRisk, depotCapital / refClose)) : na
+            float cash = not na(shares) ? shares * refClose : na
+            float plannedRisk = not na(shares) ? shares * unitRisk : na
+            bool aPlus = not na(action) and actionTouches >= 3 and actionAge >= minLineDays
+
+            bool armed = false
+            bool cleanSeen = false
+            int breakAt = na
+            if not na(action)
+                for k = last - ignoreLast + 1 to last
+                    int b = array.get(bars, k)
+                    float lp = actionValueA + actionSlope * float(b - actionBarA)
+                    float prevLp = actionValueA + actionSlope * float(array.get(bars, k - 1) - actionBarA)
+                    if array.get(closes, k - 1) <= prevLp and array.get(closes, k) > lp
+                        armed := true
+                    if armed and not cleanSeen and array.get(closes, k) >= lp + cleanBreakAtr * array.get(atrs, k)
+                        cleanSeen := true
+                        breakAt := array.get(closesAt, k)
+
+            bool closeAbove = not na(action) and refClose >= action + cleanBreakAtr * refAtr
+            string status = na(action) ? "Kein gueltiger Widerstandsfaecher" : cleanSeen and closeAbove ? (aPlus ? "A+: Ausbruch im Prueffenster" : "Vorlaeufig: Ausbruch im Prueffenster") : armed ? "Bruch vorgemerkt; Schlusskurs pruefen" : "Beobachtung; kein neuer Ausbruch"
+            color statusColor = cleanSeen and closeAbove ? (validSafety ? color.lime : color.orange) : color.yellow
+            if cleanSeen and closeAbove and not validSafety
+                status += " / KEINE SAFETY"
+
+            if useCustomDate and showStepLine
+                array.push(drawnLines, line.new(refBar, refClose - 2 * refAtr, refBar, refClose + 2 * refAtr, color=color.blue, style=line.style_dashed, extend=extend.both))
+                array.push(drawnLabels, label.new(refBar, refClose + 2 * refAtr, "Ausgewertete Kerze" + stepTxt + "\n" + str.format_time(refTime, "dd.MM.yyyy HH:mm", syminfo.timezone), style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small))
+
+            f_cell(1, "Ausgewerteter Schluss", str.format_time(refTime, "dd.MM.yyyy HH:mm", syminfo.timezone) + " | " + syminfo.timezone, color.white)
+            f_cell(2, "Zustand", status, statusColor)
+            f_cell(3, "Kurs / Clean-Close-Schwelle", f_price(refClose) + " / " + f_price(na(action) ? na : action + cleanBreakAtr * refAtr), color.white)
+            f_cell(4, "Ausgewaehlter Widerstand", f_price(action) + " | " + str.tostring(actionTouches) + " Kontakte | " + (aPlus ? "A+" : "vorlaeufig / fehlt"), color.orange)
+            f_cell(5, "Haupt-Safety (blau)", f_price(mainSafety) + " | " + str.tostring(mainTouches) + " Kontakte", color.rgb(80, 170, 255))
+            f_cell(6, "Engste gueltige Safety", f_price(tightSafety) + " | " + str.tostring(tightTouches) + " Kontakte", color.lime)
+            string smaText = na(refSma) ? "Nicht genug SMA-Vorlauf" : (refClose >= refSma ? "Ueber " : "Unter ") + f_price(refSma) + " (nur Kontext)"
+            f_cell(7, "SMA 200", smaText, na(refSma) ? color.gray : refClose >= refSma ? color.lime : color.orange)
+            f_cell(8, "Stop-Modell: " + safetyChoice, f_price(stop) + (na(unitRisk) ? "" : " | " + str.tostring(unitRisk / refClose * 100, "#.##") + "% Abstand"), color.white)
+            f_cell(9, "Ganze Aktien / Kaufbetrag", na(shares) ? "Kein gueltiges Stop-Modell" : str.tostring(shares, "#") + " | " + str.tostring(cash, "#.##") + " " + syminfo.currency, color.aqua)
+            f_cell(10, "Geplantes Kursrisiko / Bruch", (na(plannedRisk) ? "-" : str.tostring(plannedRisk, "#.##") + " " + syminfo.currency) + " / " + (na(breakAt) ? "-" : str.format_time(breakAt, "dd.MM. HH:mm", syminfo.timezone)), color.white)
+            float actualDays = (refTime - array.get(opensAt, 0)) / 86400000.0
+            f_cell(11, "Tatsaechliche Datenbasis", str.tostring(count - backOffset) + " Kerzen / " + str.tostring(actualDays, "#.1") + " Tage | Pivots H/T: " + str.tostring(array.size(highBars)) + "/" + str.tostring(array.size(lowBars)) + (pivotCapHit or array.size(highBars) == maxPivots or array.size(lowBars) == maxPivots ? " (Limit)" : ""), color.silver)
+            f_cell(12, "Grenzen", "Aktuelles Intervall; kein MTF/Retest-/Tradejournal. Stop-Modell ohne Kosten/Gaps.", color.silver)

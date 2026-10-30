@@ -98,11 +98,13 @@ class ServerTests(unittest.TestCase):
 
     def test_manual_dataset_link_does_not_resolve_a_research_signal(self):
         with patch("server.chart_dataset", return_value={"analysisEnabled": False}) as chart, \
+             patch('server.add_weekly') as weekly, \
              patch("server.jobs.get_trial", side_effect=AssertionError("No signal lookup")) as trial:
             with urllib.request.urlopen(self.url + "/api/dataset-chart?dataset=pinned&job=job&trial=trial&analysis=0") as response:
                 self.assertFalse(json.load(response)["analysisEnabled"])
             trial.assert_not_called()
             chart.assert_called_once_with("pinned", "4h", None, None, include_analysis=False)
+            weekly.assert_called_once_with({'analysisEnabled':False},'4h')
 
     def post_snapshot(self, body=b'{}', **headers):
         return urllib.request.urlopen(urllib.request.Request(self.url+'/api/snapshots', data=body,

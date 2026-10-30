@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 import re
 import uuid
+from duckdb import Error as ParquetError
 
 from alpaca import load_bars
 from providers import TIMEFRAMES, AlpacaProvider, fetch_sources
@@ -34,6 +35,13 @@ def data_kind(dataset):
     ):
         return "synthetic"
     return "market"
+
+
+def stored_bytes(identity):
+    """Conservative referenced size; shared blocks counted in full for budgets."""
+    path=path_for(identity)
+    manifest=json.loads(path.read_text("utf-8"))
+    return path.stat().st_size+sum(b["bytes"] for b in manifest.get("storage",{}).get("blocks",[]))
 
 
 def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="raw", session=None, data_kind="market"):
@@ -68,10 +76,8 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
             "sources": {tf: meta for tf, (_, meta) in sources.items()}}
         if session and session.startswith("XNYS regular"):
             payload["quality"]["intradaySessions"]="regular; open-anchored; incomplete buckets omitted explicitly"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix("."+uuid.uuid4().hex+".tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), "utf-8")
-        temporary.replace(path)
+        from parquet_store import publish
+        publish(payload, path)
     quality = json.loads(path.read_text("utf-8")).get("quality")
     if quality:
         from database import connection
@@ -84,10 +90,12 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
 def read_dataset(identity):
     try:
         payload = json.loads(path_for(identity).read_text("utf-8"))
+        from parquet_store import hydrate
+        payload = hydrate(payload, data_dir())
         if payload["id"] != identity or payload["material"]["schema"] != SCHEMA or digest(payload["material"]) != identity:
             raise ValueError("checksum")
         return payload
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, OverflowError, ParquetError):
         raise DataError("Dataset fehlt oder seine Prüfsumme ist ungültig.", 404) from None
 
 

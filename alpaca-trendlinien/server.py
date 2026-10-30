@@ -23,6 +23,7 @@ from analysis_service import build_chart
 from datasets import chart_dataset, read_dataset, source_bars
 import jobs
 from snapshots import remember, save_snapshot, read_snapshot, list_snapshots
+from weekly_chart import CHART_TIMEFRAMES,add_weekly,weeks,next_close as next_week_close
 
 APP_ID = "tori-alpaca-local"
 COMPANIES = {"AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "NVDA": "NVIDIA Corporation", "SPY": "SPDR S&P 500 ETF"}
@@ -48,9 +49,9 @@ def parse_cutoff(value: str, now: datetime) -> datetime:
         raise DataError("Ungültiger oder durch die Zeitumstellung mehrdeutiger Analysezeitpunkt (New York).", 400) from None
 
 
-def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None, *, include_analysis=True) -> dict:
-    if timeframe not in TIMEFRAMES:
-        raise DataError("Erlaubte Intervalle: 1h, 4h und 1D.", 400)
+def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None, *, include_analysis=True, analysis_engine="legacy") -> dict:
+    if timeframe not in CHART_TIMEFRAMES:
+        raise DataError("Erlaubte Intervalle: 1h, 4h, 1D und 1W.", 400)
     if not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}", symbol):
         raise DataError("Bitte ein gültiges US-Symbol eingeben.", 400)
     now = datetime.now(timezone.utc)
@@ -61,7 +62,11 @@ def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str |
             kwargs["end"] = cutoff
         futures = {tf: pool.submit(load_bars, symbol, tf, **kwargs) for tf in TIMEFRAMES}
         datasets = {tf: future.result() for tf, future in futures.items()}
-    result = build_chart(datasets, symbol, timeframe, cutoff, now, historical=bool(as_of), include_analysis=include_analysis)
+    result = build_chart(datasets, symbol, '1D' if timeframe=='1W' else timeframe, cutoff, now, historical=bool(as_of), include_analysis=include_analysis and analysis_engine=="legacy")
+    add_weekly(result,timeframe)
+    if include_analysis and analysis_engine != "legacy":
+        from fan_chart import apply
+        apply(result, analysis_engine)
     if include_analysis:
         remember(result)
     return result
@@ -75,12 +80,24 @@ def chart_analysis_requested(query):
 
 
 def step_payload(symbol, timeframe, as_of, direction):
-    if timeframe not in TIMEFRAMES or not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}",symbol):
+    if timeframe not in CHART_TIMEFRAMES or not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}",symbol):
         raise DataError("Ungültige Aktie oder Intervall.",400)
     if direction not in ("back","next"):
         raise DataError("Ungültige Schrittrichtung.",400)
     now=datetime.now(timezone.utc)
     cutoff=parse_cutoff(as_of,now)
+    if timeframe=='1W':
+        wanted=next_week_close(int(cutoff.timestamp()),int(now.timestamp())-900) if direction=='next' else int(cutoff.timestamp())
+        daily,_=load_bars(symbol,'1D',now=now,end=datetime.fromtimestamp(wanted,timezone.utc))
+        values=weeks(daily,wanted)
+        if direction=='next':
+            if not values or values[-1].end!=wanted:raise DataError('Die nächste Handelswoche ist in den Kursdaten unvollständig.',404)
+            target=wanted
+        else:
+            previous=[b.end for b in values if b.end<cutoff.timestamp()]
+            if not previous:raise DataError('Keine vorherige vollständige Handelswoche verfügbar.',404)
+            target=previous[-1]
+        return {'closedAt':target,'asof':datetime.fromtimestamp(target,timezone.utc).isoformat(),'timeframe':timeframe}
     if direction=="back":
         bars,_=load_bars(symbol,timeframe,now=now,end=cutoff)
         bars=[b for b in bars if b.end<=cutoff.timestamp()]
@@ -159,6 +176,9 @@ class Handler(BaseHTTPRequestHandler):
                                        "marketDataReadOnly": True, "localSnapshots": True,
                                        "research":True,"studyVersion":jobs.STUDY_VERSION,
                                        "operations":status()})
+            if path.startswith('/api/archive/'):
+                from archive_api import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path == "/api/research/jobs":
                 from operations import status
                 operational = status()
@@ -168,6 +188,27 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/watch/"):
                 from forward_api import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path.startswith("/api/random/"):
+                from random_replay import get
+                query = parse_qs(urlparse(self.path).query)
+                from fan_chart import selected_engine
+                engine = selected_engine(query)
+                fan_analysis = path.endswith("/chart") and engine != "legacy" and query.get("analysis", ["0"]) == ["1"]
+                payload = get(path, {**query, "analysis":["0"]} if fan_analysis else query)
+                if fan_analysis:
+                    from fan_chart import apply
+                    apply(payload, engine)
+                    remember(payload)
+                return self.send_json(payload)
+            if path.startswith("/api/workbench/"):
+                from workbench_reviews import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path.startswith("/api/candidates/"):
+                from candidate_api import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path.startswith("/api/fan/"):
+                from fan_api import get
+                return self.send_json(get(path, parse_qs(urlparse(self.path).query)))
             if path.startswith("/api/lab/"):
                 from lab_api import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
@@ -182,30 +223,44 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/dataset-chart":
                 query=parse_qs(urlparse(self.path).query,keep_blank_values=True)
                 include_analysis=chart_analysis_requested(query)
+                from fan_chart import selected_engine
+                analysis_engine = selected_engine(query)
                 setup=None
                 dataset_id=query.get("dataset",[""])[0]
-                if include_analysis and "job" in query and "trial" in query:
+                if include_analysis and analysis_engine=="legacy" and "job" in query and "trial" in query:
                     trial,setup=jobs.get_trial(query["job"][0],query["trial"][0],query.get("variant",["breakout"])[0])
                     if trial["datasetId"]!=dataset_id:
                         raise DataError("Forschungsfall gehört zu einem anderen Dataset.",400)
-                return self.send_json(chart_dataset(dataset_id,query.get("timeframe",["4h"])[0],query.get("asof",[None])[0],setup,include_analysis=include_analysis))
+                tf=query.get("timeframe",["4h"])[0]
+                if tf not in CHART_TIMEFRAMES:raise DataError('Ungültiges Chartintervall.',400)
+                payload=chart_dataset(dataset_id,'1D' if tf=='1W' else tf,query.get("asof",[None])[0],setup,include_analysis=include_analysis and analysis_engine=="legacy")
+                add_weekly(payload,tf)
+                if include_analysis and analysis_engine != "legacy":
+                    from fan_chart import apply
+                    apply(payload, analysis_engine)
+                if include_analysis:remember(payload)
+                return self.send_json(payload)
             if path == "/api/chart":
                 query = parse_qs(urlparse(self.path).query,keep_blank_values=True)
+                from fan_chart import selected_engine
+                analysis_engine = selected_engine(query)
                 return self.send_json(chart_payload(query.get("symbol", ["AAPL"])[0].strip().upper(),
                                                     query.get("timeframe", ["4h"])[0],
                                                     query.get("refresh", ["0"])[0] == "1",
-                                                    query.get("asof", [None])[0],include_analysis=chart_analysis_requested(query)))
+                                                    query.get("asof", [None])[0],include_analysis=chart_analysis_requested(query), **({"analysis_engine":analysis_engine} if analysis_engine!="legacy" else {})))
             if path == "/api/step":
                 query=parse_qs(urlparse(self.path).query)
                 if "dataset" in query:
                     from bisect import bisect_left, bisect_right
                     tf=query.get("timeframe",[""])[0]
                     direction=query.get("direction",[""])[0]
-                    if tf not in TIMEFRAMES or direction not in ("back","next"):
+                    if tf not in CHART_TIMEFRAMES or direction not in ("back","next"):
                         raise DataError("Ungültiger Dataset-Schritt.",400)
                     at=datetime.fromisoformat(query.get("asof",[""])[0].replace("Z","+00:00"))
                     if at.tzinfo is None: raise DataError("Zeitzone fehlt.",400)
-                    closes=[b.end for b in source_bars(read_dataset(query["dataset"][0]))[tf]]
+                    sources=source_bars(read_dataset(query["dataset"][0]))
+                    rows=weeks(sources['1D'],int(datetime.now(timezone.utc).timestamp())-900) if tf=='1W' else sources[tf]
+                    closes=[b.end for b in rows]
                     i=bisect_right(closes,at.timestamp()) if direction=="next" else bisect_left(closes,at.timestamp())-1
                     if not 0<=i<len(closes): raise DataError("Keine weitere Dataset-Kerze verfügbar.",404)
                     return self.send_json({"closedAt":closes[i],"asof":datetime.fromtimestamp(closes[i],timezone.utc).isoformat(),"timeframe":tf})
@@ -229,11 +284,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(search_assets(query.get("q", [""])[0][:100],
                     query.get("exchange", [""])[0], offset, symbols))
             files = {
-                "/": "index.html", "/app.js": "app.js", "/style.css": "style.css",
+                "/": "index.html", "/zufall":"index.html", "/app.js": "app.js", "/style.css": "style.css",
                 "/research": "research.html", "/research.js":"research.js", "/research.css":"research.css",
                 "/lab":"lab.html", "/lab.js":"lab.js", "/lab.css":"lab.css",
                 "/watch":"watch.html", "/watch.js":"watch.js", "/watch.css":"watch.css",
                 "/watch-view.js":"watch-view.js",
+                "/pruefung":"workbench.html", "/workbench.js":"workbench.js",
+                "/workbench-view.js":"workbench-view.js", "/workbench.css":"workbench.css",
+                "/kandidaten":"candidates.html", "/candidates.js":"candidates.js",
+                "/candidate-view.js":"candidate-view.js", "/candidates.css":"candidates.css",
+                "/faecher":"fan.html", "/fan.js":"fan.js", "/fan.css":"fan.css", "/fan-view.js":"fan-view.js",
+                "/sammler":"collector.html", "/collector.js":"collector.js",
                 "/drawings.js": "drawings.js",
                 "/analysis.js": "analysis.js",
                 "/measurements.js": "measurements.js", "/api.js": "api.js",
@@ -258,7 +319,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path=urlparse(self.path).path
-        research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/") or path.startswith("/api/watch/")
+        research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/") or path.startswith("/api/watch/") or path.startswith("/api/workbench/") or path.startswith("/api/random/") or path.startswith('/api/archive/')
         if path != "/api/snapshots" and not research:
             return self.send_json({"error": "Schreibzugriffe sind nur zum lokalen Speichern eines Analysestands vorgesehen."}, 405)
         allowed = self.allowed_hosts()
@@ -275,6 +336,15 @@ class Handler(BaseHTTPRequestHandler):
                 raise DataError("Ungültige Speicheranfrage.", 400)
             body = json.loads(self.rfile.read(length))
             if research:
+                if path.startswith('/api/archive/'):
+                    from archive_api import post
+                    return self.send_json(post(path,body))
+                if path.startswith("/api/random/"):
+                    from random_replay import post
+                    return self.send_json(post(path,body),201)
+                if path.startswith("/api/workbench/"):
+                    from workbench_reviews import post
+                    return self.send_json(post(path,body))
                 if path.startswith("/api/watch/"):
                     from forward_api import post
                     return self.send_json(post(path,body))

@@ -16,7 +16,7 @@ from database import connection, SCHEMA_VERSION
 from datasets import digest, SCHEMA
 from storage import references
 
-BACKUP_SCHEMA="tori-backup-1"
+BACKUP_SCHEMA="tori-backup-2"
 
 
 def checksum(path):
@@ -27,13 +27,19 @@ def checksum(path):
 
 
 def checked_dataset(path):
-    value=json.loads(path.read_text("utf-8"))
-    if value["id"]!=path.stem or value["material"]["schema"]!=SCHEMA or digest(value["material"])!=path.stem:
-        raise DataError("Dataset-Prüfsumme stimmt nicht; Sicherung/Wiederherstellung abgebrochen.",409)
+    from parquet_store import hydrate
+    from duckdb import Error as ParquetError
+    try:
+        if path.is_symlink() or path.parent.is_symlink():raise ValueError("link")
+        value=hydrate(json.loads(path.read_text("utf-8")),path.parent.parent)
+        if value["id"]!=path.stem or value["material"]["schema"]!=SCHEMA or digest(value["material"])!=path.stem:
+            raise ValueError("checksum")
+    except (ValueError,TypeError,KeyError,OSError,ParquetError):
+        raise DataError("Dataset-Prüfsumme stimmt nicht; Sicherung/Wiederherstellung abgebrochen.",409) from None
 
 
 def valid_relative(name):
-    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|snapshots/[a-f0-9]{24}\.json",name))
+    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|datasets/chunks/[a-f0-9]{64}\.parquet|imports/chunks/[a-f0-9]{64}\.parquet|snapshots/[a-f0-9]{24}\.json",name))
 
 
 def new_target(target):
@@ -67,7 +73,23 @@ def backup(target):
         # All referenced datasets were published before their references committed to SQLite.
         with closing(sqlite3.connect(db_path)) as snapshot:
             refs=references(snapshot,root,forward_root=stage)
+            from history_archive import backup_chunks
+            archive_paths=backup_chunks(snapshot,root)
+            from archive_state import backup_chunks as fast_chunks
+            archive_paths.update(fast_chunks(snapshot,root))
         paths=[p for area in ("datasets","snapshots") for p in (root/area).glob("*.json")]
+        # Snapshot immutable manifests before resolving their shared block graph.
+        # Never copy unrelated orphan/temp chunks or a local rollback archive.
+        chunks=set()
+        from parquet_store import block_path
+        for path in list(paths):
+            if path.parent.name=="datasets":
+                checked_dataset(path)
+                value=json.loads(path.read_text("utf-8"))
+                for entry in value.get("storage",{}).get("blocks",[]):
+                    chunks.add(block_path(root,entry["path"]))
+        paths.extend(sorted(chunks))
+        paths.extend(root/name for name in archive_paths)
         present={p.stem for p in paths if p.parent.name=="datasets"}
         if not refs<=present: raise DataError("Referenziertes Dataset fehlt; kein unvollständiges Backup erstellt.",409)
         needed=sum(p.stat().st_size for p in paths)+db_path.stat().st_size
@@ -76,11 +98,11 @@ def backup(target):
             relative=path.relative_to(root).as_posix()
             if path.is_symlink() or path.parent.is_symlink() or not path.resolve().is_relative_to(root) or not valid_relative(relative): raise DataError("Unerwartete Datei/Link im Datenbestand.",409)
             if path.parent.name=="datasets": checked_dataset(path)
-            dest=stage/relative;dest.parent.mkdir(exist_ok=True)
+            dest=stage/relative;dest.parent.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(path,dest)
         files={p.relative_to(stage).as_posix():{"sha256":checksum(p),"bytes":p.stat().st_size} for p in stage.rglob("*") if p.is_file()}
         manifest={"schema":BACKUP_SCHEMA,"createdAt":time.time(),"databaseVersion":SCHEMA_VERSION,"files":files,
-                  "excluded":["credentials","market cache","catalog cache","logs","worker lock","browser local storage"]}
+                  "excluded":["credentials","market cache","catalog cache","logs","worker lock","browser local storage","legacy-json rollback archive"]}
         (stage/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),"utf-8")
         verify(stage)
         # Rename a completed directory, never expose a partial backup under its final name.
@@ -93,14 +115,22 @@ def verify(folder):
     if not root.is_dir() or (root/"manifest.json").is_symlink(): raise DataError("Ungültiger Sicherungsordner.",400)
     try:
         value=json.loads((root/"manifest.json").read_text("utf-8"))
-        if value["schema"]!=BACKUP_SCHEMA or not isinstance(value["files"],dict): raise ValueError()
+        if value["schema"] not in ("tori-backup-1",BACKUP_SCHEMA) or not isinstance(value["files"],dict): raise ValueError()
         if "research/jobs.sqlite3" not in value["files"]: raise ValueError()
         for name,meta in value["files"].items():
             if not valid_relative(name): raise ValueError()
+            if value["schema"]=="tori-backup-1" and name.endswith('.parquet'):raise ValueError("old backup schema")
             path=root/name
             if any(p.is_symlink() for p in (path,path.parent)) or not path.resolve().is_relative_to(root): raise ValueError()
             if not path.is_file() or path.stat().st_size!=meta["bytes"] or checksum(path)!=meta["sha256"]: raise ValueError()
-            if name.startswith("datasets/"): checked_dataset(path)
+        # All files must be present/hash-checked before a manifest is hydrated.
+        for name in value["files"]:
+            if re.fullmatch(r"datasets/[a-f0-9]{64}\.json",name):
+                path=root/name
+                checked_dataset(path)
+                document=json.loads(path.read_text("utf-8"))
+                if any(e["path"] not in value["files"] for e in document.get("storage",{}).get("blocks",[])):
+                    raise ValueError("backup missing Parquet block")
         if "forward/watch.sqlite3" in value["files"]:
             with closing(sqlite3.connect((root/"forward/watch.sqlite3").as_uri()+"?mode=ro",uri=True)) as watch:
                 if watch.execute("PRAGMA integrity_check").fetchone()[0]!="ok":raise ValueError()
@@ -109,6 +139,11 @@ def verify(folder):
             version=db.execute("PRAGMA user_version").fetchone()[0]
             if version>SCHEMA_VERSION or version!=value["databaseVersion"]: raise ValueError()
             required=references(db,root)
+            from history_archive import backup_chunks
+            archive_paths=backup_chunks(db,root)
+            from archive_state import backup_chunks as fast_chunks
+            archive_paths.update(fast_chunks(db,root))
+            if any(name not in value['files'] for name in archive_paths): raise ValueError('backup missing archive checkpoint')
             if not all(f"datasets/{identity}.json" in value["files"] for identity in required): raise ValueError()
         return value
     except (ValueError,KeyError,TypeError,OSError,sqlite3.Error) as error:

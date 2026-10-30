@@ -19,13 +19,13 @@ def reserve_bytes():
     except ValueError: return 256*1024*1024
 
 
-def preflight(*, history_days=0, symbols=0):
+def preflight(*, history_days=0, symbols=0, bytes_per_symbol_day=32000):
     root = data_dir()
     existing = root
     while not existing.exists(): existing=existing.parent
     free = shutil.disk_usage(existing).free
     # Budget includes raw cache, normalized datasets and temporary writes, not a size promise.
-    estimate = int(history_days*symbols*32000)
+    estimate = int(history_days*symbols*bytes_per_symbol_day)
     required = reserve_bytes()+estimate
     result = {"freeBytes":free,"estimatedAdditionalBytes":estimate,"reserveBytes":reserve_bytes(),
               "requiredBytes":required,"sufficient":free>=required,"estimateOnly":True}
@@ -48,7 +48,7 @@ def usage(*, fresh=False):
                     path=Path(folder)/name
                     if path.is_symlink(): skipped+=1;continue
                     relative=path.relative_to(root)
-                    key=relative.parts[0] if relative.parts[0] in categories else "catalog" if relative.name=="assets.json" else "other"
+                    key="other" if relative.parts[:2]==("datasets","legacy-json") else relative.parts[0] if relative.parts[0] in categories else "catalog" if relative.name=="assets.json" else "other"
                     try:
                         categories[key]["bytes"]+=path.stat().st_size
                         categories[key]["files"]+=1
@@ -121,7 +121,10 @@ def cleanup_preview():
         candidates=[]
         for path in (root/"datasets").glob("*.json"):
             if not path.is_symlink() and re.fullmatch(r"[a-f0-9]{64}",path.stem) and path.stem not in refs:
-                candidates.append({"id":path.stem,"bytes":path.stat().st_size})
+                # Shared chunks cannot be counted as reclaimable per dataset.
+                value=json.loads(path.read_text("utf-8"))
+                candidates.append({"id":path.stem,"bytes":path.stat().st_size,
+                    "sharedParquet":bool(value.get("storage")),"chunksIncluded":False})
         return {"previewOnly":True,"deletionSupported":False,"referencedDatasets":len(refs),
                 "candidates":candidates,"candidateBytes":sum(v["bytes"] for v in candidates),
                 "warning":"Unreferenziert ist kein Löschauftrag. Es wird nichts entfernt; Nutzung kann sich nach dieser Vorschau ändern."}

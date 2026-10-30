@@ -99,3 +99,13 @@ test("frozen MTF projection stays fixed even when a source anchor initially lies
   assert.equal(context.chartProjection(ray, 20, extended), 12);
   assert.equal(context.chartProjection(ray, 100, extended), 20);
 });
+
+test('freeze cannot leak across datasets, replay cases or an earlier analysis cutoff',()=>{
+  const {frozen,bundle}=fixture();
+  frozen.payload.datasetId='one';bundle.datasetId='two';
+  assert.throws(()=>context.assertFrozenCompatible(bundle,frozen),/Datenbeständen/);
+  bundle.datasetId='one';frozen.payload.randomCase={id:'a'};bundle.randomCase={id:'b'};
+  assert.throws(()=>context.assertFrozenCompatible(bundle,frozen),/Replay/);
+  bundle.randomCase={id:'a'};frozen.analysisCutoff=42;
+  assert.throws(()=>context.assertFrozenCompatible(bundle,frozen),/später/);
+});

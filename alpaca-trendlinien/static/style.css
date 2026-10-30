@@ -157,6 +157,14 @@ button[aria-pressed="true"] {
 .toolbar-spacer {
   flex: 1;
 }
+#line-color {
+  width: 34px;
+  min-width: 34px;
+  height: 27px;
+  padding: 2px;
+  cursor: pointer;
+  vertical-align: middle;
+}
 .analysis-toggle {
   white-space: nowrap;
   font-weight: 650;
@@ -1002,3 +1010,18 @@ dialog::backdrop {
     font-size: 9px;
   }
 }
+
+.practice-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:4px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+#drawing-hint{pointer-events:none}
+.practice-controls label{display:flex;align-items:center;gap:6px}
+.practice-controls select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px;max-width:270px}
+#random-note{color:var(--muted);flex:1;min-width:190px}
+#random-new{color:var(--accent);font-weight:650}
+.app-navigation{overflow-x:auto}
+@media(max-width:600px){.practice-controls{padding:4px 8px}.practice-controls select{max-width:220px}#random-note{flex-basis:100%;font-size:12px}}
+
+#master-sma-control,#master-date-control{font-size:11px;white-space:nowrap;display:flex;gap:4px;align-items:center}#master-sma-control[hidden],#master-date-control[hidden]{display:none}#master-date-line{position:absolute;top:0;bottom:30px;border-left:1px dashed #2979ff;pointer-events:none;z-index:2}#master-date-line[hidden]{display:none}#master-date-line span{position:absolute;top:78px;right:4px;background:#2979ff;color:white;padding:4px 6px;border-radius:3px;white-space:nowrap;font-size:11px}
+
+.info-panel{max-height:calc(100% - 24px);overflow-y:auto;overscroll-behavior:contain}.info-panel .info-heading{position:sticky;top:0;background:var(--panel);z-index:1}.master-extra{border-top:1px solid #ffffff25;padding:5px 8px}.master-extra summary{cursor:pointer;font-size:12px;color:#c4cbd7}.master-extra small{display:block;line-height:1.4;padding:5px 0}
+
+.master-blue{color:#5aa9ff}

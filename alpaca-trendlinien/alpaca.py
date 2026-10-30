@@ -10,7 +10,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,25 +25,12 @@ DATA_TIMEFRAMES = {**TIMEFRAMES, "5m": "5Min"}
 SECONDS = {"5m": 300, "1h": 3600, "4h": 14400, "1D": 86400}
 _LOCK = threading.Lock()
 _DATA_LOCKS: dict[tuple[str, str], threading.Lock] = {}
-_REQUEST_LOCK = threading.Lock()
-_REQUEST_TIMES = deque()
 
 
 def request_slot():
-    """One shared per-process budget for chart and worker provider downloads."""
-    try:
-        budget=max(1,min(1000,int(os.environ.get("TORI_API_REQUESTS_PER_MINUTE","150"))))
-    except ValueError:
-        budget=150
-    while True:
-        with _REQUEST_LOCK:
-            now=time.monotonic()
-            while _REQUEST_TIMES and now-_REQUEST_TIMES[0]>=60:
-                _REQUEST_TIMES.popleft()
-            if len(_REQUEST_TIMES)<budget:
-                _REQUEST_TIMES.append(now)
-                return
-        time.sleep(.25)
+    """Reserve each HTTP attempt across processes using the same data directory."""
+    from provider_budget import wait
+    wait()
 
 
 def data_lock(symbol: str, timeframe: str):
@@ -123,6 +109,13 @@ def _request(params: dict, key: str, secret: str) -> dict:
             with urllib.request.urlopen(request, timeout=25) as response:
                 return json.load(response)
         except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                from provider_budget import cooldown
+                try:
+                    delay = float(exc.headers.get("Retry-After", "60"))
+                except (ValueError, TypeError, AttributeError):
+                    delay = 60
+                cooldown(delay)
             if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
                 time.sleep(1 + attempt)
                 continue

@@ -6,11 +6,14 @@ function bundleKey(symbol, asOf, enabled = state.analysisEnabled) {
     (asOf || "live") +
     "|" +
     (state.datasetId || "") +
+    "|random=" + (state.randomId || "") +
     "|" +
     (state.researchTrial || "") +
     "|" +
     (state.researchVariant || "") +
-    "|analysis=" + (enabled ? "1" : "0")
+    "|analysis=" + (enabled ? "1" : "0") +
+    (state.analysisEngine && state.analysisEngine !== "legacy" ? "|engine=" + state.analysisEngine : "") +
+    (state.fanCase ? "|fan_case=" + state.fanCase + "|fan_job=" + state.fanJob : "")
   );
 }
 function hasToriAnalysis() {
@@ -30,16 +33,20 @@ function updateToriControls() {
   button.title = state.analysisEnabled
     ? "Automatische Tori-Linien, Marker und Infobox ausschalten"
     : "Automatische Tori-Analyse einschalten";
-  button.disabled = state.stepping || !$("#loading").hidden;
+  button.disabled = state.stepping || state.freezing || !$("#loading").hidden;
+  $("#analysis-engine").disabled = state.stepping || state.freezing || !$("#loading").hidden || !!state.fanCase;
   $("#info-panel").hidden = !ready || !state.info;
   $("#info-button").hidden = !ready;
   $("#info-button").setAttribute("aria-pressed", String(ready && state.info));
-  $("#freeze-button").hidden = !state.analysisEnabled;
+  $("#freeze-button").hidden = !state.analysisEnabled && !state.frozen;
+  $("#freeze-button").textContent = state.freezing ? "Fixiere …" : state.frozen ? "Fixierung lösen · Mitlaufen" : "Linien jetzt fixieren";
+  if (state.researchJob) $("#freeze-button").textContent = state.data?.researchSetup ? "Signal fixiert" : "Forschungsfall";
+  $("#freeze-button").setAttribute("aria-pressed", String(!!state.frozen));
   $("#axis-mode").hidden = !state.analysisEnabled;
-  $("#freeze-button").disabled = !ready || !$("#loading").hidden || !!state.researchJob;
+  $("#freeze-button").disabled = (!ready && !state.frozen) || state.stepping || state.freezing || !$("#loading").hidden || !!state.researchJob || !!state.fanCase;
 }
 async function toggleToriAnalysis() {
-  if (state.stepping) return;
+  if (state.stepping || state.freezing) return;
   if (state.analysisEnabled) {
     const bundle = currentBundle();
     state.analysisEnabled = false;
@@ -91,13 +98,24 @@ function fixedChartPositions(ray, frozen, tf) {
     b: RayGeometry.logicalAt(axis, ray.b_time),
   };
 }
+function frozenBoundary(frozen) {
+  return Math.max(frozen.validFrom, frozen.analysisCutoff || 0);
+}
+function activeFrozen() {
+  return state.analysisEnabled === false ? null : state.frozen;
+}
 function assertFrozenCompatible(bundle, frozen) {
   if (!frozen) return;
+  if ((frozen.payload.analysisEngine || "legacy") !== (bundle.analysisEngine || "legacy"))
+    throw Error("Fixierung und Chart verwenden unterschiedliche Linienfinder.");
   if (frozen.symbol !== bundle.symbol || frozen.basis !== "bars")
     throw Error(
       "Dieser Stand gehört nicht zur aktuellen Aktie oder Linienbasis.",
     );
-  if (frozen.validFrom > bundle.analysisCutoff)
+  if ((frozen.payload.datasetId || null) !== (bundle.datasetId || null) ||
+      (frozen.payload.randomCase?.id || null) !== (bundle.randomCase?.id || null))
+    throw Error("Fixierung und Chart gehören zu unterschiedlichen Datenbeständen oder Replay-Fällen.");
+  if (frozenBoundary(frozen) > bundle.analysisCutoff)
     throw Error(
       "Der fixierte Stand enthält später abgeschlossene Kerzen als der gewählte Zeitpunkt. Bitte zuerst die Fixierung lösen oder einen früheren Stand öffnen.",
     );
@@ -111,8 +129,9 @@ function assertFrozenCompatible(bundle, frozen) {
   }
 }
 function snapshotChart(bundle, tf) {
-  if (!state.frozen) return bundle.charts[tf];
-  const locked = state.frozen.payload.charts[tf].bars;
+  const frozen = activeFrozen();
+  if (!frozen) return bundle.charts[tf];
+  const locked = frozen.payload.charts[tf].bars;
   const future = bundle.charts[tf].bars.filter(
     (bar) => bar.time > locked.at(-1).time && bar.end <= bundle.analysisCutoff,
   );
@@ -133,9 +152,8 @@ function snapshotChart(bundle, tf) {
   };
 }
 async function frozenForSymbol(symbol) {
-  if (state.datasetId) return null;
-  if (state.data && symbol === state.symbol) return state.frozen;
-  const identity = read("tori-frozen:" + symbol, null);
+  if (state.data && symbol === state.symbol && (state.data.analysisEngine || "legacy") === (state.analysisEngine || "legacy")) return state.frozen;
+  const identity = read(frozenKey(symbol), null);
   if (!identity) return null;
   const response = await apiFetch(
     "/api/snapshots/" + encodeURIComponent(identity),
@@ -144,6 +162,11 @@ async function frozenForSymbol(symbol) {
   if (!response.ok)
     throw Error(item.error || "Gespeicherter Stand nicht lesbar.");
   return item;
+}
+function frozenKey(symbol) {
+  return "tori-frozen:" + symbol +
+    (state.randomId ? ":random:" + state.randomId : state.datasetId ? ":dataset:" + state.datasetId : "") +
+    (state.analysisEngine && state.analysisEngine !== "legacy" ? ":" + state.analysisEngine : "");
 }
 function updateCollapsedInfo() {
   $("#info-panel").classList.toggle("collapsed", state.infoCollapsed);
@@ -175,7 +198,10 @@ function nyInput(timestamp) {
   return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
 }
 function renderSavedList() {
-  const items = state.snapshotLists.get(state.symbol) || [];
+  const items = (state.snapshotLists.get(state.symbol) || []).filter(item =>
+    (item.datasetId || null) === (state.datasetId || null) &&
+    (item.randomCaseId || null) === (state.randomId || null) &&
+    (item.analysisEngine || "legacy") === state.analysisEngine);
   const select = $("#saved-stand");
   select.replaceChildren(
     new Option(
@@ -218,7 +244,7 @@ function updateAnalysisControls() {
       ? " · Fixiert: " + dtLong(frozen.analysisCutoff) + " ET"
       : data.researchSetup
         ? " · Signalstand"
-        : " · Automatik");
+        : " · Mitlaufend: Neuberechnung je Kerzenschritt");
   if (state.datasetId && state.analysisEnabled)
     $("#analysis-state").textContent += data.researchSetup
       ? " · Forschungsfall: ursprüngliche Signallinien fixiert"
@@ -227,10 +253,7 @@ function updateAnalysisControls() {
     "frozen",
     state.analysisEnabled && (!!frozen || !!data.researchSetup),
   );
-  $("#freeze-button").textContent = frozen ? "Fixierung lösen" : "Fixieren";
-  $("#freeze-button").setAttribute("aria-pressed", String(!!frozen));
-  $("#freeze-button").disabled = !hasToriAnalysis();
-  $("#freeze-button").title = frozen
+  $("#freeze-button").title = state.frozen
     ? "Automatische Linien wieder neu wählen lassen; der gespeicherte Stand bleibt erhalten"
     : "Automatische Linien mit Datenbasis lokal speichern und fixieren";
   $("#analysis-at").value = nyInput(data.analysisCutoff);
@@ -243,13 +266,13 @@ function updateAnalysisControls() {
   updateStepButtons();
 }
 function updateStepButtons() {
-  const disabled = !state.data || state.stepping || !$("#loading").hidden;
+  const disabled = !state.data || state.stepping || state.freezing || !$("#loading").hidden;
   document
     .querySelectorAll("[data-tf]")
-    .forEach((button) => (button.disabled = state.stepping));
-  $("#symbol-button").disabled = state.stepping;
-  $("#history-button").disabled = state.stepping || !$("#loading").hidden;
-  $("#refresh-button").disabled = state.stepping || !$("#loading").hidden;
+    .forEach((button) => (button.disabled = state.stepping || state.freezing || !!(state.data && !state.data.charts?.[button.dataset.tf])));
+  $("#symbol-button").disabled = state.stepping || state.freezing;
+  $("#history-button").disabled = disabled;
+  $("#refresh-button").disabled = disabled;
   $("#freeze-button").disabled = disabled || !hasToriAnalysis() || !!state.researchJob;
   if (state.researchJob)
     $("#freeze-button").textContent = state.data?.researchSetup
@@ -258,12 +281,13 @@ function updateStepButtons() {
   $("#replay-interval").textContent = state.timeframe;
   $("#step-back").disabled =
     disabled ||
-    !!(state.analysisEnabled && state.frozen && state.data.analysisCutoff <= state.frozen.validFrom);
+    !!(state.analysisEnabled && state.frozen && state.data.analysisCutoff <= frozenBoundary(state.frozen));
   $("#step-next").disabled = disabled;
   updateToriControls();
+  if (typeof updateRandomUI === 'function') updateRandomUI();
 }
 async function stepAnalysis(direction) {
-  if (!state.data || state.stepping) return;
+  if (!state.data || state.stepping || state.freezing || !$("#loading").hidden) return;
   state.stepping = true;
   updateStepButtons();
   setTool(false);
@@ -277,11 +301,11 @@ async function stepAnalysis(direction) {
     const params = new URLSearchParams({
       symbol,
       timeframe: tf,
-      asof: new Date(state.data.analysisCutoff * 1000).toISOString(),
+      asof: new Date((direction==='back' ? state.data.latest.end : state.data.analysisCutoff) * 1000).toISOString(),
       direction,
     });
     if (state.datasetId) params.set("dataset", state.datasetId);
-    const response = await apiFetch("/api/step?" + params),
+    const response = await apiFetch((state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/step?' : "/api/step?") + params),
       target = await response.json();
     if (
       request !== state.request ||
@@ -291,7 +315,7 @@ async function stepAnalysis(direction) {
       return;
     if (!response.ok)
       throw Error(target.error || "Kerzenschritt nicht verfügbar.");
-    if (state.analysisEnabled && state.frozen && target.closedAt < state.frozen.validFrom)
+    if (state.analysisEnabled && state.frozen && target.closedAt < frozenBoundary(state.frozen))
       throw Error(
         "Vor den fixierten Datenstand geht es nur nach dem Lösen der Fixierung.",
       );
@@ -320,17 +344,19 @@ async function stepAnalysis(direction) {
   }
 }
 async function toggleFreeze() {
-  if (!hasToriAnalysis()) return;
+  if (state.stepping || state.freezing || !$("#loading").hidden || state.researchJob || state.fanCase) return;
+  if (!hasToriAnalysis() && !state.frozen) return;
   const bundle = currentBundle();
   if (!bundle) return;
   $("#error").hidden = true;
   if (state.frozen) {
     state.frozen = null;
-    write("tori-frozen:" + state.symbol, null);
+    write(frozenKey(state.symbol), null);
     render(bundle, true);
     return;
   }
-  $("#freeze-button").disabled = true;
+  state.freezing = true;
+  updateStepButtons();
   const request = state.request,
     symbol = state.symbol;
   try {
@@ -345,17 +371,19 @@ async function toggleFreeze() {
     if (request !== state.request || symbol !== state.symbol) return;
     assertFrozenCompatible(bundle, snapshot);
     state.frozen = snapshot;
-    write("tori-frozen:" + state.symbol, snapshot.id);
+    write(frozenKey(state.symbol), snapshot.id);
     render(bundle, true);
     await refreshSavedList();
   } catch (e) {
     if (request === state.request) showError(e.message);
   } finally {
+    state.freezing = false;
     if (request === state.request) updateStepButtons();
   }
 }
 async function openSavedSnapshot(identity) {
   if (!identity) return;
+  if (state.fanCase) { showError("Der Forschungsfall ist bereits an seinen Originalstand gebunden. Gespeicherte eigene Stände im normalen Chart öffnen."); return; }
   $("#history-dialog").close();
   $("#error").hidden = true;
   const request = ++state.request;
@@ -369,9 +397,15 @@ async function openSavedSnapshot(identity) {
     const bundle = { ...snapshot.payload, historical: true };
     if (snapshot.symbol !== state.symbol)
       throw Error("Dieser Stand gehört zu einer anderen Aktie.");
+    if ((snapshot.payload.randomCase?.id || null) !== (state.randomId || null))
+      throw Error("Dieser Stand gehört zu einem anderen Replay-Fall. Im passenden Zufallsfall öffnen.");
+    if(!snapshot.payload.charts[state.timeframe])throw Error('Dieses Intervall fehlt im alten gespeicherten Stand. Zuerst auf 1D oder 4h wechseln.');
+    state.analysisEngine = bundle.analysisEngine || "legacy";
+    state.datasetId = bundle.datasetId || null;
+    $("#analysis-engine").value = state.analysisEngine;
     state.frozen = snapshot;
     state.asOf = isoCutoff(bundle);
-    write("tori-frozen:" + state.symbol, snapshot.id);
+    write(frozenKey(state.symbol), snapshot.id);
     state.bundles.set(bundleKey(state.symbol, state.asOf), bundle);
     state.bundles.set(bundleKey(state.symbol, state.asOf, true), bundle);
     render(bundle, false);

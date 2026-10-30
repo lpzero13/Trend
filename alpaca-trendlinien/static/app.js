@@ -53,16 +53,21 @@ const write = (key, value) => {
   }
 };
 const query = new URLSearchParams(location.search);
+const randomMode = location.pathname === '/zufall';
+const drawingScope = () => state.randomId ? 'random:'+state.randomId : state.symbol;
 const state = {
   symbol: query.get("symbol") || "MSFT",
-  timeframe: ["1h", "4h", "1D"].includes(query.get("tf"))
+  timeframe: ["1h", "4h", "1D", "1W"].includes(query.get("tf"))
     ? query.get("tf")
     : "4h",
   range: 30,
   data: null,
   analysisEnabled: false,
+  analysisEngine: ["fan_extreme", "fan_local", "fan_master"].includes(query.get("engine")) ? query.get("engine") : "legacy",
+  fanJob: query.get("fan_job") || null,
+  fanCase: query.get("fan_case") || null,
   bundles: new Map(),
-  visible: { "1D": true, "4h": true, "1h": true },
+  visible: { "1D": true, "4h": true, "1h": true, "1W":true },
   request: 0,
   theme: read(
     "tori-theme",
@@ -85,15 +90,23 @@ const state = {
   axisMode: "trading",
   asOf: query.get("asof") || null,
   datasetId: query.get("dataset") || null,
+  randomId: randomMode ? query.get('case') : null,
+  randomStartAt: null,
+  randomPicking: false,
+  drawingScope: null,
   researchJob: query.get("job") || null,
   researchTrial: query.get("trial") || null,
   researchVariant: query.get("variant") || null,
   stepping: false,
+  freezing: false,
   frozen: null,
   snapshotLists: new Map(),
   measurementSymbol: null,
   measurementArchive: { items: [], trash: [], activeId: null },
   includeLines: read("tori-fit-lines", false),
+  showSma: read("tori-master-sma", true),
+  showDateMarker: read("tori-master-date", true),
+  contextSeries: {},
 };
 const chart = LC.createChart($("#chart"), {
   autoSize: true,
@@ -168,7 +181,7 @@ const rayLayer = new RayLayer(
   candles,
   () => state.data?.axis || [],
   (items) => {
-    write("tori-rays:" + state.symbol, items);
+    write("tori-rays:" + drawingScope(), items);
     updateDrawingSummary();
   },
 );
@@ -187,7 +200,7 @@ rayLayer.labelObstacles = () => {
     });
 };
 function lanes() {
-  return ["1D", "4h", ...(state.timeframe === "1h" ? ["1h"] : [])];
+  return ["1D", "4h", ...(["1h","1W"].includes(state.timeframe) ? [state.timeframe] : [])].filter(tf=>state.data?.lanes?.[tf]);
 }
 function theme() {
   document.documentElement.dataset.theme = state.theme;
@@ -256,7 +269,15 @@ rayLayer.onHint = (text) => {
   $("#drawing-hint").textContent = text;
 };
 rayLayer.onDone = () => setTool(false);
-rayLayer.onSelection = () => updateDrawingSummary();
+rayLayer.onSelection = () => {
+  const selected=rayLayer.items.find(r=>r.id===rayLayer.selected);
+  if(selected) $('#line-extension').value=selected.extend || 'right';
+  if(selected) {
+    $('#line-color').value=RayGeometry.color(selected.color);
+    rayLayer.color=$('#line-color').value;
+  }
+  updateDrawingSummary();
+};
 function updateDrawingSummary() {
   $("#drawing-summary").textContent =
     `Eigene Rays: ${rayLayer.items.length} · Messungen: ${state.measurementArchive.items.length}${storageWarning ? " · Speicherung fehlgeschlagen" : ""}`;
@@ -304,9 +325,41 @@ function storedRays(symbol) {
       r.a.time < r.b.time &&
       r.a.price > 0 &&
       r.b.price > 0,
-  );
+  ).map(r=>{
+    if(r.basis && !RayGeometry.validBasis(r.basis)) { const copy={...r};delete copy.basis;return copy; }
+    return r;
+  });
 }
+function updateMasterDateMarker() {
+  const active=hasToriAnalysis() && state.analysisEngine==='fan_master';
+  $('#master-date-control').hidden=!active;$('#master-date').checked=state.showDateMarker;
+  const visible=active && state.showDateMarker && state.data.historical;
+  const x=visible ? chart.timeScale().logicalToCoordinate?.(state.data.axis.length-1) : null;
+  $('#master-date-line').hidden=!visible || !Number.isFinite(x) || x<0;
+  if(visible && Number.isFinite(x)) {
+    $('#master-date-line').setAttribute('style',`left:${x}px`);
+    $('#master-date-line span').textContent=`Ausgewerteter Schluss · ${dtLong(state.data.latest.end)} ET`;
+  }
+}
+$('#master-date').onchange=()=>{state.showDateMarker=$('#master-date').checked;write('tori-master-date',state.showDateMarker);updateMasterDateMarker();};
+chart.timeScale().subscribeVisibleLogicalRangeChange(updateMasterDateMarker);
+function updateMasterContext() {
+  updateMasterDateMarker();
+  const active=hasToriAnalysis() && state.analysisEngine==='fan_master';
+  $('#master-sma-control').hidden=!active;$('#master-sma').checked=state.showSma;
+  if(!LC.LineSeries)return;
+  for(const period of ['50','200']) {
+    // Context can end before the replay candle (warm-up, gaps, frozen stand).
+    // Keep every plotted series on exactly the candle grid, including whitespace.
+    const known = new Map((state.data?.lanes[state.timeframe]?.context?.series?.[period] || []).map(row=>[row.time,row]));
+    const rows=active && state.showSma ? state.data.bars.map(bar=>known.get(bar.time) || {time:bar.time}) : [];
+    if(rows.length && !state.contextSeries[period])state.contextSeries[period]=chart.addSeries(LC.LineSeries,{color:period==='50'?'#a855f7':'#8b939f',lineWidth:period==='50'?1:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    state.contextSeries[period]?.setData(rows);
+  }
+}
+$('#master-sma').onchange=()=>{state.showSma=$('#master-sma').checked;write('tori-master-sma',state.showSma);updateMasterContext();};
 function automaticLines() {
+  updateMasterContext();
   rayLayer.automatic = [];
   if (!hasToriAnalysis()) {
     markerPlugin.setMarkers([]);
@@ -319,26 +372,27 @@ function automaticLines() {
     const lane = state.data.lanes[tf];
     const add = (r, kind, outer = false, retest = false) => {
       if (!r) return;
-      const color = retest ? "#f48200" : kind === "red" ? "#ff4564" : "#0bbb78";
+      const master = r.algorithm === "master";
+      const color = retest ? "#f48200" : master ? r.color : kind === "red" ? "#ff4564" : "#0bbb78";
       rayLayer.automatic.push({
         ...asRay(r),
-        color: outer ? color + "44" : color,
-        width: outer ? 1 : tf === state.timeframe ? 2.5 : 2,
+        color: outer && !master ? color + "44" : color,
+        width: master && !retest ? (outer ? 2 : 3) : outer ? 1 : tf === state.timeframe ? 2.5 : 2,
         dash: retest
           ? tf === "1D"
             ? [2, 5]
             : [13, 9]
-          : tf === "1D"
+          : master ? (r.qualified ? [] : [8,5]) : tf === "1D"
             ? []
             : tf === "4h"
               ? [8, 5]
               : [2, 4],
-        label: outer
+        label: outer && !master
           ? ""
           : retest
             ? `${tf} Bruch · ${dt(lane.retest.closedAt)}`
-            : `${tf} · ${kind === "red" ? "Rot" : "Grün"}`,
-        labelColor: retest ? "#985000" : kind === "red" ? "#b72642" : "#087847",
+            : master ? `${tf} · ${kind === "red" ? "Widerstand" : "Safety"} ${r.level}${r.provisionalEnvelope ? " · Hülle" : ""} · ${r.contacts} K${r.qualified ? " · A+" : ""}` : `${tf} · ${kind === "red" ? "Rot" : "Grün"}`,
+        labelColor: retest ? "#985000" : master ? r.color : kind === "red" ? "#b72642" : "#087847",
         labelEdge: !retest,
         labelAt: retest
           ? {
@@ -350,17 +404,19 @@ function automaticLines() {
     };
     if ($("#outer-lines").checked) {
       lane.outerRed.forEach((r) => add(r, "red", true));
-      lane.outerGreen.forEach((r) => add(r, "green", true));
+      lane.outerGreen.filter(r=>r.id!==lane.mainSafety?.id).forEach((r) => add(r, "green", true));
     }
     add(lane.red, "red");
+    if(lane.mainSafety && lane.mainSafety.id!==lane.green?.id)add(lane.mainSafety,"green",true);
+    if(lane.tightSafety && lane.tightSafety.id!==lane.green?.id && lane.tightSafety.id!==lane.mainSafety?.id)add(lane.tightSafety,"green",true);
     add(lane.green, "green");
     if (lane.retest) add(lane.retest.ray, "red", false, true);
     if (tf === state.timeframe) {
       for (const kind of ["red", "green"]) {
         const r = lane[kind];
         if (!r) continue;
-        for (const time of [r.a_time, r.b_time]) {
-          const b = state.data.bars.findLast((b) => b.time <= time);
+        for (const time of r.algorithm === "master" && r.contactPoints ? r.contactPoints.map(p=>p.time) : [r.a_time, r.b_time]) {
+          const b = state.data.bars.findLast((b) => b.time <= time && time < b.end);
           if (b)
             markers.push({
               time: b.time,
@@ -374,8 +430,8 @@ function automaticLines() {
     }
   }
   const setup = state.data.researchSetup;
-  if (setup?.entryAt && setup.entryAt <= state.data.reference) {
-    const at = state.data.bars.findLast((b) => b.time <= setup.entryAt);
+  if (setup?.entryAt && setup.entryAt <= state.data.analysisCutoff) {
+    const at = state.data.bars.findLast((b) => b.time <= setup.entryAt && setup.entryAt < b.end);
     if (at)
       markers.push({
         time: at.time,
@@ -411,13 +467,14 @@ function table() {
     return;
   }
   const tfs = lanes();
+  const extraRows=[];
   const rows = [
     [
       "Rot",
       (tf) => `<span class="red">${fmt(data.lanes[tf].red?.value)}</span>`,
     ],
     [
-      "Grün",
+      state.analysisEngine === "fan_master" ? "Safety (gewählt)" : "Grün",
       (tf) => `<span class="green">${fmt(data.lanes[tf].green?.value)}</span>`,
     ],
     [
@@ -444,13 +501,26 @@ function table() {
       (tf) => {
         const e = data.lanes[tf].event;
         return e
-          ? `${tf === "4h" && data.researchSetup?.entryMode === "tori" ? "Rot, ursprünglicher Bruch" : e.kind === "green_break" ? "Grün" : e.kind === "long_break" ? "Rot, qualifiziert" : "Rot, Filter fehlt"}<br><small>${dt(e.closedAt)}</small>`
+          ? `${e.kind === "fan_break" || tf === "4h" && data.researchSetup?.entryMode === "tori" ? "Rot, ursprünglicher Bruch" : e.kind === "green_break" ? "Grün" : e.kind === "long_break" ? "Rot, qualifiziert" : "Rot, Filter fehlt"}<br><small>${dt(e.closedAt)}</small>`
           : "—";
       },
     ],
   ];
+  if(state.analysisEngine==='fan_master') {
+    rows.push(['Haupt-Safety (blau)',tf=>`<span class="master-blue">${fmt(data.lanes[tf].mainSafety?.value)}</span>`]);
+    rows.push(['SMA 50 / 200',tf=>`${fmt(data.lanes[tf].context?.sma50)} / ${fmt(data.lanes[tf].context?.sma200)}`]);
+    extraRows.push(['Clean-Close / Quelle',tf=>fmt(data.lanes[tf].cleanCloseThreshold)]);
+    extraRows.push(['Pine-Prüffenster¹',tf=>esc(data.lanes[tf].checkWindow?.status||'—')]);
+    if(!data.researchSetup)extraRows.push(['Schlusskursmodell¹',tf=>{const m=data.lanes[tf].closeModel;return m?.quantity==null?'—':`${m.quantity} Stück · Stop ${fmt(m.stop)}<br><small>${fmt(m.capital)} Kapital · ${fmt(m.riskFraction*100)}% Risiko · ohne Kosten</small>`;}]);
+  }
+  if (data.researchSetup?.entryMode === "fan") {
+    const setup = data.researchSetup;
+    rows.push(["Signalstop (fixiert)", tf => tf === setup.sourceTimeframe ? fmt(setup.initialStop) : "—"]);
+    rows.push(["Modell-Einstieg", tf => tf === setup.sourceTimeframe ? fmt(setup.entryPrice) : "—"]);
+  }
   $("#line-table").innerHTML =
     `<table><thead><tr><th>${esc(data.symbol)}</th>${tfs.map((tf) => `<th>${tf} | Linie</th>`).join("")}</tr></thead><tbody>${rows.map(([title, fn]) => `<tr><th>${title}</th>${tfs.map((tf) => `<td>${fn(tf)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  if(extraRows.length)$('#line-table').innerHTML+=`<details class="master-extra"><summary>Master-Details</summary><table><tbody>${extraRows.map(([title,fn])=>`<tr><th>${title}</th>${tfs.map(tf=>`<td>${fn(tf)}</td>`).join('')}</tr>`).join('')}</tbody></table><small>¹ Prüffenster: Rückblick, kein neues Handelssignal. Größenmodell: hypothetischer Quellschluss ohne Kosten/Gaps.</small></details>`;
   $("#layer-controls").innerHTML = tfs
     .map(
       (tf) =>
@@ -515,11 +585,12 @@ function resetView() {
   if (!state.data) return;
   setTool(false);
   chart.priceScale("right").applyOptions({ autoScale: true });
-  setRange(state.timeframe === "1D" ? 90 : 30);
+  setRange(state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30);
   $("#auto-scale").setAttribute("aria-pressed", "true");
 }
 function view(bundle, tf) {
-  const source = state.frozen ? state.frozen.payload : bundle;
+  const frozen = activeFrozen();
+  const source = frozen ? frozen.payload : bundle;
   const selected = snapshotChart(bundle, tf);
   const data = {
     ...bundle,
@@ -532,13 +603,14 @@ function view(bundle, tf) {
     for (const r of [
       lane.red,
       lane.green,
+      lane.mainSafety,
       ...lane.outerRed,
       ...lane.outerGreen,
       lane.retest?.ray,
     ]) {
       if (r) {
-        if (state.frozen)
-          r.chartPositions = fixedChartPositions(r, state.frozen, tf);
+        if (frozen)
+          r.chartPositions = fixedChartPositions(r, frozen, tf);
         r.sourceValue = r.value;
         r.value = chartProjection(r, data.reference, data.axis);
       }
@@ -566,12 +638,16 @@ function render(bundle, preserve = false) {
   state.symbol = bundle.symbol;
   state.data = view(bundle, state.timeframe);
   const data = state.data;
-  if (state.measurementSymbol !== state.symbol)
-    restoreMeasurements(state.symbol);
+  const scope=drawingScope();
+  if (state.measurementSymbol !== scope)
+    restoreMeasurements(scope);
+  rayLayer.cutoff=data.analysisCutoff;
   rayLayer.measurementEnd = data.reference;
   updateMeasurementSummary();
   rayLayer.timeframe = state.timeframe;
-  if (symbolChanged || !hadData) rayLayer.load(storedRays(state.symbol));
+  if (symbolChanged || !hadData || state.drawingScope!==scope) rayLayer.load(storedRays(scope));
+  rayLayer.bindAxes?.(bundle.drawingAxes || Object.fromEntries(Object.entries(bundle.charts).map(([tf,c])=>[tf,c.bars.map(b=>b.time)])));
+  state.drawingScope=scope;
   $("#ticker").textContent = data.symbol;
   $("#company").textContent = data.company;
   const synthetic = data.dataKind === "synthetic";
@@ -581,12 +657,15 @@ function render(bundle, preserve = false) {
   history.replaceState(
     null,
     "",
-    "/?" +
+    (randomMode ? '/zufall?' : '/?') +
       new URLSearchParams({
         symbol: data.symbol,
         tf: state.timeframe,
+        ...(state.randomId ? {case:state.randomId} : {}),
         ...(state.asOf ? { asof: state.asOf } : {}),
         ...(state.datasetId ? { dataset: state.datasetId } : {}),
+        ...(state.analysisEngine !== "legacy" ? {engine: state.analysisEngine} : {}),
+        ...(state.fanCase ? {fan_job:state.fanJob, fan_case:state.fanCase} : {}),
         ...(state.researchJob
           ? {
               job: state.researchJob,
@@ -606,7 +685,7 @@ function render(bundle, preserve = false) {
     }),
   );
   chart.timeScale().applyOptions({
-    timeVisible: state.timeframe !== "1D",
+    timeVisible: !['1D','1W'].includes(state.timeframe),
     tickMarkFormatter: (time, type) =>
       new Intl.DateTimeFormat("de-DE", {
         timeZone: "America/New_York",
@@ -623,7 +702,7 @@ function render(bundle, preserve = false) {
       from: RayGeometry.logicalAt(data.axis, windowTimes.from),
       to: RayGeometry.logicalAt(data.axis, windowTimes.to),
     });
-  else setRange(state.timeframe === "1D" ? 90 : 30);
+  else setRange(state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30);
   $("#axis-mode").value = state.axisMode;
   $("#fit-lines").checked = state.includeLines;
   $("#axis-note").textContent =
@@ -645,6 +724,7 @@ function render(bundle, preserve = false) {
     .map((m) => m.warning)
     .filter(Boolean);
   if (warnings.length) showError(warnings[0]);
+  updateRandomUI();
 }
 function showError(text) {
   $("#error").textContent = text;
@@ -658,12 +738,16 @@ async function load(
 ) {
   const previousContext = {
     datasetId: state.datasetId,
+    fanJob: state.fanJob,
+    fanCase: state.fanCase,
     researchJob: state.researchJob,
     researchTrial: state.researchTrial,
     researchVariant: state.researchVariant,
   };
-  if (symbol !== state.symbol) {
+  if (symbol !== state.symbol && !state.randomId) {
     state.datasetId = null;
+    state.fanJob = null;
+    state.fanCase = null;
     state.researchJob = null;
     state.researchTrial = null;
     state.researchVariant = null;
@@ -683,7 +767,7 @@ async function load(
     analysis = state.analysisEnabled,
     key = bundleKey(symbol, asOf, analysis);
   try {
-    const frozen = analysis ? await frozenForSymbol(symbol) : null;
+    const frozen = analysis ? await frozenForSymbol(symbol) : symbol === state.symbol ? state.frozen : null;
     let data = state.bundles.get(key);
     let fetched = false;
     if (
@@ -699,13 +783,18 @@ async function load(
       });
       if (asOf) params.set("asof", asOf);
       if (state.datasetId) params.set("dataset", state.datasetId);
+      if (state.analysisEngine !== "legacy") params.set("engine", state.analysisEngine);
+      if (state.fanCase) {
+        params.set("fan_job", state.fanJob);
+        params.set("fan_case", state.fanCase);
+      }
       if (state.researchJob) {
         params.set("job", state.researchJob);
         params.set("trial", state.researchTrial);
         params.set("variant", state.researchVariant);
       }
       const response = await apiFetch(
-        (state.datasetId ? "/api/dataset-chart?" : "/api/chart?") + params,
+        (state.fanCase ? "/api/fan/chart?" : state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/chart?' : state.datasetId ? "/api/dataset-chart?" : "/api/chart?") + params,
       );
       data = await response.json();
       if (!response.ok) throw Error(data.error || "Datenabruf fehlgeschlagen.");
@@ -717,7 +806,7 @@ async function load(
       state.bundles.delete(bundleKey(symbol, asOf, true));
       state.bundles.delete(bundleKey(symbol, isoCutoff(data), true));
     }
-    assertFrozenCompatible(data, frozen);
+    if (analysis) assertFrozenCompatible(data, frozen);
     const preserve =
       symbol === state.symbol &&
       (preserveView || state.asOf === isoCutoff(data));
@@ -919,6 +1008,20 @@ $("#outer-lines").onchange = automaticLines;
 $("#ray-tool").onclick = () => {
   if (state.data) setTool(!rayLayer.active);
 };
+$('#line-extension').onchange=()=>{
+  setTool(false);
+  rayLayer.changeExtension($('#line-extension').value);
+  updateDrawingSummary();
+};
+$('#line-color').value=RayGeometry.color(read('tori-line-color','#3988ee'));
+rayLayer.color=$('#line-color').value;
+$('#line-color').onchange=()=>{
+  setTool(false);
+  const color=RayGeometry.color($('#line-color').value);
+  write('tori-line-color',color);
+  rayLayer.changeColor(color);
+  updateDrawingSummary();
+};
 $("#cursor-tool").onclick = () => setTool(false);
 $("#measure-tool").onclick = () => {
   if (state.data) setTool(rayLayer.measureActive ? false : "measure");
@@ -929,14 +1032,17 @@ document.querySelectorAll("[data-tf]").forEach(
   (b) =>
     (b.onclick = () => {
       if (state.timeframe === b.dataset.tf) return;
+      const bundle = currentBundle();
+      if(!bundle?.charts[b.dataset.tf] || state.frozen && !state.frozen.payload.charts[b.dataset.tf]) {
+        showError('Dieses Intervall fehlt im angezeigten Bestand oder alten fixierten Stand. Gegebenenfalls Fixierung lösen und Daten neu laden.');return;
+      }
       state.timeframe = b.dataset.tf;
-      state.range = state.timeframe === "1D" ? 90 : 30;
+      state.range = state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30;
       document
         .querySelectorAll("[data-tf]")
         .forEach((btn) => btn.setAttribute("aria-pressed", String(btn === b)));
       setTool(false);
       rayLayer.timeframe = state.timeframe;
-      const bundle = currentBundle();
       if (bundle) render(bundle, true);
     }),
 );
@@ -1027,5 +1133,61 @@ theme();
 updateDrawingSummary();
 setupAnalysisUI();
 $("#tori-analysis").onclick = toggleToriAnalysis;
+$("#analysis-engine").value = state.analysisEngine;
+$("#analysis-engine").onchange = async () => {
+  if (state.stepping || state.freezing || !$("#loading").hidden) {
+    $("#analysis-engine").value = state.analysisEngine;
+    return;
+  }
+  const before = state.analysisEngine;
+  if (state.fanCase) {
+    $("#analysis-engine").value = before;
+    showError("Dieser Forschungsfall ist an seine ursprüngliche Geometrie gebunden. Für einen Vergleich den normalen Chart öffnen.");
+    return;
+  }
+  state.analysisEngine = $("#analysis-engine").value;
+  state.frozen = null;
+  if (state.analysisEnabled && !await load(state.symbol, false, state.asOf, true)) {
+    state.analysisEngine = before;
+    $("#analysis-engine").value = before;
+  }
+};
 setupMeasurements();
-load(state.symbol);
+function updateRandomUI(){
+  if(!randomMode)return;
+  $('#random-controls').hidden=false;$('#random-note').hidden=false;
+  $('#random-new').disabled=state.randomPicking || state.stepping || state.freezing || !$('#loading').hidden;
+  $('#random-reset').disabled=!state.data || state.randomPicking || state.stepping || state.freezing || !$('#loading').hidden;
+  $('#symbol-button').disabled=true;
+  $('#random-note').textContent=state.randomStartAt
+    ? 'Zufallsfall · Start '+dtLong(state.randomStartAt)+' ET · Eigene Zeichnungen nur für diesen Fall'
+    : 'Zufällige Aktie und Zeitpunkt aus lokal gespeicherten Daten · keine Signalauswahl';
+}
+async function pickRandom(resume=false){
+  if(state.randomPicking || state.stepping || state.freezing)return;
+  state.randomPicking=true;updateRandomUI();$('#error').hidden=true;
+  const before={randomId:state.randomId,datasetId:state.datasetId,randomStartAt:state.randomStartAt,asOf:state.asOf,
+    analysisEnabled:state.analysisEnabled,frozen:state.frozen,researchJob:state.researchJob,researchTrial:state.researchTrial,researchVariant:state.researchVariant};
+  let applied=false;
+  try{
+    const response=await apiFetch(resume && state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId) : '/api/random/cases',
+      resume && state.randomId ? undefined : {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const item=await response.json();if(!response.ok)throw Error(item.error || 'Zufallsauswahl fehlgeschlagen.');
+    state.randomId=item.id;state.datasetId=item.datasetId;state.randomStartAt=item.startAt;
+    state.researchJob=state.researchTrial=state.researchVariant=null;state.frozen=null;state.analysisEnabled=false;
+    const asOf=resume && query.get('asof') ? query.get('asof') : new Date(item.startAt*1000).toISOString();
+    applied=await load(item.symbol,false,asOf);
+  }catch(e){showError(e.message);}
+  finally{if(!applied){Object.assign(state,before);updateAnalysisControls();}state.randomPicking=false;updateRandomUI();}
+}
+if(randomMode){
+  document.title='Tori · Zufall';
+  document.querySelector('.app-navigation a[href="/"]')?.setAttribute('aria-current','false');
+  document.querySelector('.app-navigation a[href="/zufall"]')?.setAttribute('aria-current','page');
+  $('#random-new').onclick=()=>pickRandom();
+  $('#random-reset').onclick=()=>{if(state.randomStartAt && !state.stepping)load(state.symbol,false,new Date(state.randomStartAt*1000).toISOString());};
+  $('#history-button').title='Datum innerhalb dieses Zufallsfalls wählen';
+  $('#live-analysis').hidden=true;
+  $('#symbol-button').onclick=()=>{};
+  pickRandom(!!state.randomId);
+}else load(state.symbol);

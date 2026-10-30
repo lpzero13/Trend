@@ -6,7 +6,7 @@ const MeasurementStore = {
       typeof item.id === "string" &&
       item.id.length > 0 &&
       item.id.length <= 80 &&
-      ["1h", "4h", "1D"].includes(item.timeframe) &&
+      ["1h", "4h", "1D", "1W"].includes(item.timeframe) &&
       Number.isFinite(item.createdAt) &&
       ["a", "b"].every(
         (key) =>
@@ -81,7 +81,7 @@ function restoreMeasurements(symbol) {
 function commitMeasurementState(next, remember = false) {
   next = MeasurementStore.normalize(next);
   const previous = remember ? structuredClone(state.measurementArchive) : null;
-  if (!write("tori-measurements:" + state.symbol, next)) {
+  if (!write("tori-measurements:" + (state.measurementSymbol || state.symbol), next)) {
     showError(
       "Messungen konnten nicht gespeichert werden. Bitte den Browserspeicher prüfen; der bisher gespeicherte Bestand bleibt erhalten.",
     );
@@ -124,7 +124,7 @@ function saveCompletedMeasurement(measurement) {
   rayLayer.selected = null;
   rayLayer.measurementSelected = true;
   rayLayer.remember(() => {
-    restoreMeasurements(state.symbol);
+    restoreMeasurements(state.measurementSymbol || state.symbol);
     updateMeasurementSummary();
     rayLayer.update();
   });

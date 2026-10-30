@@ -22,10 +22,10 @@ DEFAULTS = {"symbols": ["MSFT", "AMZN"], "samples": 10, "seed": 20261017,
 
 
 def validate_spec(value):
-    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe", "entry_mode", "tori", "lab"}):
+    if not isinstance(value, dict) or set(value) - (set(DEFAULTS) | {"dataset_ids", "universe", "entry_mode", "tori", "lab", "fan"}):
         raise DataError("Unbekannte oder ungültige Forschungsparameter.", 400)
     result = {**DEFAULTS, **value}
-    if result.get("entry_mode", "legacy") not in ("legacy", "tori", "lab"):
+    if result.get("entry_mode", "legacy") not in ("legacy", "tori", "lab", "fan"):
         raise DataError("Unbekannter Einstiegsmodus.", 400)
     if result.get("entry_mode") in ("tori","lab"):
         from tori_entries import validate
@@ -59,10 +59,19 @@ def validate_spec(value):
             raise DataError("Für die Validierung muss ein eigener Zeitanteil verbleiben.",400)
     elif "lab" in result:
         raise DataError("Laborparameter nur im separat gewählten Labormodus verwenden.",400)
+    if result.get("entry_mode") == "fan":
+        from fan_study import validate as validate_fan
+        result["fan"] = validate_fan(result.get("fan", {}))
+        if result.get("universe", "list") != "list":
+            raise DataError("Fächer verwendet ausdrücklich gewählte lokale Datasets, keinen automatischen Vollimport.", 400)
+    elif "fan" in result:
+        raise DataError("Fächerparameter nur im separat gewählten Fächermodus verwenden.", 400)
     ids = result.get("dataset_ids", {})
     allowed_symbols=result["symbols"]+([result["lab"]["benchmark_symbol"]] if result.get("entry_mode")=="lab" else [])
     if not isinstance(ids, dict) or any(k not in allowed_symbols or not isinstance(v, str) or not re.fullmatch(r"[a-f0-9]{64}", v) for k,v in ids.items()):
         raise DataError("Ungültige Dataset-Zuordnung.", 400)
+    if result.get("entry_mode") == "fan" and set(ids) != set(result["symbols"]):
+        raise DataError("Für jede Aktie im Fächertest ein lokales Dataset auswählen.", 400)
     return result
 
 

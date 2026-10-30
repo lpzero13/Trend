@@ -20,6 +20,8 @@ def main():
     add_commands(commands)
     from strategy_cli import add_commands as add_strategy_commands
     add_strategy_commands(commands)
+    from archive_cli import add_commands as add_archive_commands
+    add_archive_commands(commands)
     submit=commands.add_parser("submit",help="Forschungsauftrag einreichen")
     submit.add_argument("--spec",required=True)
     for name in ("status","report","events","cancel"):
@@ -28,7 +30,7 @@ def main():
         if name=="report":
             command.add_argument("--offset",type=int,default=0)
             command.add_argument("--limit",type=int,default=250)
-            command.add_argument("--entry-filter",choices=("all","entries"),default="all")
+            command.add_argument("--entry-filter",choices=("all","entries","origins"),default="all")
         if name=="events":
             command.add_argument("--limit",type=int,default=250)
             command.add_argument("--cursor")
@@ -53,10 +55,14 @@ def main():
     analyze=commands.add_parser("analyze")
     analyze.add_argument("--dataset",required=True)
     analyze.add_argument("--asof")
-    analyze.add_argument("--timeframe",choices=("1h","4h","1D"),default="4h")
+    analyze.add_argument("--timeframe",choices=("1h","4h","1D","1W"),default="4h")
+    analyze.add_argument("--engine", choices=("legacy", "fan_extreme", "fan_local", "fan_master"), default="legacy")
     args=parser.parse_args()
     try:
-        if args.command.startswith("strategy-"):
+        if args.command.startswith("archive-"):
+            from archive_cli import execute as execute_archive
+            result=execute_archive(args)
+        elif args.command.startswith("strategy-"):
             from strategy_cli import execute as execute_strategy
             result=execute_strategy(args)
         elif args.command.startswith("lab-"):
@@ -88,7 +94,13 @@ def main():
         elif args.command=="list": result=jobs.list_jobs()
         elif args.command=="schedule": result=jobs.schedule(json.loads(Path(args.spec).read_text("utf-8-sig")) if args.spec else None)
         elif args.command=="import": result={"datasetId":import_dataset(args.symbol.upper(),args.history_days)}
-        elif args.command=="analyze": result=chart_dataset(args.dataset,args.timeframe,args.asof)
+        elif args.command=="analyze":
+            from weekly_chart import add_weekly
+            result=chart_dataset(args.dataset,"1D" if args.timeframe=="1W" else args.timeframe,args.asof,include_analysis=args.engine=="legacy")
+            add_weekly(result,args.timeframe)
+            if args.engine!="legacy":
+                from fan_chart import apply
+                apply(result,args.engine)
         else:
             stop=threading.Event()
             for name in (signal.SIGINT,signal.SIGTERM): signal.signal(name,lambda *_:stop.set())

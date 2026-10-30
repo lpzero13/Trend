@@ -1,0 +1,17 @@
+{
+  "entry_mode": "fan",
+  "symbols": ["MSFT"],
+  "dataset_ids": {"MSFT": "0000000000000000000000000000000000000000000000000000000000000000"},
+  "samples": 10,
+  "seed": 20261029,
+  "horizons": [5, 10, 20],
+  "holdout_fraction": 0.2,
+  "fan": {
+    "timeframe": "4h",
+    "geometry_variants": ["extreme", "local"],
+    "sampling": "origins",
+    "warmup_bars": 200,
+    "models": ["fixed", "higher_low"],
+    "execution": {"capital": 2000, "risk_fraction": 0.01, "target_r": 0}
+  }
+}

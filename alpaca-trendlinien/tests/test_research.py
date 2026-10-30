@@ -58,7 +58,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(read_dataset(self.identity)['material'],self.dataset['material'])
         path=Path(self.temp.name)/'datasets'/f'{second}.json'
         value=json.loads(path.read_text('utf-8'))
-        value['material']['bars']['4h'][0]['high']=9999
+        value['material']['symbol']='TAMPERED'
         path.write_text(json.dumps(value),'utf-8')
         with self.assertRaises(DataError):read_dataset(second)
 

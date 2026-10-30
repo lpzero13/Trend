@@ -5,6 +5,126 @@ const { RayGeometry: G, RayLayer } = require("../static/drawings.js");
 const hour = 3600;
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
 
+test('fractional MTF anchors interpolate integer-only library coordinates instead of jumping to the left edge',()=>{
+  const scale={logicalToCoordinate:n=>Number.isInteger(n)?n*100+20:0,coordinateToLogical:x=>Math.ceil((x-20)/100)};
+  for(const n of [-.75,0,.1,.5,1,7.25]) {
+    near(G.pixelAt(scale,n),n*100+20);
+    near(G.logicalAtPixel(scale,G.pixelAt(scale,n)),n);
+  }
+  const target=[0,7*24*hour,14*24*hour];
+  const source=[0,24*hour,2*24*hour,3*24*hour,4*24*hour,7*24*hour,8*24*hour,9*24*hour];
+  const ray={a:{time:24*hour,price:100},b:{time:8*24*hour,price:105},basis:G.capture(source)};
+  const xs=G.drawingPoints(target,ray,G.logicalAt(target,ray.a.time),2).map(n=>G.pixelAt(scale,n));
+  assert.ok(xs.every((x,i)=>!i || x>=xs[i-1]));assert.ok(xs.every(x=>x>20));
+});
+
+test('personal daily lines stay straight through the same saved anchors in every interval',()=>{
+  const daily=[0,24*hour,48*hour,120*hour,144*hour];
+  const hourly=[0,hour,2*hour,24*hour,25*hour,48*hour,49*hour,120*hour,121*hour,144*hour];
+  const four=[0,4*hour,24*hour,28*hour,48*hour,52*hour,120*hour,124*hour,144*hour];
+  const weekly=[0,120*hour,240*hour];
+  const ray={a:{time:0,price:100},b:{time:48*hour,price:110},basis:G.capture(daily)};
+  const before=JSON.stringify(ray);
+  for(const axis of [daily,hourly,four,weekly,[...hourly,145*hour,200*hour]]) {
+    near(G.candleValue(axis,ray,ray.a.time),ray.a.price);
+    near(G.candleValue(axis,ray,ray.b.time),ray.b.price);
+    const a=G.logicalAt(axis,ray.a.time),b=G.logicalAt(axis,ray.b.time);
+    for(const fraction of [-.5,0,.25,.5,.75,1,2]) {
+      const logical=a+(b-a)*fraction;
+      near(G.candleValue(axis,ray,G.timeAt(axis,logical)),ray.a.price+(ray.b.price-ray.a.price)*fraction);
+    }
+    assert.deepEqual(G.drawingPoints(axis,ray,a,b+3),[a,b+3]);
+  }
+  assert.equal(JSON.stringify(ray),before);
+});
+
+test('renderer and hit test use one straight segment for legacy 1D rays in 4h and weekly views',()=>{
+  const daily=[0,24*hour,48*hour,120*hour,144*hour];
+  const ray={id:'daily',timeframe:'1D',a:{time:24*hour,price:100},b:{time:120*hour,price:120},basis:G.capture(daily),extend:'both'};
+  const original=JSON.stringify(ray);
+  for(const axis of [[0,4*hour,24*hour,28*hour,48*hour,52*hour,120*hour,124*hour,144*hour],[0,168*hour,336*hour]]) {
+    const path=[];
+    const scale={logicalToCoordinate:n=>Number.isInteger(n)?n*100:0,coordinateToLogical:x=>Math.ceil(x/100)};
+    const layer=Object.assign(Object.create(RayLayer.prototype),{
+      timeframe:'4h',axis:()=>axis,chart:{timeScale:()=>scale},series:{priceToCoordinate:p=>p},
+      automatic:[{...ray,color:'blue',width:2,dash:[]}],items:[],
+    });
+    const ctx={save(){},restore(){},beginPath(){},rect(){},clip(){},setLineDash(){},stroke(){},
+      moveTo(x,y){path.push([x,y])},lineTo(x,y){path.push([x,y])}};
+    layer.paint(ctx,{width:550,height:300});
+    assert.equal(path.length,2,'a ray is never a sampled per-candle polyline');
+    near(path[0][0],0);near(path[1][0],550);
+    const a=layer.point(ray.a),b=layer.point(ray.b);
+    for(const p of path) near((p[1]-a.y)*(b.x-a.x),(p[0]-a.x)*(b.y-a.y));
+    layer.items=[ray];
+    const x=430,y=a.y+(b.y-a.y)*(x-a.x)/(b.x-a.x);
+    assert.equal(layer.hit({x,y})?.ray.id,'daily');
+    assert.equal(layer.hit({x,y:y+15}),null);
+  }
+  assert.equal(JSON.stringify(ray),original);
+});
+
+test('old drawings bind once to their original interval; zoom, extra history and interval switches do not rebase',()=>{
+  const daily=[0,24*hour,48*hour],hourly=[0,hour,2*hour,24*hour,48*hour];
+  let changes=0;
+  const layer=Object.assign(Object.create(RayLayer.prototype),{items:[{id:'d',timeframe:'1D',a:{time:0,price:100},b:{time:48*hour,price:110}}],onChange(){changes++},update(){}});
+  layer.bindAxes({'1D':daily,'1h':hourly});
+  const stored=JSON.stringify(layer.items);
+  layer.bindAxes({'1D':[-24*hour,...daily,72*hour],'1h':hourly});
+  assert.equal(JSON.stringify(layer.items),stored);assert.equal(changes,1);
+  assert.notEqual(layer.items[0].basis.axis,daily);
+});
+
+test('a deliberate edit on another interval rebases only the selected drawing and can be undone',()=>{
+  const daily=[0,24*hour,48*hour],hourly=[0,hour,2*hour,24*hour,48*hour];
+  const ray={id:'d',timeframe:'1D',a:{time:0,price:100},b:{time:48*hour,price:110},basis:G.capture(daily)};
+  const before=JSON.stringify([ray]);
+  const layer=Object.assign(Object.create(RayLayer.prototype),{items:[ray],axis:()=>hourly,timeframe:'1h',cutoff:50*hour,undoStack:[],
+    coords:()=>({x:1,y:105}),anchor:()=>({time:hour,price:105}),update(){},onChange(){},
+    chart:{applyOptions(){}},drag:{key:'a',ray,original:structuredClone(ray),before,changed:false}});
+  layer.move({preventDefault(){},stopImmediatePropagation(){}});
+  assert.equal(ray.timeframe,'1h');assert.deepEqual(ray.basis.axis,hourly);
+  layer.up({stopImmediatePropagation(){}});layer.undo();
+  assert.equal(JSON.stringify(layer.items),before);
+});
+
+test('line color persists per drawing; undo restores the old color without changing geometry',()=>{
+  const ray={id:'r',timeframe:'1D',a:{time:0,price:100},b:{time:hour,price:110},basis:G.capture([0,hour])};
+  let saved;
+  const layer=Object.assign(Object.create(RayLayer.prototype),{items:[ray],selected:'r',undoStack:[],update(){},onChange(items){saved=JSON.stringify(items)}});
+  layer.changeColor('#DC2626');assert.equal(ray.color,'#dc2626');
+  assert.equal(JSON.parse(saved)[0].color,'#dc2626');
+  layer.undo();assert.deepEqual(layer.items,[{id:'r',timeframe:'1D',a:{time:0,price:100},b:{time:hour,price:110},basis:G.capture([0,hour])}]);
+  layer.selected=null;layer.changeColor('#16a34a');assert.equal(layer.color,'#16a34a');
+  assert.equal(layer.items[0].color,undefined);
+});
+
+test('left rays, full lines and segments draw to their actual endpoints and hit on the correct side',()=>{
+  const axis=[0,hour,2*hour,3*hour,4*hour];
+  const ray={id:'r',a:{time:hour,price:100},b:{time:2*hour,price:101}};
+  const lines=[];const layer=Object.assign(Object.create(RayLayer.prototype),{
+    axis:()=>axis,chart:{timeScale:()=>({logicalToCoordinate:n=>n*100,coordinateToLogical:x=>x/100})},
+    series:{priceToCoordinate:p=>p},items:[],automatic:['left','both','segment'].map(extend=>({...ray,extend,color:'blue',width:2,dash:[]}))
+  });
+  const ctx={save(){},restore(){},beginPath(){},rect(){},clip(){},setLineDash(){},stroke(){},
+    moveTo(x,y){lines.push(['start',x,y]);},lineTo(x,y){lines.push(['end',x,y]);}};
+  layer.paint(ctx,{width:400,height:300});
+  assert.deepEqual(lines.map(x=>x.slice(0,2)),[['start',0],['end',200],['start',0],['end',400],['start',100],['end',200]]);
+  for(const extend of ['left','right','both','segment']){
+    layer.items=[{...ray,extend}];
+    assert.equal(!!layer.hit({x:0,y:99}),['left','both'].includes(extend));
+    assert.equal(!!layer.hit({x:400,y:103}),['right','both'].includes(extend));
+  }
+  layer.items=[{...ray,extend:'both',observedAt:50}];layer.cutoff=49;
+  assert.equal(layer.hit({x:0,y:99}),null);
+});
+
+test('changing a selected line to horizontal is persisted and undo restores both price and extension',()=>{
+  const layer=Object.assign(Object.create(RayLayer.prototype),{items:[{id:'r',a:{time:1,price:100},b:{time:2,price:105},extend:'right'}],selected:'r',undoStack:[],update(){},onChange(){}});
+  layer.changeExtension('horizontal');assert.equal(layer.items[0].b.price,100);assert.equal(layer.items[0].extend,'horizontal');
+  layer.undo();assert.equal(layer.items[0].b.price,105);assert.equal(layer.items[0].extend,'right');
+});
+
 test("measurement uses the first price as percentage base in either time direction", () => {
   const axis = [0, hour, 20 * hour];
   const gain = G.measure(

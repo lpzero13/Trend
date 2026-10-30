@@ -16,6 +16,7 @@ _analyses = OrderedDict()
 
 def remember(payload):
     material = {k: payload[k] for k in ("symbol", "analysisCutoff", "rulesVersion", "charts", "lanes")}
+    material.update({k: payload.get(k) for k in ("datasetId", "analysisEngine", "randomCase")})
     identity = hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()[:24]
     payload["analysisId"] = identity
     with _lock:
@@ -71,7 +72,10 @@ def list_snapshots(symbol):
         try:
             item = read_snapshot(path.stem)
             if item["symbol"] == symbol:
-                result.append({k: item[k] for k in ("id", "symbol", "createdAt", "analysisCutoff", "validFrom", "label", "rulesVersion")})
+                result.append({**{k: item[k] for k in ("id", "symbol", "createdAt", "analysisCutoff", "validFrom", "label", "rulesVersion")},
+                    "datasetId": item["payload"].get("datasetId"),
+                    "analysisEngine": item["payload"].get("analysisEngine", "legacy"),
+                    "randomCaseId": item["payload"].get("randomCase", {}).get("id")})
         except DataError:
             continue
         if len(result) == 100:

@@ -24,7 +24,7 @@
       <a href="/research">Forschung</a>
       <a href="/lab">Labor</a>
       <a href="/watch">Beobachtung</a>
-    </nav>
+    <a href="/pruefung">Sichtprüfung</a><a href="/kandidaten">Kandidaten</a><a href="/faecher">Fächer-Test</a><a href="/sammler">Datensammler</a><a href="/zufall">Zufall</a></nav>
     <header class="toolbar">
       <button
         id="symbol-button"
@@ -39,7 +39,8 @@
       <div class="segmented" aria-label="Chartintervall">
         <button data-tf="1h" aria-pressed="false">1h</button
         ><button data-tf="4h" aria-pressed="true">4h</button
-        ><button data-tf="1D" aria-pressed="false">1D</button>
+        ><button data-tf="1D" aria-pressed="false">1D</button
+        ><button data-tf="1W" aria-pressed="false">1W</button>
       </div>
       <select
         id="axis-mode"
@@ -52,6 +53,14 @@
         <option value="trading">Handelskerzen</option>
       </select>
       <div class="toolbar-spacer"></div>
+      <select id="analysis-engine" aria-label="Analysemodell" title="Linienfinder auswählen; Analyse bleibt zunächst aus">
+        <option value="legacy">Bisherige Linien</option>
+        <option value="fan_master">Pine Master · 29.10.</option>
+        <option value="fan_extreme">Tori-Fächer</option>
+        <option value="fan_local">Fächer: mehrere Startanker</option>
+      </select>
+
+
       <button
         id="tori-analysis"
         class="analysis-toggle"
@@ -90,7 +99,7 @@
         title="Automatische Linien mit Datenbasis lokal speichern und fixieren"
         aria-pressed="false"
       >
-        Fixieren
+        Linien jetzt fixieren
       </button>
       <button
         id="refresh-button"
@@ -114,8 +123,20 @@
         ⓘ
       </button>
     </header>
+    <div class="practice-controls">
+      <label>Farbe <input type="color" id="line-color" value="#3988ee" aria-label="Linienfarbe" title="Farbe der ausgewählten Linie und neuer Linien"></label>
+      <label>Linienart <select id="line-extension" aria-label="Verlängerung eigener Linien">
+        <option value="right">Ray nach rechts →</option><option value="left">Ray nach links ←</option>
+        <option value="both">Gerade in beide Richtungen ↔</option><option value="segment">Strecke zwischen zwei Punkten</option>
+        <option value="horizontal">Horizontaler Widerstand / Unterstützung ↔</option>
+      </select></label>
+      <label id="master-date-control" hidden><input id="master-date" type="checkbox" checked> Stichtagslinie</label> <label id="master-sma-control" hidden title="SMA 50/200 nur als Kontext"><input id="master-sma" type="checkbox" checked> SMA 50/200</label>
+      <span id="random-controls" hidden><button id="random-new" type="button">⚄ Neu würfeln</button><button id="random-reset" type="button">Zum Startpunkt</button></span>
+      <span id="random-note" role="status" hidden></span>
+    </div>
     <main id="workspace">
       <div id="chart" aria-label="Interaktiver Kerzenchart"></div>
+      <div id="master-date-line" hidden aria-hidden="true"><span></span></div>
       <div class="instrument">
         <strong id="company">Kursdaten werden geladen</strong
         ><span class="muted">
@@ -311,7 +332,7 @@
         </div>
       </form>
       <p class="catalog-note">
-        Alle drei Intervalle werden vor der Berechnung zeitlich begrenzt.
+        Alle Intervalle werden vor der Berechnung zeitlich begrenzt.
         Historische Kurse sind Rekonstruktionen aus dem heutigen Datenbestand;
         nachträgliche Anbieterkorrekturen lassen sich dadurch nicht
         ausschließen.
@@ -325,7 +346,9 @@
         Fixieren hält die automatisch gewählten Anker und den Analysezustand
         fest. Die Geraden verlängern sich weiter. Eigene Rays bleiben separat
         bearbeitbar. Ein späterer Stand wird vor seinem Datenzeitpunkt nicht
-        eingeblendet.
+        eingeblendet. Ohne Fixierung werden die Linien bei jedem Kerzenschritt
+        neu berechnet. Mit ◀ / ▶ geht es im ausgewählten Intervall jeweils
+        eine abgeschlossene Kerze zurück oder weiter – auch im normalen Chart.
       </p>
     </dialog>
     <dialog id="asset-dialog" aria-labelledby="asset-title">
