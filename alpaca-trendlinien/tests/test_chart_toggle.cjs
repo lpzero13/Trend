@@ -32,7 +32,7 @@ function payload(analyzed, research = false) {
   };
 }
 
-async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = false, path='/', moving=false, failFreeze=false, deferredFreeze=false } = {}) {
+async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = false, path='/', moving=false, failFreeze=false, deferredFreeze=false, themePreference=null } = {}) {
   const elements = new Map();
   function element(selector) {
     if (!elements.has(selector)) elements.set(selector, { hidden: true, disabled: false,
@@ -49,6 +49,7 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
     ["tori-analysis-enabled", "true"], ["tori-info", "true"],
     ["tori-frozen:TEST", '"old-snapshot"'], ["tori-rays:TEST", JSON.stringify([manualRay])],
   ]);
+  if(themePreference)stored.set('tori-theme',JSON.stringify(themePreference));
   let range = null, candleData = [], resolveAnalysis, resolveFreeze, lastAnalysis, randomSerial=0; const smaData={}, snapshots=new Map();
   const scale = { getVisibleLogicalRange: () => range, setVisibleLogicalRange: (r) => { range = r; },
     subscribeVisibleLogicalRangeChange() {}, applyOptions() {} };
@@ -144,6 +145,23 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
     eval: (code) => vm.runInContext(code, context), candles: () => candleData,
     resolveAnalysis: () => resolveAnalysis(), resolveFreeze: () => resolveFreeze() };
 }
+
+test('visible light/dark switch persists choice without changing candles, drawings or fetching data',async()=>{
+  const h=await boot();
+  const before=h.eval('JSON.stringify({bars:state.data.bars,rays:rayLayer.items})'),requests=h.requests.length;
+  assert.match(h.element('#theme-button').textContent,/Hell/);
+  h.element('#theme-button').onclick();
+  assert.match(h.element('#theme-button').textContent,/Dunkel/);
+  assert.equal(h.element('#theme-button').attributes['aria-pressed'],'true');
+  assert.equal(h.eval('document.documentElement.dataset.theme'),'dark');
+  assert.equal(h.stored.get('tori-theme'),'"dark"');
+  assert.equal(h.eval('JSON.stringify({bars:state.data.bars,rays:rayLayer.items})'),before);
+  assert.equal(h.requests.length,requests);
+  const again=await boot({themePreference:JSON.parse(h.stored.get('tori-theme'))});
+  assert.equal(again.eval('document.documentElement.dataset.theme'),'dark');
+  again.element('#theme-button').onclick();
+  assert.equal(again.eval('document.documentElement.dataset.theme'),'light');
+});
 
 test('random page uses its pinned case, separate drawings, all intervals and replay without live provider routes',async()=>{
   const h=await boot({path:'/zufall'});await h.flush();

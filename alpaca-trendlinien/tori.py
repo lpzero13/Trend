@@ -22,6 +22,10 @@ def main():
     add_strategy_commands(commands)
     from archive_cli import add_commands as add_archive_commands
     add_archive_commands(commands)
+    from pilot_cli import add_commands as add_pilot_commands
+    add_pilot_commands(commands)
+    from journal_cli import add_commands as add_journal_commands
+    add_journal_commands(commands)
     submit=commands.add_parser("submit",help="Forschungsauftrag einreichen")
     submit.add_argument("--spec",required=True)
     for name in ("status","report","events","cancel"):
@@ -59,7 +63,13 @@ def main():
     analyze.add_argument("--engine", choices=("legacy", "fan_extreme", "fan_local", "fan_master"), default="legacy")
     args=parser.parse_args()
     try:
-        if args.command.startswith("archive-"):
+        if args.command.startswith("journal-"):
+            from journal_cli import execute as execute_journal
+            result=execute_journal(args)
+        elif args.command=="pilot-backtest":
+            from pilot_cli import execute as execute_pilot
+            result=execute_pilot(args)
+        elif args.command.startswith("archive-"):
             from archive_cli import execute as execute_archive
             result=execute_archive(args)
         elif args.command.startswith("strategy-"):

@@ -179,6 +179,9 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/api/archive/'):
                 from archive_api import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path.startswith('/api/entries/'):
+                from entry_history import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path == "/api/research/jobs":
                 from operations import status
                 operational = status()
@@ -297,6 +300,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/sammler":"collector.html", "/collector.js":"collector.js",
                 "/drawings.js": "drawings.js",
                 "/analysis.js": "analysis.js",
+                "/entry-history.js": "entry-history.js",
                 "/measurements.js": "measurements.js", "/api.js": "api.js",
                 "/vendor/lightweight-charts.js": "vendor/lightweight-charts.js",
                 "/vendor/LICENSE": "vendor/LICENSE", "/vendor/NOTICE": "vendor/NOTICE",
@@ -319,7 +323,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path=urlparse(self.path).path
+        entry_request=path.startswith('/api/entries/')
         research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/") or path.startswith("/api/watch/") or path.startswith("/api/workbench/") or path.startswith("/api/random/") or path.startswith('/api/archive/')
+        research=research or entry_request
         if path != "/api/snapshots" and not research:
             return self.send_json({"error": "Schreibzugriffe sind nur zum lokalen Speichern eines Analysestands vorgesehen."}, 405)
         allowed = self.allowed_hosts()
@@ -335,6 +341,9 @@ class Handler(BaseHTTPRequestHandler):
             if length < 1 or length > (65536 if research else 1024) or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 raise DataError("Ungültige Speicheranfrage.", 400)
             body = json.loads(self.rfile.read(length))
+            if entry_request:
+                from entry_history import post
+                return self.send_json(post(path,body))
             if research:
                 if path.startswith('/api/archive/'):
                     from archive_api import post

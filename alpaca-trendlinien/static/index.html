@@ -15,6 +15,7 @@
     <script defer src="/api.js"></script>
     <script defer src="/analysis.js"></script>
     <script defer src="/measurements.js"></script>
+    <script defer src="/entry-history.js"></script>
     <script defer src="/app.js"></script>
   </head>
   <body class="chart-page">
@@ -69,6 +70,7 @@
         aria-controls="info-panel"
         title="Automatische Tori-Analyse einschalten"
       >Tori-Analyse: Aus</button>
+      <button id="entry-history-toggle" type="button" aria-pressed="false" aria-controls="entry-history-panel">Historische Einstiege</button>
       <button
         id="history-button"
         title="Chart zu einem vergangenen Zeitpunkt anzeigen"
@@ -110,9 +112,10 @@
       ><button
         id="theme-button"
         title="Darstellung wechseln"
-        aria-label="Darstellung wechseln"
+        aria-label="Zwischen Hell- und Dunkelmodus wechseln"
+        aria-pressed="false"
       >
-        ◐</button
+        ☀ Hell</button
       ><button
         id="info-button"
         hidden
@@ -136,6 +139,52 @@
     </div>
     <main id="workspace">
       <div id="chart" aria-label="Interaktiver Kerzenchart"></div>
+      <aside id="entry-history-panel" class="entry-history-panel" hidden aria-label="Historische Einstiege">
+        <details open>
+          <summary>Historische Einstiege · feste Signale</summary>
+          <div class="entry-history-body">
+            <label>Gespeicherte Untersuchung <select id="entry-run" aria-label="Entryversion"></select></label>
+            <p id="entry-coverage" class="entry-muted"></p>
+            <label>Signalauswahl <select id="entry-quality" aria-label="Strukturprofil für historische Einstiege">
+              <option value="balanced">Struktur + Abstand + Tagestrend · experimentell</option>
+              <option value="strict">Streng: zusätzlich Reife, Verengung, beide Linien qualifiziert</option>
+              <option value="qualified" selected>Nur qualifizierte Ausbrüche / Retests</option>
+              <option value="risk">Qualifiziert + Stopabstand</option>
+              <option value="trend">Qualifiziert + Tagestrend</option>
+              <option value="mature">Qualifiziert + Linienreife</option>
+              <option value="convergent">Qualifiziert + Verengung</option>
+              <option value="both_qualified">Beide Linien qualifiziert</option>
+              <option value="all">Alle Rohsignale · Vergleich</option>
+            </select></label>
+            <p class="entry-muted">Standard: qualifizierte Ausbrüche und Retests mit bekannter Safety. Kein Filter nach späterem Gewinn. Zusätzliche Abstands-, Trend- und Strukturregeln sind experimentell; ein engerer Filter garantiert keine besseren Trades.</p>
+            <div class="entry-filters">
+              <label>Entry <select id="entry-family"><option value="all">Alle drei Varianten</option><option value="breakout">Ausbruch</option><option value="red_retest">Roter Retest</option><option value="safety_bounce">Safety-Bounce</option></select></label>
+              <label>Linienqualität <select id="entry-cohort"><option value="all">Alle Kontaktklassen</option><option value="qualified">Qualifiziert: ≥3 / ≥7 Tage</option><option value="two">Zwei Kontakte</option><option value="three_young">≥3, noch zu jung</option></select></label>
+            </div>
+            <label><input id="entry-filled" type="checkbox" checked> Ausführbare Entries / im Replay noch unbestätigte Fills</label>
+            <p id="entry-history-status" role="status" class="entry-muted"></p>
+            <p class="entry-legend"><span>▲ Ausbruch</span> <span>▲ Retest</span> <span>▲ Safety</span> · Marker am Signal-Schluss; Fill im Detail.</p>
+            <div id="entry-case-list" class="entry-case-list" aria-label="Einstiegfälle"></div>
+            <section id="entry-case-detail" hidden aria-label="Ausgewählter Einstieg">
+              <div id="entry-case-facts"></div>
+              <button id="entry-replay" type="button">Replay ab Signal · 4h</button>
+              <p class="entry-muted">Dann mit ◀ / ▶ oder den Pfeiltasten kerzenweise vor/zurück. Die ausgewählten Linien bleiben fixiert. Künftige Fills und Ergebnisse werden nicht vorweggenommen.</p>
+              <label>Meine Bewertung <select id="entry-verdict"><option value="unclear">Noch unklar</option><option value="plausible">Plausibler Einstieg</option><option value="wrong_line">Falsche Linie / Kontakte</option><option value="too_late">Einstieg zu spät</option><option value="duplicate">Wiederholung derselben Idee</option></select></label>
+              <label>Notiz <textarea id="entry-note" rows="3" maxlength="4000" placeholder="Was passt oder sollte geprüft werden?"></textarea></label>
+              <div class="entry-actions"><button id="entry-review-save">Bewertung speichern</button><button id="entry-review-delete">Bewertung löschen</button></div>
+              <p id="entry-review-status" role="status" class="entry-muted"></p>
+            </section>
+            <details class="entry-build"><summary>Andere Zeiträume lokal berechnen</summary>
+              <p class="entry-muted">Nur diese Aktie, nur vorhandene SIP/split-Daten. Gleiche 4h-Entry-/Episodenlogik wie im Backtest; keine neue Exitstudie. Bestehende Versionen bleiben erhalten.</p>
+              <label>Entries ab <input id="entry-start" type="date"></label>
+              <label>Entries bis <input id="entry-end" type="date"></label>
+              <p class="entry-muted">Leer: gesamte geeignete Historie. Mindestens 320 Tage Vorlauf erforderlich.</p>
+              <div class="entry-actions"><button id="entry-build">Berechnung starten</button><button id="entry-cancel" hidden>Abbrechen</button></div>
+              <p id="entry-build-status" role="status" class="entry-muted"></p>
+            </details>
+          </div>
+        </details>
+      </aside>
       <div id="master-date-line" hidden aria-hidden="true"><span></span></div>
       <div class="instrument">
         <strong id="company">Kursdaten werden geladen</strong

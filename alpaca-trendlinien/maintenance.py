@@ -16,7 +16,7 @@ from database import connection, SCHEMA_VERSION
 from datasets import digest, SCHEMA
 from storage import references
 
-BACKUP_SCHEMA="tori-backup-2"
+BACKUP_SCHEMA="tori-backup-3"
 
 
 def checksum(path):
@@ -39,7 +39,7 @@ def checked_dataset(path):
 
 
 def valid_relative(name):
-    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|datasets/chunks/[a-f0-9]{64}\.parquet|imports/chunks/[a-f0-9]{64}\.parquet|snapshots/[a-f0-9]{24}\.json",name))
+    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|datasets/chunks/[a-f0-9]{64}\.parquet|imports/chunks/[a-f0-9]{64}\.parquet|snapshots/[a-f0-9]{24}\.json|signal-journals/[\w-]{1,80}\.sqlite3",name))
 
 
 def new_target(target):
@@ -70,6 +70,16 @@ def backup(target):
             (stage/"forward").mkdir()
             with closing(sqlite3.connect(watch.as_uri()+"?mode=ro",uri=True)) as source, closing(sqlite3.connect(stage/"forward/watch.sqlite3")) as destination:
                 source.backup(destination)
+        journals=root/'signal-journals'
+        if journals.is_symlink():raise DataError('Signaljournal-Ordner darf kein Link sein.',409)
+        for journal in journals.glob('*.sqlite3'):
+            if journal.is_symlink():raise DataError('Signaljournal darf kein Link sein.',409)
+            (stage/'signal-journals').mkdir(exist_ok=True)
+            with closing(sqlite3.connect(journal.as_uri()+'?mode=ro',uri=True)) as source, closing(sqlite3.connect(stage/'signal-journals'/journal.name)) as destination:
+                source.backup(destination)
+                # A standalone backup must not rely on WAL sidecars. Readers of
+                # a WAL-mode snapshot can otherwise create untracked shm files.
+                destination.execute('PRAGMA journal_mode=DELETE')
         # All referenced datasets were published before their references committed to SQLite.
         with closing(sqlite3.connect(db_path)) as snapshot:
             refs=references(snapshot,root,forward_root=stage)
@@ -115,7 +125,7 @@ def verify(folder):
     if not root.is_dir() or (root/"manifest.json").is_symlink(): raise DataError("Ungültiger Sicherungsordner.",400)
     try:
         value=json.loads((root/"manifest.json").read_text("utf-8"))
-        if value["schema"] not in ("tori-backup-1",BACKUP_SCHEMA) or not isinstance(value["files"],dict): raise ValueError()
+        if value["schema"] not in ("tori-backup-1","tori-backup-2",BACKUP_SCHEMA) or not isinstance(value["files"],dict): raise ValueError()
         if "research/jobs.sqlite3" not in value["files"]: raise ValueError()
         for name,meta in value["files"].items():
             if not valid_relative(name): raise ValueError()

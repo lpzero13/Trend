@@ -6,7 +6,7 @@ import time
 from models import DataError
 from settings import data_dir
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MIGRATIONS = {
     1: [
         "CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,created REAL NOT NULL,updated REAL NOT NULL,status TEXT NOT NULL,spec TEXT NOT NULL,manifest TEXT NOT NULL,universe TEXT,current_symbol TEXT,error TEXT,automatic INTEGER NOT NULL DEFAULT 0)",
@@ -33,6 +33,14 @@ MIGRATIONS = {
         "CREATE TABLE IF NOT EXISTS lab_final_windows(symbol TEXT NOT NULL,start_at INTEGER NOT NULL,end_at INTEGER NOT NULL,experiment_id TEXT NOT NULL,job_id TEXT NOT NULL,dataset_id TEXT NOT NULL,PRIMARY KEY(job_id,symbol))",
         "CREATE INDEX IF NOT EXISTS lab_final_window_lookup ON lab_final_windows(symbol,start_at,end_at)",
     ],
+    5: [
+        "CREATE TABLE IF NOT EXISTS entry_runs(id TEXT PRIMARY KEY,symbol TEXT NOT NULL,dataset_id TEXT NOT NULL,created REAL NOT NULL,manifest TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS entry_runs_symbol ON entry_runs(symbol,created)",
+        "CREATE TABLE IF NOT EXISTS entry_cases(run_id TEXT NOT NULL,id TEXT NOT NULL,episode_id TEXT NOT NULL,family TEXT NOT NULL,cohort TEXT NOT NULL,signal_at INTEGER NOT NULL,payload TEXT NOT NULL,checksum TEXT NOT NULL,PRIMARY KEY(run_id,id),UNIQUE(run_id,episode_id,family))",
+        "CREATE INDEX IF NOT EXISTS entry_cases_time ON entry_cases(run_id,signal_at,id)",
+        "CREATE TABLE IF NOT EXISTS entry_reviews(run_id TEXT NOT NULL,case_id TEXT NOT NULL,verdict TEXT NOT NULL,note TEXT NOT NULL,updated REAL NOT NULL,PRIMARY KEY(run_id,case_id))",
+        "CREATE TABLE IF NOT EXISTS entry_searches(id TEXT PRIMARY KEY,status TEXT NOT NULL,updated REAL NOT NULL,request TEXT NOT NULL,progress TEXT NOT NULL,run_id TEXT,error TEXT)",
+    ],
 }
 REQUIRED = {"jobs":{"id","created","updated","status","spec","manifest","universe","current_symbol","error","automatic"},
             "symbols":{"job_id","symbol","dataset_id","plan","done","error"},
@@ -46,7 +54,11 @@ REQUIRED = {"jobs":{"id","created","updated","status","spec","manifest","univers
             "lab_reviews":{"id","job_id","config","manifest"},
             "lab_review_cases":{"pack_id","id","sample","label","revealed","tainted"},
             "lab_simulations":{"job_id","section","profile","family","result"},
-            "lab_final_windows":{"symbol","start_at","end_at","experiment_id","job_id","dataset_id"}}
+            "lab_final_windows":{"symbol","start_at","end_at","experiment_id","job_id","dataset_id"},
+            "entry_runs":{"id","symbol","dataset_id","created","manifest"},
+            "entry_cases":{"run_id","id","episode_id","family","cohort","signal_at","payload","checksum"},
+            "entry_reviews":{"run_id","case_id","verdict","note","updated"},
+            "entry_searches":{"id","status","updated","request","progress","run_id","error"}}
 
 
 def migrate(db):

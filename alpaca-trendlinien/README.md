@@ -1,3 +1,17 @@
+**Neu: [Strukturfilter für historische Signalkandidaten](SIGNALFILTER-BEWERTUNG-20261031.md).** Neun gemeinsame Offline-/Chartprofile unter „Historische Einstiege → Signalauswahl“. Qualifizierte Ausbrüche/Retests als Ausgangsansicht, zusätzliche Abstands-, SMA200-, Reife- und Verengungsfilter experimentell. [Ergebnisse aus 69 Aktien](SIGNALFILTER-ERGEBNISSE-20261031.md): 749 kombinierte oder 206 strenge Kandidaten; strenge Auswahl ist historisch schwächer, kein bestätigter Gewinnerfilter. Erste archivierte Signale filtern ist umgesetzt; ein neuer Scanner für den ersten erst später geeigneten Trigger bleibt geplant.
+
+**Neu: [Safety-Folgeexperiment mit unveränderten Entries](SAFETY-FOLGEPLAN-20261031.md).** Zwei neue interne Stopvarianten: aktuelle Safety nur bei bestätigter Qualifikation oder erst ab +2R. [69-Aktien-Ergebnisse](SAFETY-FOLGEERGEBNISSE-20261031.md) · [Bewertung](SAFETY-FOLGEBEWERTUNG-20261031.md). Offene Buchwerte und Datenlücken getrennt, identische Fälle vergleichen. Höhere historische Mittel bei Ausbruch/Retest, schlechtere Mediane; keine Strategiefreigabe oder automatische Umstellung bestehender Defaults.
+
+**Neu: [Historische Einstiege im normalen Chart](HISTORISCHE-EINSTIEGE.md).** Feste Signalpunkte und ursprüngliche Linien aus gespeicherten Untersuchungen, Familien-/Qualitätsfilter, Replay-Sprung und eigene Bewertungen. Optionale Offline-Suche für andere Zeiträume; keine automatische Neuberechnung beim Anzeigen. Datenbank Schema 5, gleicher Datenpfad; bei Updates vorhandene Dienste kontrolliert neu starten.
+
+**Neu 31.10.2026: [Signalepisoden ohne Kapital-/Slotlimit und ohne Zeitexits](SIGNALFALLSTUDIE.md).** Eigenständiger Offline-Modus, gemeinsamer kausaler Linien-/Entrykern, strukturelle Wiederholungserkennung und drei Hard-Stop-Varianten. [69-Aktien-Ergebnisse](SIGNALFALL-ERGEBNISSE-20261031.md) · [Bewertung](SIGNALFALL-BEWERTUNG-20261031.md). 6.668 Fälle aus 4.614 Episoden, 10.218 Wiederholungen unterdrückt; leichte positive historische Mittel bei aktueller Safety, negative Mediane und keine Strategiefreigabe. Alte Depotstudien und Chart bleiben erhalten.
+
+**Weitere Exitforschung (30.10.2026):** [Hard gegen 4h-Close, 40 gegen 80 Handelstage und Daten-Nachprüfung](EXIT-FORSCHUNGSERGEBNISSE-20261030.md). Roter Retest mit ursprünglicher Safety und längerer Haltedauer bleibt eine interessante Hypothese, mit erhöhtem Drawdown und Gewinnerkonzentration. Reiner Close-Stop zeigt große Verlustspitzen. 192 Depotvergleiche plus zwölf Konzentrationsdiagnosen geprüft; keine Strategiefreigabe oder automatische Umstellung.
+
+**Einstiege / Exits getrennt (30.10.2026):** [Drei Entry-Familien, Kontaktklassen und identische Fälle für drei Exitmethoden](ENTRY-EXIT-ERGEBNISSE-20261030.md). 168 getrennte Depotbücher und sortierbare private CSVs. Ausbruch mit festem Stop und Retest mit geometrischem Nachziehen bleiben unterschiedliche Forschungshypothesen; keine neue Strategiefreigabe.
+
+**Feste Robustheitsprüfung (30.10.2026):** [69 Aktien, vier Zeitfenster, Kostenstress und Ergebnisse](ROBUSTHEITSERGEBNISSE-20261030.md) · [Vorabplan](ROBUSTHEITSPLAN-20261030.md). Zwei vollständig auswertbare Gesamtdepots positiv, zwei wegen Datenlücken unvollständig; Kontrollvergleiche unvollständig, keine Strategiefreigabe. 30 konkrete Symbol-/Tagespaare zur Datenprüfung vorgemerkt. [Neues Signaljournal für Einzelschritte, eingefrorene Signale und Hermes](SIGNALJOURNAL.md), einschließlich Wiederaufnahme und Backup/Restore. Kein neuer Dauerdienst gestartet.
+
 **Datensammler V2 (30.10.2026):** Neues Menü **Datensammler** (`/sammler`) mit vollständigen Emittenten-Abbildern, gemeinsamer Auswahl ohne doppelte Symbole, Start/Pause, geprüftem Cache und Übernahme alter Bestände. [Bedienung und Hermes-CLI](SAMMLER-V2.md) · [Messwerte, Datenprüfung und Zeit-/Speicherplanung je Universum](SAMMLER-V2-ERGEBNISSE.md). Echter Fünf-Aktien-Vergleich: rund 34 % weniger Zeit bei exakt gleichen Kursbeständen. Große Universen wurden dafür nicht gestartet; der frühere 100er-Lauf bleibt bei 69 fertigen Aktien pausiert.
 
 **Chart / Replay:** [Trendlinien zuschalten, kerzenweise entwickeln und am Datum fixieren](CHART-REPLAY-FIXIERUNG.md). Funktioniert auch im Zufallsmodus und bei lokalen Datasets; Analyse startet weiterhin aus.
@@ -5,6 +19,12 @@
 **Historienarchiv:** [Fortsetzbarer SIP-Sammelimport ab 2016, Parquet/Zstd, Qualitätsprotokoll und Hermes-CLI](HISTORIENARCHIV.md). Das erste benutzergewählte Universum umfasst Dow-30 plus 70 weitere S&P-100-Titel. Der tatsächliche Importstatus wird pro Job gespeichert.
 
 # Tori Market Lab – Alpaca-Prototyp
+
+**Technische Strategiesuche:** [Zwei festgelegte Runden, 16 Aktien und gemeinsames Kapitalbuch](STRATEGIE-SUCHE-ERGEBNISSE-20261030.md). Positive Modellkandidaten, aber das zusätzliche Zufallskontrolltor ist noch nicht bestanden. Alle Ergebnisse und Kosten-/Konzentrationsgrenzen sind dokumentiert; Webausbau bleibt zurückgestellt.
+
+**Begrenzter Technikpilot:** [Eine Aktie / zwölf Monate, drei Entry-Familien und kausale Exitvergleiche](BACKTEST-PILOT.md). Explizit per `python tori.py pilot-backtest` aus vorhandenen lokalen Daten; keine automatische Großstudie. MSFT/2023 technisch reproduzierbar durchgelaufen, keine Strategiefreigabe.
+
+**Roadmap:** [Backtest-Meilensteine: Datenbasis → Signalsuche → Verlauf → Exits → Robustheit → Depot → Hermes](BACKTEST-MEILENSTEINE.md). Technikpilot, Mehraktien-Kapitalbuch und feste Robustheitsrunde sind umgesetzt. Datenbereinigung, unabhängige Strategiebestätigung und Hermes-Dauerbetrieb bleiben offen.
 
 **Pine Master · 29.10.: [Update und Bedienung](TORI-MASTER-UPDATE-20261029.md)** – zusätzlicher `fan_master`-Modus mit Hüllkurvenanpassung, getrennten Suchhorizonten, Haupt-Safety und SMA-Kontext.
 

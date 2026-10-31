@@ -13,7 +13,8 @@ function bundleKey(symbol, asOf, enabled = state.analysisEnabled) {
     (state.researchVariant || "") +
     "|analysis=" + (enabled ? "1" : "0") +
     (state.analysisEngine && state.analysisEngine !== "legacy" ? "|engine=" + state.analysisEngine : "") +
-    (state.fanCase ? "|fan_case=" + state.fanCase + "|fan_job=" + state.fanJob : "")
+    (state.fanCase ? "|fan_case=" + state.fanCase + "|fan_job=" + state.fanJob : "") +
+    (state.entryRun ? "|entry_run=" + state.entryRun : "")
   );
 }
 function hasToriAnalysis() {
@@ -33,8 +34,8 @@ function updateToriControls() {
   button.title = state.analysisEnabled
     ? "Automatische Tori-Linien, Marker und Infobox ausschalten"
     : "Automatische Tori-Analyse einschalten";
-  button.disabled = state.stepping || state.freezing || !$("#loading").hidden;
-  $("#analysis-engine").disabled = state.stepping || state.freezing || !$("#loading").hidden || !!state.fanCase;
+  button.disabled = state.stepping || state.freezing || !$("#loading").hidden || !!state.entryRun;
+  $("#analysis-engine").disabled = state.stepping || state.freezing || !$("#loading").hidden || !!state.fanCase || !!state.entryRun;
   $("#info-panel").hidden = !ready || !state.info;
   $("#info-button").hidden = !ready;
   $("#info-button").setAttribute("aria-pressed", String(ready && state.info));
@@ -239,7 +240,7 @@ function updateAnalysisControls() {
       ? "Historisch · " + dtLong(data.analysisCutoff) + " ET"
       : state.analysisEnabled ? "Aktuelle Analyse" : "Aktuelle Kursdaten") +
     (!state.analysisEnabled
-      ? " · Manuelle Ansicht · Tori-Analyse aus"
+      ? state.entryRun ? " · Historische Einstiege · ursprüngliche Linien fixiert" : " · Manuelle Ansicht · Tori-Analyse aus"
       : frozen
       ? " · Fixiert: " + dtLong(frozen.analysisCutoff) + " ET"
       : data.researchSetup

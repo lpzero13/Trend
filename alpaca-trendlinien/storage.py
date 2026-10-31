@@ -39,7 +39,7 @@ def usage(*, fresh=False):
     with _lock:
         old=_cache.get(str(root))
         if old and not fresh and time.monotonic()-old[0]<30: return old[1]
-        categories={key:{"bytes":0,"files":0} for key in ("market","datasets","snapshots","research","forward","catalog","other")}
+        categories={key:{"bytes":0,"files":0} for key in ("market","datasets","snapshots","research","forward","signal-journals","catalog","other")}
         skipped=0
         if root.exists():
             for folder, dirs, names in os.walk(root,followlinks=False):
@@ -80,6 +80,11 @@ def references(db, root, *, forward_root=None):
     for row in db.execute("SELECT value FROM settings"): scan(json.loads(row[0]))
     # The database snapshot may predate lab migration. Never discard preregistered/review references.
     tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if 'entry_runs' in tables:
+        refs.update(r[0] for r in db.execute('SELECT DISTINCT dataset_id FROM entry_runs'))
+    if 'entry_searches' in tables:
+        for row in db.execute('SELECT request FROM entry_searches'):
+            scan(json.loads(row[0]))
     for table,columns in (("lab_experiments",("spec","datasets","plan","selection")),
                           ("lab_reviews",("config","manifest")),("lab_review_cases",("sample",))):
         if table in tables:
@@ -108,6 +113,15 @@ def references(db, root, *, forward_root=None):
                 refs.update(r[0] for r in state.execute("SELECT dataset FROM cases UNION SELECT dataset FROM imports WHERE dataset IS NOT NULL"))
         except (sqlite3.Error,ValueError,KeyError,TypeError) as error:
             raise DataError("Beobachtungsreferenzen nicht vollständig lesbar; keine Bereinigung oder Sicherung freigegeben.",409) from error
+    journals=(forward_root or root)/'signal-journals'
+    if journals.is_symlink():raise DataError('Signaljournal-Ordner darf kein Link sein.',409)
+    from signal_journal import dataset_references
+    import sqlite3
+    for journal in journals.glob('*.sqlite3'):
+        if journal.is_symlink():raise DataError('Signaljournal darf kein Link sein.',409)
+        try:refs.update(dataset_references(journal))
+        except (sqlite3.Error,ValueError,KeyError,TypeError,IndexError) as error:
+            raise DataError('Signaljournal-Referenzen nicht vollständig lesbar; keine Bereinigung oder Sicherung.',409) from error
     return refs
 
 

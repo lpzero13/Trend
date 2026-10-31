@@ -66,6 +66,7 @@ const state = {
   analysisEngine: ["fan_extreme", "fan_local", "fan_master"].includes(query.get("engine")) ? query.get("engine") : "legacy",
   fanJob: query.get("fan_job") || null,
   fanCase: query.get("fan_case") || null,
+  entryRun: randomMode ? null : query.get('entry_run') || null,
   bundles: new Map(),
   visible: { "1D": true, "4h": true, "1h": true, "1W":true },
   request: 0,
@@ -108,6 +109,7 @@ const state = {
   showDateMarker: read("tori-master-date", true),
   contextSeries: {},
 };
+let entryHistory = null;
 const chart = LC.createChart($("#chart"), {
   autoSize: true,
   layout: { attributionLogo: true, fontFamily: "Arial", fontSize: 12 },
@@ -154,6 +156,7 @@ const candles = chart.addSeries(LC.CandlestickSeries, {
     const to = visible
       ? RayGeometry.timeAt(axis, Math.min(axis.length + 7, visible.to))
       : state.data.reference;
+    p.push(...(entryHistory?.priceBounds(from,to) || []));
     for (const tf of state.includeLines && hasToriAnalysis() ? lanes() : []) {
       if (!state.visible[tf]) continue;
       for (const kind of ["red", "green"]) {
@@ -187,7 +190,7 @@ const rayLayer = new RayLayer(
 );
 rayLayer.labelObstacles = () => {
   const host = $("#chart").getBoundingClientRect();
-  return [$("#info-panel"), $(".instrument"), $(".view-tools")]
+  return [$("#info-panel"), $(".instrument"), $(".view-tools"), $('#entry-history-panel')]
     .filter((el) => el && !el.hidden)
     .map((el) => {
       const r = el.getBoundingClientRect();
@@ -208,11 +211,11 @@ function theme() {
   chart.applyOptions({
     layout: {
       background: { type: "solid", color: dark ? "#11151e" : "#ffffff" },
-      textColor: dark ? "#aeb9cb" : "#5c6777",
+      textColor: dark ? "#c5cfdf" : "#5c6777",
     },
     grid: {
-      vertLines: { color: dark ? "#202632" : "#f0f2f5" },
-      horzLines: { color: dark ? "#202632" : "#f0f2f5" },
+      vertLines: { color: dark ? "#273245" : "#f0f2f5" },
+      horzLines: { color: dark ? "#273245" : "#f0f2f5" },
     },
     crosshair: {
       vertLine: {
@@ -231,10 +234,13 @@ function theme() {
     wickUpColor: dark ? "#20b998" : "#00a483",
     wickDownColor: dark ? "#f05a70" : "#f23752",
   });
-  $("#theme-button").textContent = dark ? "☀" : "☾";
+  $("#theme-button").textContent = dark ? "☾ Dunkel" : "☀ Hell";
+  $("#theme-button").setAttribute('aria-pressed',String(dark));
   $("#theme-button").title = dark
     ? "Zum Hellmodus wechseln"
     : "Zum Dunkelmodus wechseln";
+  $("#theme-button").setAttribute('aria-label',$("#theme-button").title);
+  if(state.data)automaticLines();
   rayLayer.update();
 }
 function setTool(active) {
@@ -362,7 +368,9 @@ function automaticLines() {
   updateMasterContext();
   rayLayer.automatic = [];
   if (!hasToriAnalysis()) {
-    markerPlugin.setMarkers([]);
+    const historyMarkers = [];
+    if (typeof entryHistory !== 'undefined') entryHistory?.decorate(historyMarkers);
+    markerPlugin.setMarkers(historyMarkers);
     rayLayer.update();
     return;
   }
@@ -456,6 +464,7 @@ function automaticLines() {
       });
     }
   }
+  if (typeof entryHistory !== 'undefined') entryHistory?.decorate(markers);
   markerPlugin.setMarkers(markers.sort((a, b) => a.time - b.time));
   rayLayer.update();
 }
@@ -664,6 +673,7 @@ function render(bundle, preserve = false) {
         ...(state.randomId ? {case:state.randomId} : {}),
         ...(state.asOf ? { asof: state.asOf } : {}),
         ...(state.datasetId ? { dataset: state.datasetId } : {}),
+        ...(state.entryRun ? {entry_run:state.entryRun, ...(entryHistory?.selectedId() ? {entry_case:entryHistory.selectedId()} : {})} : {}),
         ...(state.analysisEngine !== "legacy" ? {engine: state.analysisEngine} : {}),
         ...(state.fanCase ? {fan_job:state.fanJob, fan_case:state.fanCase} : {}),
         ...(state.researchJob
@@ -725,6 +735,7 @@ function render(bundle, preserve = false) {
     .filter(Boolean);
   if (warnings.length) showError(warnings[0]);
   updateRandomUI();
+  if (typeof entryHistory !== 'undefined') entryHistory?.onRender();
 }
 function showError(text) {
   $("#error").textContent = text;
@@ -740,6 +751,7 @@ async function load(
     datasetId: state.datasetId,
     fanJob: state.fanJob,
     fanCase: state.fanCase,
+    entryRun: state.entryRun,
     researchJob: state.researchJob,
     researchTrial: state.researchTrial,
     researchVariant: state.researchVariant,
@@ -748,6 +760,7 @@ async function load(
     state.datasetId = null;
     state.fanJob = null;
     state.fanCase = null;
+    state.entryRun = null;
     state.researchJob = null;
     state.researchTrial = null;
     state.researchVariant = null;
@@ -783,6 +796,7 @@ async function load(
       });
       if (asOf) params.set("asof", asOf);
       if (state.datasetId) params.set("dataset", state.datasetId);
+      if (state.entryRun) params.set('run',state.entryRun);
       if (state.analysisEngine !== "legacy") params.set("engine", state.analysisEngine);
       if (state.fanCase) {
         params.set("fan_job", state.fanJob);
@@ -794,7 +808,7 @@ async function load(
         params.set("variant", state.researchVariant);
       }
       const response = await apiFetch(
-        (state.fanCase ? "/api/fan/chart?" : state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/chart?' : state.datasetId ? "/api/dataset-chart?" : "/api/chart?") + params,
+        (state.entryRun ? '/api/entries/chart?' : state.fanCase ? "/api/fan/chart?" : state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/chart?' : state.datasetId ? "/api/dataset-chart?" : "/api/chart?") + params,
       );
       data = await response.json();
       if (!response.ok) throw Error(data.error || "Datenabruf fehlgeschlagen.");
@@ -807,6 +821,7 @@ async function load(
       state.bundles.delete(bundleKey(symbol, isoCutoff(data), true));
     }
     if (analysis) assertFrozenCompatible(data, frozen);
+    if (state.entryRun) state.datasetId=data.datasetId;
     const preserve =
       symbol === state.symbol &&
       (preserveView || state.asOf === isoCutoff(data));
@@ -1180,6 +1195,20 @@ async function pickRandom(resume=false){
   }catch(e){showError(e.message);}
   finally{if(!applied){Object.assign(state,before);updateAnalysisControls();}state.randomPicking=false;updateRandomUI();}
 }
+entryHistory = typeof EntryHistory !== 'undefined' ? EntryHistory.attach({
+  state, chart, rayLayer, redraw: automaticLines, load, setTool, showError, dtLong, fmt, esc,
+  open: async (run, asof=null) => {
+    const before={entryRun:state.entryRun,datasetId:state.datasetId,asOf:state.asOf,
+      analysisEnabled:state.analysisEnabled,frozen:state.frozen,fanCase:state.fanCase,fanJob:state.fanJob,
+      researchJob:state.researchJob,researchTrial:state.researchTrial,researchVariant:state.researchVariant};
+    state.entryRun=run.id;state.datasetId=run.datasetId;state.analysisEnabled=false;state.frozen=null;
+    state.fanCase=state.fanJob=state.researchJob=state.researchTrial=state.researchVariant=null;
+    const pending=load(state.symbol,false,asof),ticket=state.request;
+    if(!await pending){if(state.request===ticket)Object.assign(state,before);return false;}
+    return true;
+  },
+  disable: async () => {state.entryRun=null;await load(state.symbol,false,state.asOf,true);}
+}) : null;
 if(randomMode){
   document.title='Tori · Zufall';
   document.querySelector('.app-navigation a[href="/"]')?.setAttribute('aria-current','false');
