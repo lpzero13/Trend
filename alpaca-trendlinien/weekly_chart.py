@@ -56,7 +56,9 @@ def add_weekly(payload,timeframe):
         'weekPolicy':'XNYS Monday–Friday; complete expected sessions only; no partial week'}
     if payload.get('analysisEnabled'):
         from trendlines import analyze
-        payload['lanes']['1W']=analyze(rows,'1W',last.time,data_errors=False)
+        from chart_lane_cache import lane
+        payload['lanes']['1W']=lane(('legacy',payload.get('symbol','CHART'),'1W',last.time,False),rows,
+                                  lambda:analyze(rows,'1W',last.time,data_errors=False))
     if timeframe=='1W':
         payload.update(view,timeframe='1W',fingerprint=hashlib.sha256(json.dumps(bars,sort_keys=True).encode()).hexdigest()[:16])
     from drawing_axes import add_drawing_axes

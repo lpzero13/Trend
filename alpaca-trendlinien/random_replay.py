@@ -14,6 +14,7 @@ from datasets import read_dataset, source_bars, data_kind
 from models import DataError, NY
 from settings import data_dir
 from weekly_chart import CHART_TIMEFRAMES,add_weekly,weeks
+from chart_sources import sources_for
 
 VERSION='random-manual-1'
 _cached = {'stamp':None,'groups':{}}
@@ -47,10 +48,11 @@ def candidates():
     return {s:list(v) for s,v in groups.items()}
 
 
-def eligible(dataset,now=None):
+def eligible(dataset,now=None,*,chart_frames=None):
     if data_kind(dataset)!='market':raise DataError('Zufall verwendet ausschließlich echte Marktdaten.',422)
     now=int(time.time()) if now is None else now
-    frames={tf:[b for b in rows if b.end<=now-900] for tf,rows in source_bars(dataset).items() if tf in ('1h','4h','1D')}
+    inputs=source_bars(dataset) if chart_frames is None else chart_frames
+    frames={tf:[b for b in rows if b.end<=now-900] for tf,rows in inputs.items() if tf in ('1h','4h','1D')}
     if set(frames)!={'1h','4h','1D'} or len(frames['1D'])<81 or any(len(r)<3 for r in frames.values()):
         raise DataError('Benötigt 60 vergangene und mindestens 20 weitere gespeicherte Handelstage.',422)
     first,last=frames['1D'][59].end,frames['1D'][-21].end
@@ -97,12 +99,17 @@ def cutoff(value,default):
     except (ValueError,TypeError,AttributeError):raise DataError('Ungültiger oder mehrdeutiger Zeitpunkt (New York).',400) from None
 
 
+def _chart_inputs(identity):
+    sources,meta=sources_for(identity)
+    frames,_=eligible({'material':meta},chart_frames={tf:bars for tf,(bars,_) in sources.items()})
+    return frames,meta
+
+
 def view(identity,timeframe='4h',as_of=None,analysis=False):
-    item=case(identity);dataset=read_dataset(item['datasetId']);frames,_=eligible(dataset)
+    item=case(identity);frames,m=_chart_inputs(item['datasetId'])
     if timeframe not in CHART_TIMEFRAMES:raise DataError('Erlaubte Intervalle: 1h, 4h, 1D, 1W.',400)
     at=cutoff(as_of,item['startAt'])
     if at>max(b.end for b in frames['1h']):raise DataError('Ende des gespeicherten Verlaufs erreicht.',404)
-    m=dataset['material']
     # Do not ship whole-dataset metadata or future OHLC through another interval.
     sources={tf:(rows,{'quality':{'rejected':0},'cached':True,'mode':'random-replay',
                      'normalization':m['normalization'][tf]}) for tf,rows in frames.items()}
@@ -117,7 +124,7 @@ def view(identity,timeframe='4h',as_of=None,analysis=False):
 
 
 def step(identity,timeframe,as_of,direction):
-    item=case(identity);frames,_=eligible(read_dataset(item['datasetId']))
+    item=case(identity);frames,_=_chart_inputs(item['datasetId'])
     if timeframe=='1W':frames['1W']=weeks(frames['1D'],int(time.time())-900)
     if timeframe not in frames or direction not in ('back','next'):raise DataError('Ungültiger Kerzenschritt.',400)
     at=cutoff(as_of,item['startAt']);ends=[b.end for b in frames[timeframe]]

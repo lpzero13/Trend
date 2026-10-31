@@ -8,6 +8,7 @@ from fan_observer import price_at
 from fan_study import source_gaps
 from lab_data import NORMALIZATION
 from models import Bar, DataError
+from chart_lane_cache import lane as cached_lane
 
 ENGINES = ("legacy", "fan_extreme", "fan_local", "fan_master")
 
@@ -31,8 +32,9 @@ def apply(payload, engine="fan_extreme", *, config=None, case=None):
         regular = meta.get("normalization") == NORMALIZATION or tf == "1W" and payload["sources"]["1D"].get("normalization") == NORMALIZATION
         gaps = source_gaps(rows, rows[-1].end, tf) if regular else {}
         try:
-            lane = analyze(rows, tf, symbol=payload["symbol"], rules=rules, gaps=gaps,
-                           context_clean_atr=(config or {}).get("watch", {}).get("clean_atr", .15))
+            clean_atr=(config or {}).get('watch',{}).get('clean_atr',.15)
+            lane = cached_lane((engine,payload['symbol'],tf,stable_id(asdict(rules)),tuple(gaps.items()) if isinstance(gaps,dict) else tuple(gaps),clean_atr),rows,
+                               lambda:analyze(rows,tf,symbol=payload['symbol'],rules=rules,gaps=gaps,context_clean_atr=clean_atr))
         except DataError as exc:
             if exc.status != 404:
                 raise

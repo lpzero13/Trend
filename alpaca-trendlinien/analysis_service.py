@@ -6,6 +6,7 @@ import json
 from models import DataError
 from trendlines import RULES_VERSION, analyze
 from assets import cached_asset_name
+from chart_lane_cache import lane as cached_lane
 
 COMPANIES = {"AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "NVDA": "NVIDIA Corporation", "SPY": "SPDR S&P 500 ETF"}
 
@@ -24,8 +25,8 @@ def build_chart(datasets, symbol, timeframe, cutoff, now, *, historical=False, i
     lanes = {}
     if include_analysis:
         with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {tf: pool.submit(analyze, bars, tf, bars[-1].time,
-                                      data_errors=meta["quality"]["rejected"] > 0)
+            futures = {tf: pool.submit(cached_lane,('legacy',symbol,tf,bars[-1].time,meta['quality']['rejected']>0),bars,
+                                      lambda bars=bars,tf=tf,meta=meta:analyze(bars,tf,bars[-1].time,data_errors=meta['quality']['rejected']>0))
                        for tf, (bars, meta) in datasets.items()}
             lanes = {tf: future.result() for tf, future in futures.items()}
     serialized = [asdict(bar) for bar in chart_bars]

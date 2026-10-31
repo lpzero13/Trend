@@ -81,8 +81,11 @@ class RandomReplayTests(unittest.TestCase):
         for tf,rows in self.frames.items():
             frames[tf]=([replace(b,open=1000,high=1001,low=999,close=1000) if b.time>=item['startAt'] else b for b in rows],{'normalization':NORMALIZATION})
         altered=save_dataset('AAA',frames,feed='sip',adjustment='split',session='XNYS regular; test fixture')
-        with patch('random_replay.read_dataset',return_value=read_dataset(altered)):
-            p=replay.view(item['id']);self.assertEqual(original['charts'],p['charts'])
+        from chart_sources import clear
+        clear()
+        with patch('chart_sources.read_dataset',return_value=read_dataset(altered)) as load:
+            p=replay.view(item['id']);self.assertEqual(original['charts'],p['charts']);load.assert_called_once()
+        clear()
 
     def test_synthetic_short_and_corrupt_files_do_not_become_random_market_cases(self):
         with patch('random_replay.candidates',return_value={'AAA':[self.identity]}):

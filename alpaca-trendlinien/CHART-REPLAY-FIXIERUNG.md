@@ -1,5 +1,21 @@
 # Trendlinien im Chart und Replay
 
+## Beschleunigung vom 31.10.2026
+
+Normale Dataset-Charts und der Zufalls-Replay verwenden jetzt `chart_sources.py`. Beim ersten Zugriff wird der vollständige unveränderliche Bestand mit dem vorhandenen Datasetleser geprüft, einschließlich der 5m-Parquetblöcke. Im Speicher verbleiben nur 1h-/4h-/1D-Chartquellen und Metadaten für höchstens zwei Bestände. Die Chartansicht und der zugehörige Schrittabruf verwenden diese gemeinsam. Bei weiteren Kerzenschritten wird nicht erneut die komplette Ausführungshistorie geladen.
+
+Manifest- und Blockdateien werden vor jedem Zugriff auf Größe, Änderungs-/Erstellungsstand und Dateiidentität geprüft. Änderungen oder fehlende Dateien erzwingen erneute vollständige Prüfung beziehungsweise einen Fehler. Spätestens nach zehn Minuten wird auch ein unveränderter Bestand vollständig nachgeprüft. Dieser Webcache ersetzt weder Prüfsummen noch den strikten Datasetleser der Forschung. Es werden keine ungeprüften neuen Kerzen angehängt. Die Rückgaben sind vom Cache getrennte Listen/Metadaten; Kursobjekte sind unveränderlich.
+
+`chart_lane_cache.py` speichert zusätzlich höchstens 32 reine Quellintervall-Analyseergebnisse bis zusammen 8 MiB **serialisierter** Größe; der tatsächliche Python-RAM-Bedarf enthält zusätzlichen Objektaufwand. Schlüssel enthalten sämtliche verwendeten OHLCV-Kerzen sowie Intervall, Aktie, Modell, Regeln/Gapzustand und relevante Optionen. Eine frühere Kurskorrektur erzeugt auch bei gleicher letzter Kerze einen neuen Schlüssel. Unveränderte Tages-/Wochenintervalle und bereits besuchte historische Zustände werden wiederverwendet. Ausgaben werden vor Verwendung kopiert, damit fixierte Forschungsgeometrien oder spätere Ansichten keinen gespeicherten Zustand verändern.
+
+Die ursprünglichen Berechnungsfunktionen bleiben maßgeblich: keine verkürzte Historie, geänderte Kontaktregel, vorgeschätzte Linie oder Zukunftskerze. Neue bisher nicht besuchte Quellpräfixe werden regulär berechnet. Der erste Aktienaufruf einschließlich Prüfsummen und Kalenderinitialisierung bleibt deshalb teurer. Bereits fixierte Forschungsfälle verwenden weiterhin ihren bisherigen Overlaypfad. Kein neuer Import, Dauerscanner, Hintergrund-Backtest, Datenbankwechsel oder zusätzliche Abhängigkeit.
+
+Lokaler AAPL-Vergleich mit identischen gespeicherten Kursdaten, 4h-Ansicht am 22.10.2024: Rückwärtsschritt bisher 1,90 Sekunden (Legacy) beziehungsweise 1,98 Sekunden (Pine Master), danach 0,45 beziehungsweise 0,35 Sekunden. Bereits besuchter Vorwärtsschritt 1,82 auf 0,30 beziehungsweise 0,24 Sekunden. Der erste kalte Gesamtaufruf blieb rund 4,6 Sekunden. Dies sind Backendmessungen auf dem lokalen Rechner, keine garantierten Container-/Browserzeiten. Sämtliche sechs Vergleichsausgaben stimmen nach Ausklammerung der Erstellungszeit und temporären Analyse-ID vollständig mit den zuvor gespeicherten Referenzen überein. Keine Browserkorrekturen nötig.
+
+Neue Tests prüfen vollständige Inputschlüssel, frühere Kurskorrekturen, getrennte Modelle, Kopierschutz, Speichergrenzen, Ausnahmen, Cacheablauf, geänderte/fehlende Parquetblöcke, Dataset-/Intervallwechsel, exakt abgeschnittene Präfixe und alle drei Fan-Modi gegen die ungespeicherte Berechnung. Der Zukunftsschocktest im Zufallsmodus prüft ausdrücklich den neuen Loader, damit er trotz Cache nicht wirkungslos wird.
+
+Abnahme: 563 Python-Tests ohne Fehler (ein bestehender Skip), 84 JS-Prüfungen bestanden. Lokaler Dienst 8877 ohne allgemeinen Worker neu gestartet. Echte HTTP-Gegenprobe: warmer Dataset-Schritt rund 0,005 Sekunden, folgende analysierte Chartantwort 0,72–0,83 Sekunden einschließlich JSON-Übertragung/-Einlesen im Testclient; Referenzkerzen und -linien identisch. Auf GitHub übergeben; noch nicht im Container installiert.
+
 Stand: 30.10.2026. Dieselbe Bedienung gilt im normalen Chart, bei einem lokal gespeicherten Dataset und unter **Zufall**.
 
 ## Bedienung

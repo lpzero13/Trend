@@ -20,7 +20,8 @@ from alpaca import DataError, ROOT, TIMEFRAMES, NY, credentials, load_bars, next
 from trendlines import RULES_VERSION, analyze
 from assets import search_assets, cached_asset_name
 from analysis_service import build_chart
-from datasets import chart_dataset, read_dataset, source_bars
+from datasets import read_dataset, source_bars
+from chart_sources import chart_dataset,sources_for
 import jobs
 from snapshots import remember, save_snapshot, read_snapshot, list_snapshots
 from weekly_chart import CHART_TIMEFRAMES,add_weekly,weeks,next_close as next_week_close
@@ -261,7 +262,8 @@ class Handler(BaseHTTPRequestHandler):
                         raise DataError("Ungültiger Dataset-Schritt.",400)
                     at=datetime.fromisoformat(query.get("asof",[""])[0].replace("Z","+00:00"))
                     if at.tzinfo is None: raise DataError("Zeitzone fehlt.",400)
-                    sources=source_bars(read_dataset(query["dataset"][0]))
+                    chart_sources,_=sources_for(query['dataset'][0])
+                    sources={tf:bars for tf,(bars,_) in chart_sources.items()}
                     rows=weeks(sources['1D'],int(datetime.now(timezone.utc).timestamp())-900) if tf=='1W' else sources[tf]
                     closes=[b.end for b in rows]
                     i=bisect_right(closes,at.timestamp()) if direction=="next" else bisect_left(closes,at.timestamp())-1
