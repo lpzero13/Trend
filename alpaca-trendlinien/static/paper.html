@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tori · Papertrading</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/paper.css">
+  <script defer src="/paper.js"></script>
+</head>
+<body>
+<header><a href="/">Tori · Chart</a><a href="/watch">Beobachtung</a></header>
+<main>
+  <h1>Papertrading</h1>
+  <p class="muted">Simulation mit zeitversetzten SIP-Daten · 1-Minuten-Ausführung · reguläre US-Handelszeiten</p>
+  <p>Simulierte Fills liegen in der ursprünglichen Marktzeit. Die Information erreicht den Worker später.</p>
+  <div id="message" role="status" aria-live="polite"></div>
+  <section aria-labelledby="status-title">
+    <h2 id="status-title">Konto und Datenstand</h2>
+    <div id="account-view"></div>
+    <form id="account-form" hidden>
+      <label>Startkapital USD <input name="capital" type="number" min="1" step=".01" value="10000" required></label>
+      <label>Gebühr je Seite USD <input name="fee" type="number" min="0" max="1000" step=".01" value="0" required></label>
+      <label>Slippage je Seite in Basispunkten <input name="slippage" type="number" min="0" max="500" value="5" required></label>
+      <button>Konto mit diesen Annahmen anlegen</button>
+    </form>
+  </section>
+  <section aria-labelledby="new-title">
+    <h2 id="new-title">Plan aus einem Screenshot erfassen</h2>
+    <p>Übertrage die beiden Zeit-/Preispunkte je Linie. Die Zeit ist der Start der regulären 4h- oder Tageskerze, der Ankerpreis gilt an deren Schluss. Verwende UTC oder einen Zeitstempel mit explizitem Offset und unbereinigte USD-Kurse.</p>
+    <form id="plan-form">
+      <label>US-Ticker <input name="symbol" maxlength="12" placeholder="MSFT" required></label>
+      <label>Signalintervall <select name="timeframe"><option>4h</option><option>1D</option></select></label>
+      <label>Gültig ab, optional <input name="effective_from" placeholder="2026-11-16T14:30:00Z"></label>
+      <label>Ablaufzeit <input name="expires_at" placeholder="2026-11-21T00:00:00Z" required></label>
+      <fieldset>
+        <legend>Rote Action Line</legend>
+        <label>Erster Kerzenstart <input name="action_at_1" placeholder="2026-11-12T14:30:00Z" required></label>
+        <label>Preis USD <input name="action_price_1" type="number" min=".0001" step=".0001" required></label>
+        <label>Zweiter Kerzenstart <input name="action_at_2" placeholder="2026-11-13T14:30:00Z" required></label>
+        <label>Preis USD <input name="action_price_2" type="number" min=".0001" step=".0001" required></label>
+      </fieldset>
+      <fieldset>
+        <legend>Grüne Safety Line</legend>
+        <label>Erster Kerzenstart <input name="safety_at_1" placeholder="2026-11-12T14:30:00Z" required></label>
+        <label>Preis USD <input name="safety_price_1" type="number" min=".0001" step=".0001" required></label>
+        <label>Zweiter Kerzenstart <input name="safety_at_2" placeholder="2026-11-13T14:30:00Z" required></label>
+        <label>Preis USD <input name="safety_price_2" type="number" min=".0001" step=".0001" required></label>
+      </fieldset>
+      <label class="check"><input name="hard_stop" type="checkbox" checked> Fester Intrabar-Stop zusätzlich zum Safety-Schluss-Exit</label>
+      <label>Stop-Puffer in % <input name="buffer_pct" type="number" min="0" max="10" step=".01" value=".5" required></label>
+      <label>Risiko je Position in % <input name="risk_pct" type="number" min=".01" max="2" step=".01" value="1" required></label>
+      <label>Priorität (kleiner zuerst) <input name="priority" type="number" min="0" max="9999" value="100" required></label>
+      <label>Maximaler Entry in USD <input name="max_entry" type="number" min=".0001" step=".0001"></label>
+      <label>Take-Profit in USD, optional <input name="target_price" type="number" min=".0001" step=".0001"></label>
+      <label>Zeitexit nach Sitzungen, optional <input name="time_exit_sessions" type="number" min="1" max="90"></label>
+      <label>Buch-P/L nach Sitzungen <input name="horizons" value="5, 10, 20"></label>
+      <label>Notiz zum Screenshot <textarea name="note" maxlength="2000" rows="2"></textarea></label>
+      <div><button>Entwurf speichern</button></div>
+    </form>
+  </section>
+  <section aria-labelledby="plans-title"><h2 id="plans-title">Setups und Positionen</h2><div id="plans"></div></section>
+  <section id="preview" aria-labelledby="preview-title" hidden>
+    <h2 id="preview-title">Planvorschau</h2>
+    <p id="preview-note"></p>
+    <canvas id="preview-chart" height="230" role="img" aria-label="Rote und grüne Linie mit den abgerufenen Kurskerzen an den Anker- und Referenzpunkten"></canvas>
+    <dl id="preview-summary"></dl>
+    <details><summary>Plan und Kursdaten als JSON ansehen</summary><pre id="preview-json"></pre></details>
+    <div class="actions">
+      <button id="prepare" type="button">Kursvorschau anfordern</button>
+      <button id="preview-refresh" type="button">Vorschau abrufen</button>
+      <button id="activate" type="button">Plan ausdrücklich aktivieren</button>
+    </div>
+  </section>
+  <section aria-labelledby="journal-title">
+    <h2 id="journal-title">Ereignisse und Export</h2>
+    <div class="actions">
+      <button id="refresh" type="button">Aktualisieren</button>
+      <button id="journal-next" type="button">Weitere Ereignisse</button>
+      <a href="/api/paper/trades.csv" download="tori-paper-trades.csv">Abgeschlossene Trades als CSV</a>
+      <a href="/api/paper/trades">Trades als JSON</a>
+    </div>
+    <ol id="journal"></ol>
+  </section>
+</main>
+</body>
+</html>
