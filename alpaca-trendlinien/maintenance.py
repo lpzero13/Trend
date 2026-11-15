@@ -15,6 +15,7 @@ from settings import data_dir
 from database import connection, SCHEMA_VERSION
 from datasets import digest, SCHEMA
 from storage import references
+from paper_store import DB_NAME as PAPER_DB_NAME, SCHEMA_VERSION as PAPER_SCHEMA_VERSION
 
 BACKUP_SCHEMA="tori-backup-3"
 
@@ -39,7 +40,7 @@ def checked_dataset(path):
 
 
 def valid_relative(name):
-    return name in ("research/jobs.sqlite3","forward/watch.sqlite3") or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|datasets/chunks/[a-f0-9]{64}\.parquet|imports/chunks/[a-f0-9]{64}\.parquet|snapshots/[a-f0-9]{24}\.json|signal-journals/[\w-]{1,80}\.sqlite3",name))
+    return name in ("research/jobs.sqlite3","forward/watch.sqlite3",PAPER_DB_NAME) or bool(re.fullmatch(r"datasets/[a-f0-9]{64}\.json|datasets/chunks/[a-f0-9]{64}\.parquet|imports/chunks/[a-f0-9]{64}\.parquet|snapshots/[a-f0-9]{24}\.json|signal-journals/[\w-]{1,80}\.sqlite3",name))
 
 
 def new_target(target):
@@ -54,7 +55,8 @@ def backup(target):
     root=data_dir()
     if target.is_relative_to(root): raise DataError("Backupziel muss außerhalb des aktiven Datenordners liegen.",400)
     db_source=root/"research/jobs.sqlite3"
-    initial_bytes=db_source.stat().st_size if db_source.exists() else 0
+    initial_bytes=sum(path.stat().st_size for path in (
+        db_source, root/PAPER_DB_NAME, root/(PAPER_DB_NAME+"-wal")) if path.exists())
     if shutil.disk_usage(target.parent).free<initial_bytes+16*1024*1024:
         raise DataError("Zu wenig Platz am Backupziel.",507)
     root.mkdir(parents=True,exist_ok=True)
@@ -70,6 +72,15 @@ def backup(target):
             (stage/"forward").mkdir()
             with closing(sqlite3.connect(watch.as_uri()+"?mode=ro",uri=True)) as source, closing(sqlite3.connect(stage/"forward/watch.sqlite3")) as destination:
                 source.backup(destination)
+        paper = root / PAPER_DB_NAME
+        if paper.is_symlink() or paper.parent.is_symlink():
+            raise DataError("Paper-Datenbank darf kein Link sein.", 409)
+        if paper.exists():
+            paper_destination = stage / PAPER_DB_NAME
+            paper_destination.parent.mkdir()
+            with closing(sqlite3.connect(paper.as_uri()+"?mode=ro", uri=True)) as source, closing(sqlite3.connect(paper_destination)) as destination:
+                source.backup(destination)
+                destination.execute("PRAGMA journal_mode=DELETE")
         journals=root/'signal-journals'
         if journals.is_symlink():raise DataError('Signaljournal-Ordner darf kein Link sein.',409)
         for journal in journals.glob('*.sqlite3'):
@@ -144,6 +155,12 @@ def verify(folder):
         if "forward/watch.sqlite3" in value["files"]:
             with closing(sqlite3.connect((root/"forward/watch.sqlite3").as_uri()+"?mode=ro",uri=True)) as watch:
                 if watch.execute("PRAGMA integrity_check").fetchone()[0]!="ok":raise ValueError()
+        if PAPER_DB_NAME in value["files"]:
+            with closing(sqlite3.connect((root/PAPER_DB_NAME).as_uri()+"?mode=ro", uri=True)) as paper:
+                if (paper.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
+                        or paper.execute("PRAGMA user_version").fetchone()[0] != PAPER_SCHEMA_VERSION
+                        or paper.execute("PRAGMA foreign_key_check").fetchone() is not None):
+                    raise ValueError("Ungültige Paper-Datenbank")
         with closing(sqlite3.connect((root/"research/jobs.sqlite3").as_uri()+"?mode=ro",uri=True)) as db:
             if db.execute("PRAGMA integrity_check").fetchone()[0]!="ok": raise ValueError()
             version=db.execute("PRAGMA user_version").fetchone()[0]

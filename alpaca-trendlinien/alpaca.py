@@ -98,13 +98,21 @@ def parse_bars(rows: list[dict], timeframe: str, cutoff: int) -> tuple[list[Bar]
 
 
 def _request(params: dict, key: str, secret: str) -> dict:
-    url = "https://data.alpaca.markets/v2/stocks/bars?" + urllib.parse.urlencode(params)
+    return request_market_data("v2/stocks/bars", params, key, secret)
+
+
+def request_market_data(endpoint: str, params: dict, key: str, secret: str, *, on_attempt=None) -> dict:
+    if endpoint not in ("v2/stocks/bars", "v1/corporate-actions"):
+        raise ValueError("Unzulässiger Alpaca-Marktdatenendpunkt.")
+    url = "https://data.alpaca.markets/" + endpoint + "?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={
         "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
         "Accept": "application/json", "User-Agent": "Tori-Local-Prototype/0.1",
     }, method="GET")
     for attempt in range(3):
         request_slot()
+        if on_attempt is not None:
+            on_attempt()
         try:
             with urllib.request.urlopen(request, timeout=25) as response:
                 return json.load(response)

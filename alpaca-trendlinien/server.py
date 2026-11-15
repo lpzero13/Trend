@@ -192,6 +192,15 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/watch/"):
                 from forward_api import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path == "/api/paper/trades.csv":
+                from paper_api import trade_csv
+                return self.send_bytes(trade_csv().encode("utf-8"), 200, "text/csv; charset=utf-8")
+            if path == "/api/paper/trades":
+                from paper_api import trade_items
+                return self.send_json(trade_items())
+            if path.startswith("/api/paper/"):
+                from paper_api import get
+                return self.send_json(get(path, parse_qs(urlparse(self.path).query)))
             if path.startswith("/api/random/"):
                 from random_replay import get
                 query = parse_qs(urlparse(self.path).query)
@@ -297,6 +306,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/lab":"lab.html", "/lab.js":"lab.js", "/lab.css":"lab.css",
                 "/watch":"watch.html", "/watch.js":"watch.js", "/watch.css":"watch.css",
                 "/watch-view.js":"watch-view.js",
+                "/paper":"paper.html", "/paper.js":"paper.js", "/paper.css":"paper.css",
                 "/pruefung":"workbench.html", "/workbench.js":"workbench.js",
                 "/workbench-view.js":"workbench-view.js", "/workbench.css":"workbench.css",
                 "/daily-review.js":"daily-review.js",
@@ -331,7 +341,8 @@ class Handler(BaseHTTPRequestHandler):
         path=urlparse(self.path).path
         entry_request=path.startswith('/api/entries/')
         research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/") or path.startswith("/api/watch/") or path.startswith("/api/workbench/") or path.startswith("/api/random/") or path.startswith('/api/archive/')
-        research=research or entry_request
+        paper_request = path.startswith("/api/paper/")
+        research=research or entry_request or paper_request
         if path != "/api/snapshots" and not research:
             return self.send_json({"error": "Schreibzugriffe sind nur zum lokalen Speichern eines Analysestands vorgesehen."}, 405)
         allowed = self.allowed_hosts()
@@ -347,6 +358,9 @@ class Handler(BaseHTTPRequestHandler):
             if length < 1 or length > (65536 if research else 1024) or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 raise DataError("Ungültige Speicheranfrage.", 400)
             body = json.loads(self.rfile.read(length))
+            if paper_request:
+                from paper_api import post
+                return self.send_json(post(path, body))
             if entry_request:
                 from entry_history import post
                 return self.send_json(post(path,body))

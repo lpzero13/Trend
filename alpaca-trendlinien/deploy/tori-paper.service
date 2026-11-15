@@ -1,0 +1,27 @@
+[Unit]
+Description=Tori delayed paper simulation (market data only)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tori
+Group=tori
+WorkingDirectory=/opt/trend/alpaca-trendlinien
+EnvironmentFile=/etc/tori/tori.env
+Environment=TORI_DATA_DIR=/var/lib/tori
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/trend/alpaca-trendlinien/.venv/bin/python /opt/trend/alpaca-trendlinien/tools/paper.py run
+Restart=on-failure
+RestartSec=60
+StateDirectory=tori
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tori
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

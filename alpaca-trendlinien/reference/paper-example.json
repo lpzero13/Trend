@@ -1,0 +1,23 @@
+{
+  "request_id": "synthetic-demo-001",
+  "setup": {
+    "symbol": "MSFT",
+    "timeframe": "4h",
+    "action": [
+      {"at": "2026-11-12T14:30:00Z", "price": "500.00"},
+      {"at": "2026-11-13T14:30:00Z", "price": "498.00"}
+    ],
+    "safety": [
+      {"at": "2026-11-12T14:30:00Z", "price": "475.00"},
+      {"at": "2026-11-13T14:30:00Z", "price": "477.00"}
+    ],
+    "expires_at": "2026-11-21T00:00:00Z",
+    "hard_stop": true,
+    "buffer_pct": "0.5",
+    "risk_pct": "1",
+    "target_price": null,
+    "time_exit_sessions": null,
+    "horizons": [5, 10, 20],
+    "note": "Synthetische Preise und Anker zur Formaterklärung. Datum vor Einsatz anpassen."
+  }
+}
