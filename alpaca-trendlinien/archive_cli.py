@@ -26,9 +26,30 @@ def add_commands(commands):
     estimate.add_argument('--universes',required=True)
     estimate.add_argument('--start',default='2016-01-01T00:00:00Z')
     estimate.add_argument('--end')
+    daily = commands.add_parser('archive-update', help='Lokale SIP-Historien bis zum letzten verfügbaren US-Schluss ergänzen')
+    daily.add_argument('--universes', help='Gespeicherte IDs kommasepariert. Standard: alle gespeicherten Listen')
+    daily.add_argument('--plan', action='store_true', help='Datenstand und fehlende Sitzungen ohne Abruf prüfen')
+    daily.add_argument('--workers', type=int, default=4)
+    daily.add_argument('--max-minutes', type=int, default=55)
+    review = commands.add_parser('archive-review', help='Kurse ergänzen und Abend-Watchlist für die Sichtprüfung erstellen')
+    review.add_argument('--universes', help='Gespeicherte IDs kommasepariert')
+    review.add_argument('--scan-only', action='store_true', help='Nur gespeicherte Kursdaten prüfen')
+    review.add_argument('--base-url', help='Tori-Serveradresse für absolute Links in der JSON-Ausgabe')
+    review.add_argument('--workers', type=int, default=4)
+    review.add_argument('--max-minutes', type=int, default=55, help='Zeitbudget des Kursupdates vor der Sichtprüfung')
 
 
 def execute(args):
+    if args.command == 'archive-review':
+        from daily_review import run
+        keys = args.universes.split(',') if args.universes else None
+        return run(keys, scan_only=args.scan_only, base_url=args.base_url,
+                   workers=args.workers, max_minutes=args.max_minutes)
+    if args.command == 'archive-update':
+        from daily_archive import make_plan, summarize, update
+        keys = args.universes.split(',') if args.universes else None
+        return summarize(make_plan(keys), {}) if args.plan else update(
+            keys, workers=args.workers, max_minutes=args.max_minutes)
     import history_archive as archive
     import history_fast as fast
     import archive_state as state

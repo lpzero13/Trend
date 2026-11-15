@@ -205,6 +205,9 @@ class Handler(BaseHTTPRequestHandler):
                     remember(payload)
                 return self.send_json(payload)
             if path.startswith("/api/workbench/"):
+                if path == "/api/workbench/daily-review":
+                    from daily_review import latest
+                    return self.send_json({"report": latest()})
                 from workbench_reviews import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path.startswith("/api/candidates/"):
@@ -296,6 +299,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/watch-view.js":"watch-view.js",
                 "/pruefung":"workbench.html", "/workbench.js":"workbench.js",
                 "/workbench-view.js":"workbench-view.js", "/workbench.css":"workbench.css",
+                "/daily-review.js":"daily-review.js",
                 "/kandidaten":"candidates.html", "/candidates.js":"candidates.js",
                 "/candidate-view.js":"candidate-view.js", "/candidates.css":"candidates.css",
                 "/faecher":"fan.html", "/fan.js":"fan.js", "/fan.css":"fan.css", "/fan-view.js":"fan-view.js",

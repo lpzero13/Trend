@@ -62,7 +62,7 @@ const state = {
     : "4h",
   range: 30,
   data: null,
-  analysisEnabled: false,
+  analysisEnabled: Boolean(query.get("dataset") && query.get("asof") && query.get("analysis") === "1"),
   analysisEngine: ["fan_extreme", "fan_local", "fan_master"].includes(query.get("engine")) ? query.get("engine") : "legacy",
   fanJob: query.get("fan_job") || null,
   fanCase: query.get("fan_case") || null,

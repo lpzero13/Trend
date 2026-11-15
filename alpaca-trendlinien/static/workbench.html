@@ -2,9 +2,23 @@
 <html lang="de" class="research-document">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tori · Sichtprüfung</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/research.css"><link rel="stylesheet" href="/workbench.css">
-<script defer src="/vendor/lightweight-charts.js"></script><script defer src="/api.js"></script><script defer src="/workbench-view.js"></script><script defer src="/workbench.js"></script></head>
+<script defer src="/vendor/lightweight-charts.js"></script><script defer src="/api.js"></script><script defer src="/daily-review.js"></script><script defer src="/workbench-view.js"></script><script defer src="/workbench.js"></script></head>
 <body class="research-page"><header class="research-header"><a class="brand" href="/">tori<span>.</span></a><nav class="app-navigation" aria-label="Hauptnavigation"><a href="/">Chart</a><a href="/research">Forschung</a><a href="/lab">Labor</a><a href="/watch">Beobachtung</a><a href="/pruefung" aria-current="page">Sichtprüfung</a><a href="/kandidaten">Kandidaten</a><a href="/faecher">Fächer-Test</a><a href="/sammler">Datensammler</a><a href="/zufall">Zufall</a></nav><span class="toolbar-spacer"></span><button id="wb-theme" aria-label="Hell/Dunkel wechseln">◐</button></header>
 <main class="research-layout"><section class="research-intro"><span class="eyebrow">LINIEN UND KONTAKTE PRÜFEN</span><h1>Erst selbst zeichnen. Dann vergleichen.</h1><p>Nur zum Stichtag abgeschlossene Quellkerzen. Keine späteren Kurse oder Gewinne. Die Fallauswahl ist diagnostisch und misst keine allgemeine Trefferquote.</p></section>
+<section class="research-card" id="abend-watchlist" aria-labelledby="daily-review-title">
+  <h2 id="daily-review-title">Abend-Watchlist</h2>
+  <p id="daily-review-status" role="status">Watchlist wird geladen …</p>
+  <div class="table-wrap" id="daily-review-table" hidden>
+    <table>
+      <thead><tr><th>Aktie</th><th>Warum prüfen?</th><th>Seit dem letzten Bericht</th><th>Kursstand</th><th>Chart</th></tr></thead>
+      <tbody id="daily-review-rows"></tbody>
+    </table>
+  </div>
+  <details id="daily-review-issues" hidden>
+    <summary>Ausgelassene Datenstände</summary>
+    <ul id="daily-review-issues-list"></ul>
+  </details>
+</section>
 <p id="wb-error" role="alert" hidden></p><section class="research-card"><div class="study-actions"><label>Paket<select id="wb-pack"></select></label><label>Fall<select id="wb-case"></select></label><button id="wb-previous">Vorherige Seite</button><button id="wb-next">Nächste Seite</button><button id="wb-refresh">Neu laden</button></div><p id="wb-meta" role="status">Laden …</p>
 <div class="study-actions"><button data-tool="red">Roter Ray</button><button data-tool="green">Grüner Ray</button><button data-tool="resistance">Horizontaler Widerstand</button><button data-tool="contact">Kontakt markieren</button><button id="wb-cancel">Zeichnen beenden</button><button id="wb-fit">Ansicht zurücksetzen</button></div>
 <p id="wb-help" class="note">Zwei Anker von links nach rechts anklicken. Zusätzliche Kontakte sind eigene Markierungen, keine automatisch bestätigten Reaktionen.</p><div id="wb-chart" aria-label="Historischer Quellchart"></div>

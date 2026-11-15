@@ -145,3 +145,40 @@ python tools/verify_archive.py --id AUFTRAGS_ID --output /pfad/pruefbericht.json
 Der Prüfer unterstützt v1 und v2, benötigt keine Providerzugangsdaten und liest alle referenzierten Kursdateien mit Prüfsummen. Er rechnet jedes gespeicherte Stunden-, Vierstunden- und Tagesaggregat aus seinem exakten 5m-Intervall nach und vergleicht den vollständigen Wochen-Cache. `--watch` prüft neue fertige Aktien während eines ausdrücklich laufenden Imports. Für eine erneute vollständige Prüfung einen neuen Berichtspfad verwenden.
 
 Sicherungen umfassen SQLite, referenzierte Datasets und referenzierte v1/v2-Monatsdateien; Zugangsdaten und große Roh-JSON-Caches bleiben ausgeschlossen. Es wurde kein automatisches Löschen alter Bestände ergänzt.
+## Tägliches Kursupdate für Hermes
+
+Der Befehl `archive-update` ergänzt vorhandene Alpaca-SIP-Historien im gemeinsamen `TORI_DATA_DIR`. Er liest die lokal gespeicherten Universumslisten und verarbeitet jedes Symbol einmal. Hermes legt den Ausführungszeitpunkt fest. Verwende auf Proxmox denselben Benutzer, dieselbe Python-Umgebung, denselben Datenordner und dieselben Alpaca-Zugangsdaten wie beim normalen Tori-Sammler.
+
+~~~sh
+python tori.py archive-update --plan
+python tori.py archive-update
+python tori.py archive-update --universes nasdaq100,dow30,sp500 --max-minutes 55
+~~~
+
+`--plan` zeigt den Bestand je Symbol und die vorgesehenen Sitzungen ohne Alpaca-Abrufe. Ohne `--universes` berücksichtigt der Lauf alle gespeicherten Listen. Titel ohne kompatible lokale SIP-Historie erscheinen als `no_local_history`. Der Sammler bietet für diese Titel den getrennten Erstimport an.
+
+Der Handelskalender bestimmt den letzten regulären New Yorker Börsenschluss einschließlich Feiertagen und verkürzten Sitzungen. Die Sitzung wird 16 Minuten nach Schluss für den Import verfügbar. Fällige Sitzungen werden je Symbol nachgeholt. Der Abruf fasst bis zu 100 Symbole pro Sitzung zusammen. Die 5‑Minuten-Daten werden mit den bisherigen Daten abgeglichen und zu 1h, 4h und 1D zusammengefasst. Der neue Datensatz hat eine eigene ID. Hermes erhält sie in der JSON-Ausgabe und kann sie direkt für einen nachfolgenden Scan verwenden.
+
+Pro Lauf werden je Symbol bis zu 20 ausstehende Sitzungen aufgenommen. Neuere Datenlücken werden innerhalb der letzten fünf Sitzungen erneut geprüft. Ältere dem Update bereits bekannte Lücken stehen weiterhin im Bericht. Abweichende OHLC-Werte im Überlapp können auf eine Kursrevision oder einen Split hindeuten. Das betroffene Symbol erhält `error` und kann über den vorhandenen Sammler mit einheitlicher Splitbereinigung neu importiert werden. Reine Volumenänderungen werden im neuen Datensatz berücksichtigt.
+
+**Toleranz für Kurslücken.** Der Bericht zählt erwartete und fehlende reguläre 5‑Minuten-Kerzen je Aktie und Sitzung. Bei 1–9 fehlenden Kerzen erscheint `gapStatus: "tolerated"`, ab 10 `gapStatus: "problem"`. Das gilt auch bei einem für die Nachprüfung vorgemerkten Symbol mit `status: "pending"`. Hermes kann für die Statistik `gapCounts` und pro Symbol `missingBarsBySession` lesen. Vollständige übergeordnete Kerzen entstehen weiterhin aus den tatsächlichen lückenlosen 5‑Minuten-Intervallen. Bei einer Lücke kann die jüngste vollständige Tageskerze daher älter sein als die jüngste geprüfte Sitzung.
+
+Das Standardbudget von 55 Minuten stoppt das Anfangen weiterer Arbeit. Laufende Speicheroperationen können noch abschließen. Der nächste Lauf ermittelt den Bedarf anhand der inzwischen gespeicherten Daten. Prüfe im JSON `counts`, `behindTarget` und je Symbol `status`, `checkedThrough` und `missingSessions`. `pending` zeigt Arbeit, die nach dem Zeitbudget noch aussteht. `behindTarget` zählt vorhandene Historien mit älterer letzter vollständiger Tageskerze. Wenn die Zielsession bereits vollständig vorliegt und keine jüngeren Lücken nachzuprüfen sind, fallen keine Alpaca-Abrufe an.
+
+## Kursupdate und Abend-Watchlist
+
+Hermes kann stattdessen einen gemeinsamen Lauf ausführen. `archive-review` wartet auf das Ergebnis des Kursupdates und speichert dann die Liste unter **Sichtprüfung → Abend-Watchlist** im selben Datenordner.
+
+~~~sh
+python tori.py archive-review
+python tori.py archive-review --universes nasdaq100,dow30,sp500 --base-url https://tori.example.internal
+python tori.py archive-review --scan-only
+~~~
+
+`--scan-only` verwendet den lokalen Kursstand und erstellt daraus die Liste ohne Alpaca-Aufruf. Der Zeitpunkt des Starts wird außerhalb des Programms bestimmt. Der Bericht zeigt immer die ausgewertete US-Handelssitzung und die tatsächlich verwendeten 4h- und Tagesbalken.
+
+Ein Kandidat liegt am abgeschlossenen 4h-Balken über steigender grüner Unterstützung und bis zu einer 4h-ATR unter fallendem Rot. Beide Linien brauchen zwei Kontakte. Das Master-Profil stuft die Linienqualität ein. Die Tageslinie liefert Kontext. Bei tolerierten Lücken kann ein vollständiger früherer 4h-Balken der Sitzung für die Prüfung genügen. Der Bericht kennzeichnet den Teilstand. Bei zehn oder mehr fehlenden 5‑Minuten-Kerzen in der Zielsitzung wird die Aktie ausgelassen.
+
+Die Liste beginnt mit Kandidaten auf dem vollständigen 4h-Schluss, dann folgen innerhalb desselben Datenstands qualifizierte Linienpaare vor vorläufigen. Der Abstand zu Rot sortiert innerhalb dieser Gruppen. Der Bericht vergleicht mit der letzten gespeicherten früheren Sitzung derselben Universumsauswahl. Eine Änderung der roten Anker wird als neu gezeichnete Linie ausgewiesen. Bei unveränderter Linie zählt eine Abstandsdifferenz ab 0,1 ATR für „näher“ oder „weiter entfernt“.
+
+Hermes liest `session`, `previousSession`, `coverage`, `issues` und `candidates` aus der JSON-Ausgabe. Das Feld `chartPath` führt zum gespeicherten Datenstand mit eingeschalteter Tori-Analyse. Mit `--base-url` liefert die Ausgabe zusätzlich direkt anklickbare vollständige Chartlinks und die URL der Watchlist. Verwende die Tori-Adresse, die der Empfänger im Browser erreicht. Für eine kurze Zusammenfassung hebe neue, näher gerückte und neu gezeichnete Kandidaten aus dem Bericht hervor und nenne je Aktie einen konkreten Punkt für die manuelle Prüfung.
