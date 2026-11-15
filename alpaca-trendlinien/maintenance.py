@@ -13,7 +13,7 @@ from contextlib import closing
 from models import DataError
 from settings import data_dir
 from database import connection, SCHEMA_VERSION
-from datasets import digest, SCHEMA
+from datasets import verified_dataset
 from storage import references
 from paper_store import DB_NAME as PAPER_DB_NAME, SCHEMA_VERSION as PAPER_SCHEMA_VERSION
 
@@ -28,13 +28,10 @@ def checksum(path):
 
 
 def checked_dataset(path):
-    from parquet_store import hydrate
     from duckdb import Error as ParquetError
     try:
         if path.is_symlink() or path.parent.is_symlink():raise ValueError("link")
-        value=hydrate(json.loads(path.read_text("utf-8")),path.parent.parent)
-        if value["id"]!=path.stem or value["material"]["schema"]!=SCHEMA or digest(value["material"])!=path.stem:
-            raise ValueError("checksum")
+        verified_dataset(path)
     except (ValueError,TypeError,KeyError,OSError,ParquetError):
         raise DataError("Dataset-Prüfsumme stimmt nicht; Sicherung/Wiederherstellung abgebrochen.",409) from None
 

@@ -71,6 +71,7 @@ class DailyReviewTest(TestCase):
             report = run(scan_only=True, base_url="https://tori.example.org")
             updater.assert_not_called()
             self.assertIsNone(report["previousSession"])
+            self.assertTrue(report["cachedAnalysis"])
             self.assertEqual(report["url"], "https://tori.example.org/pruefung#abend-watchlist")
             self.assertEqual(latest()["session"], snapshot["targetSession"])
             self.assertNotIn("url", latest())
@@ -80,6 +81,6 @@ class DailyReviewTest(TestCase):
         with TemporaryDirectory() as directory, patch.dict(os.environ, {"TORI_DATA_DIR": directory}), patch(
                 "daily_review.update", return_value=snapshot) as updater:
             report = run(["nasdaq100"], workers=2, max_minutes=25)
-            updater.assert_called_once_with(["nasdaq100"], workers=2, max_minutes=25)
+            updater.assert_called_once_with(["nasdaq100"], workers=2, max_minutes=25, stop=None, progress=None, budget=90)
             self.assertEqual(report["session"], "2026-11-13")
             self.assertEqual(report, latest())

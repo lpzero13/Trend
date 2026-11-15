@@ -82,7 +82,7 @@ class DailyArchiveTest(TestCase):
             self.assertEqual(result["symbols"]["AAPL"]["lastSession"], "2026-11-12")
             self.assertEqual(len(read_dataset(dataset)["material"]["bars"]["1D"]), 3)
             tape[datetime.fromtimestamp(session_bounds("2026-11-11")[0], timezone.utc)] = prices("2026-11-11")
-            result = update(["sp500"], now=now, client_factory=lambda: FakeClient(tape))
+            result = update(["sp500"], mode="repair", now=now, client_factory=lambda: FakeClient(tape))
             self.assertEqual(result["counts"], {"updated": 1, "no_local_history": 1})
             latest = result["symbols"]["AAPL"]["datasetId"]
             self.assertEqual(len(read_dataset(latest)["material"]["bars"]["1D"]), 5)
@@ -109,6 +109,8 @@ class DailyArchiveTest(TestCase):
                     archive_state.put(db, "universe:v1:sp500", {"asOf": first, "members": [{"symbol": "AAPL"}]})
                     archive_state.put(db, "daily-archive:v1:AAPL", updated)
                 planned = make_plan(["sp500"], utc("2026-11-12T22:00:00+00:00"))["symbols"]["AAPL"]
-                self.assertEqual(planned["status"], "pending")
+                self.assertEqual(planned["status"], status)
+                self.assertEqual(make_plan(["sp500"], utc("2026-11-12T22:00:00+00:00"),
+                                           mode="repair")["symbols"]["AAPL"]["status"], "pending")
                 self.assertEqual(planned["gapStatus"], quality)
                 self.assertEqual(planned["missingBarsBySession"], {second: missing, third: 2})

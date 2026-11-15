@@ -130,7 +130,7 @@ Bereits vollständig rückgelesene unveränderliche Dateien können nach erneute
 
 Cacheverträge trennen Symbol, Feed, Bereinigung, Normalisierung, Symbolstand und Datenvintage. Wiederverwendung über verschiedene Universen funktioniert für passende gemeinsame Datenstände. Abweichende Monatsgrenzen, insbesondere ein späteres Ende im laufenden Monat, können einen erneuten Abruf dieses Monats erfordern.
 
-**Noch geplant:** automatische tägliche Fortschreibung splitbereinigter Historien über neue Vintages hinweg. Dafür müssen Kurskorrekturen und Corporate Actions versionsbewusst behandelt werden. V2 mischt nicht blind alte bereinigte Preise mit einem neuen Datenstand. Die derzeitige Vintage ist ein eingefrorener Abrufbatch, keine vom Anbieter garantierte historische Corporate-Action-Version.
+Der separate Tageslauf ergänzt vorhandene, splitbereinigte Parquet-Historien nach einer Überlappungsprüfung. Die Abrufvintage bleibt ein eingefrorener Datenstand, keine vom Anbieter garantierte historische Corporate-Action-Version. Für erkannte Preisrevisionen oder Splits meldet der Tageslauf einen Konflikt für das betreffende Symbol. Ein einheitlich neu bereinigter Altbestand braucht einen getrennt freigegebenen Historienimport.
 
 Ein Auftrag bindet den relevanten Codehash. Nach einer Kernänderung einen neuen Auftrag anlegen; alte Forschungs-/Importaufträge nicht durch manipulierte Hashes fortsetzen. Fertige Kursbestände bleiben lesbar. Der Cache darf nur bei weiterhin passendem, versioniertem Datenvertrag übernommen werden.
 
@@ -147,23 +147,26 @@ Der Prüfer unterstützt v1 und v2, benötigt keine Providerzugangsdaten und lie
 Sicherungen umfassen SQLite, referenzierte Datasets und referenzierte v1/v2-Monatsdateien; Zugangsdaten und große Roh-JSON-Caches bleiben ausgeschlossen. Es wurde kein automatisches Löschen alter Bestände ergänzt.
 ## Tägliches Kursupdate für Hermes
 
-Der Befehl `archive-update` ergänzt vorhandene Alpaca-SIP-Historien im gemeinsamen `TORI_DATA_DIR`. Er liest die lokal gespeicherten Universumslisten und verarbeitet jedes Symbol einmal. Hermes legt den Ausführungszeitpunkt fest. Verwende auf Proxmox denselben Benutzer, dieselbe Python-Umgebung, denselben Datenordner und dieselben Alpaca-Zugangsdaten wie beim normalen Tori-Sammler.
+Der Befehl `archive-update` ergänzt vorhandene Alpaca-SIP-Historien im gemeinsamen `TORI_DATA_DIR`. Standard sind die gespeicherten Mitglieder von Nasdaq‑100, Dow‑30 und S&P 500. Überschneidungen werden dedupliziert. `--universes` kann eine Teilmenge dieser drei Listen wählen. Titel ohne kompatibles splitbereinigtes Parquet-Archiv erscheinen als `no_local_history`. Hermes legt den Ausführungszeitpunkt fest. Der XNYS-Kalender gibt die letzte Zielsitzung 16 Minuten nach regulärem Börsenschluss frei.
 
 ~~~sh
 python tori.py archive-update --plan
-python tori.py archive-update
-python tori.py archive-update --universes nasdaq100,dow30,sp500 --max-minutes 55
+python tori.py archive-update --progress
+python tori.py archive-update --mode catchup --max-sessions 5 --progress
+python tori.py archive-update --mode repair --max-sessions 3 --progress
+python tori.py archive-update --mode repair --session 2026-11-13 --progress
 ~~~
 
-`--plan` zeigt den Bestand je Symbol und die vorgesehenen Sitzungen ohne Alpaca-Abrufe. Ohne `--universes` berücksichtigt der Lauf alle gespeicherten Listen. Titel ohne kompatible lokale SIP-Historie erscheinen als `no_local_history`. Der Sammler bietet für diese Titel den getrennten Erstimport an.
+- `daily` (Standard) schließt je Titel bis zu zwei offene Sitzungen. Ein größerer Rückstand erscheint als `backlog`.
+- `catchup` arbeitet die ältesten offenen Sitzungen pro Titel ab. `--max-sessions` begrenzt die Arbeit auf 1–20 Sitzungen zuzüglich einer Überlappsitzung.
+- `repair` behandelt bereits bekannte Lücken oder explizit per `--session` gewählte Sitzungen im lokalen Bestandszeitraum. Auch dieser Modus prüft einen Überlapp. Wiederholte Reparatur ist ein bewusster Aufruf.
+- `--plan` funktioniert in allen Modi ohne Providerzugriff. `--progress` schreibt JSON-Ereignisse nach stderr. Der zusammengefasste Bericht bleibt auf stdout.
 
-Der Handelskalender bestimmt den letzten regulären New Yorker Börsenschluss einschließlich Feiertagen und verkürzten Sitzungen. Die Sitzung wird 16 Minuten nach Schluss für den Import verfügbar. Fällige Sitzungen werden je Symbol nachgeholt. Der Abruf fasst bis zu 100 Symbole pro Sitzung zusammen. Die 5‑Minuten-Daten werden mit den bisherigen Daten abgeglichen und zu 1h, 4h und 1D zusammengefasst. Der neue Datensatz hat eine eigene ID. Hermes erhält sie in der JSON-Ausgabe und kann sie direkt für einen nachfolgenden Scan verwenden.
+Der Abruf bündelt bis zu 100 Symbole je Sitzung. Vollständig validierte Sitzungsantworten bleiben bis zum erfolgreichen Symbol-Checkpoint im lokalen Downloadcache. Beim Wiederanlauf unter demselben Modus und Stichtag sind nur fehlende Teile fällig. Der Standard sind ein Veröffentlichungs-Worker, 55 Minuten für den Updatepfad und 90 API-Versuche pro Minute im gemeinsamen Projektbudget. SIGINT und SIGTERM lassen eine begonnene Veröffentlichung abschließen. Eine noch ausstehende Arbeit bleibt als `pending` sichtbar. Der Bulk-Sammler und der Tageslauf teilen eine Prozesssperre.
 
-Pro Lauf werden je Symbol bis zu 20 ausstehende Sitzungen aufgenommen. Neuere Datenlücken werden innerhalb der letzten fünf Sitzungen erneut geprüft. Ältere dem Update bereits bekannte Lücken stehen weiterhin im Bericht. Abweichende OHLC-Werte im Überlapp können auf eine Kursrevision oder einen Split hindeuten. Das betroffene Symbol erhält `error` und kann über den vorhandenen Sammler mit einheitlicher Splitbereinigung neu importiert werden. Reine Volumenänderungen werden im neuen Datensatz berücksichtigt.
+Im JSON stehen `checkedThrough` für die zuletzt geprüfte Sitzung, `lastBarSession` für die letzte vorhandene 5‑Minuten-Sitzung und `lastSession` für die letzte vollständige Tageskerze. `behindTarget` zählt geprüfte Stände vor der Zielsitzung. `backlogSessions` und `missingBarsBySession` zeigen Rückstände und bekannte Lücken je Titel. Ein bis neun fehlende 5‑Minuten-Kerzen pro Aktie und Sitzung gelten als toleriert. Ab zehn meldet das Update `gapStatus: "problem"`. Vollständige höhere Kerzen entstehen weiterhin aus lückenlosen 5‑Minuten-Intervallen. Reine Volumenrevisionen können veröffentlicht werden. OHLC-Konflikte und fehlender Vergleichsüberlapp werden als `errorKind: "split_or_revision"` gemeldet.
 
-**Toleranz für Kurslücken.** Der Bericht zählt erwartete und fehlende reguläre 5‑Minuten-Kerzen je Aktie und Sitzung. Bei 1–9 fehlenden Kerzen erscheint `gapStatus: "tolerated"`, ab 10 `gapStatus: "problem"`. Das gilt auch bei einem für die Nachprüfung vorgemerkten Symbol mit `status: "pending"`. Hermes kann für die Statistik `gapCounts` und pro Symbol `missingBarsBySession` lesen. Vollständige übergeordnete Kerzen entstehen weiterhin aus den tatsächlichen lückenlosen 5‑Minuten-Intervallen. Bei einer Lücke kann die jüngste vollständige Tageskerze daher älter sein als die jüngste geprüfte Sitzung.
-
-Das Standardbudget von 55 Minuten stoppt das Anfangen weiterer Arbeit. Laufende Speicheroperationen können noch abschließen. Der nächste Lauf ermittelt den Bedarf anhand der inzwischen gespeicherten Daten. Prüfe im JSON `counts`, `behindTarget` und je Symbol `status`, `checkedThrough` und `missingSessions`. `pending` zeigt Arbeit, die nach dem Zeitbudget noch aussteht. `behindTarget` zählt vorhandene Historien mit älterer letzter vollständiger Tageskerze. Wenn die Zielsession bereits vollständig vorliegt und keine jüngeren Lücken nachzuprüfen sind, fallen keine Alpaca-Abrufe an.
+Unveränderte Parquet-Blöcke werden über ihre bestehenden Referenzen und Prüfsummen wiederverwendet. Nur veränderte Sitzungen werden mit dem gemeinsamen RTH-Kern aggregiert. Vollständige Kalenderwochen können einen Block im Vormonat betreffen. Neue Versionen nutzen `tori-parquet-2`. Ältere Kurs- und Forschungs-IDs bleiben unverändert. [Identitätsvertrag, Messverfahren, Betriebsabnahme und Rollback](TAGESUPDATE-UEBERGABE.md)
 
 ## Kursupdate und Abend-Watchlist
 
@@ -175,7 +178,7 @@ python tori.py archive-review --universes nasdaq100,dow30,sp500 --base-url https
 python tori.py archive-review --scan-only
 ~~~
 
-`--scan-only` verwendet den lokalen Kursstand und erstellt daraus die Liste ohne Alpaca-Aufruf. Der Zeitpunkt des Starts wird außerhalb des Programms bestimmt. Der Bericht zeigt immer die ausgewertete US-Handelssitzung und die tatsächlich verwendeten 4h- und Tagesbalken.
+`--scan-only` verwendet den lokalen Kursstand und erstellt daraus die Liste ohne Alpaca-Aufruf. Der Zeitpunkt des Starts wird außerhalb des Programms bestimmt. Der Bericht zeigt die ausgewertete US-Handelssitzung und die verwendeten 4h- und Tagesbalken. Eine Wiederholung mit unveränderten lokalen Daten, Regeln und Vergleichsbericht verwendet eine bis zu eine Stunde alte geprüfte Analyse. Neue Daten oder geänderte Datei-Metadaten lösen eine erneute Prüfung aus.
 
 Ein Kandidat liegt am abgeschlossenen 4h-Balken über steigender grüner Unterstützung und bis zu einer 4h-ATR unter fallendem Rot. Beide Linien brauchen zwei Kontakte. Das Master-Profil stuft die Linienqualität ein. Die Tageslinie liefert Kontext. Bei tolerierten Lücken kann ein vollständiger früherer 4h-Balken der Sitzung für die Prüfung genügen. Der Bericht kennzeichnet den Teilstand. Bei zehn oder mehr fehlenden 5‑Minuten-Kerzen in der Zielsitzung wird die Aktie ausgelassen.
 

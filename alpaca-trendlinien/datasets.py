@@ -81,22 +81,33 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
     quality = json.loads(path.read_text("utf-8")).get("quality")
     if quality:
         from database import connection
-        summary={**quality,"issues":[{k:v for k,v in issue.items() if k!="examples"} for issue in quality["issues"]]}
         with connection() as db:
-            db.execute("INSERT OR IGNORE INTO dataset_quality VALUES(?,?)",(identity,json.dumps(summary)))
+            register_quality(db, identity, quality)
     return identity
+
+
+def register_quality(db, identity, quality):
+    summary = {**quality, "issues": [{k: v for k, v in issue.items() if k != "examples"}
+                                    for issue in quality["issues"]]}
+    db.execute("INSERT OR IGNORE INTO dataset_quality VALUES(?,?)", (identity, json.dumps(summary)))
 
 
 def read_dataset(identity):
     try:
-        payload = json.loads(path_for(identity).read_text("utf-8"))
-        from parquet_store import hydrate
-        payload = hydrate(payload, data_dir())
-        if payload["id"] != identity or payload["material"]["schema"] != SCHEMA or digest(payload["material"]) != identity:
-            raise ValueError("checksum")
-        return payload
+        return verified_dataset(path_for(identity))
     except (OSError, ValueError, KeyError, TypeError, OverflowError, ParquetError):
         raise DataError("Dataset fehlt oder seine Prüfsumme ist ungültig.", 404) from None
+
+
+def verified_dataset(path):
+    from parquet_store import hydrate, INCREMENTAL_FORMAT
+    manifest = json.loads(path.read_text("utf-8"))
+    payload = hydrate(manifest, path.parent.parent)
+    incremental = manifest.get("storage", {}).get("format") == INCREMENTAL_FORMAT
+    if (payload["id"] != path.stem or payload["material"]["schema"] != SCHEMA
+            or not incremental and digest(payload["material"]) != path.stem):
+        raise ValueError("checksum")
+    return payload
 
 
 def source_bars(dataset):

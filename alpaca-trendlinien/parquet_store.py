@@ -20,6 +20,7 @@ import duckdb
 from models import Bar, DataError
 
 FORMAT = "tori-parquet-1"
+INCREMENTAL_FORMAT = "tori-parquet-2"
 FIELDS = ("time", "end", "open", "high", "low", "close", "volume")
 NUMBERS = FIELDS[2:]
 
@@ -59,6 +60,49 @@ def weekly_rows(material):
             for b in weeks(daily, max(b.end for b in daily))]
 
 
+def write_block(con, root, context, month, rows):
+    identity = hashlib.sha256(encoded([context, rows])).hexdigest()
+    name = f"datasets/chunks/{identity}.parquet"
+    path = block_path(root, name)
+    if not path.exists():
+        con.execute('CREATE OR REPLACE TABLE bars (timeframe VARCHAR, "time" BIGINT, "end" BIGINT, '
+                    'open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE, '
+                    'integer_mask UTINYINT, exact_integers VARCHAR)')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(uuid.uuid4().hex + ".tmp")
+        # JSON int/float distinctions belong to old checksum identities.
+        # Preserve those distinctions, including integers beyond 2**53.
+        values = []
+        for tf, b in rows:
+            mask = sum(1 << i for i, k in enumerate(NUMBERS) if type(b[k]) is int)
+            exact = {k: b[k] for k in NUMBERS if type(b[k]) is int and abs(b[k]) > 2**53}
+            values.append((tf, b["time"], b["end"], *(float(b[k]) for k in NUMBERS),
+                           mask, json.dumps(exact) if exact else None))
+        csv_path = temporary.with_suffix(".csv")
+        try:
+            with csv_path.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerows(values)
+            columns = {"timeframe": "VARCHAR", "time": "BIGINT", "end": "BIGINT",
+                       **{k: "DOUBLE" for k in NUMBERS}, "integer_mask": "UTINYINT", "exact_integers": "VARCHAR"}
+            con.execute("INSERT INTO bars SELECT * FROM read_csv(?,header=false,columns=?)", [str(csv_path), columns])
+            con.execute("COPY (SELECT * FROM bars ORDER BY timeframe, \"time\") TO ? "
+                        "(FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3, ROW_GROUP_SIZE 32768)", [str(temporary)])
+            with temporary.open("r+b") as stream:
+                os.fsync(stream.fileno())
+            # A concurrent publisher must never replace an existing block.
+            try:
+                os.link(temporary, path)
+            except FileExistsError:
+                pass
+            sync_directory(path.parent)
+        finally:
+            temporary.unlink(missing_ok=True)
+            csv_path.unlink(missing_ok=True)
+    return {"path": name, "sha256": checksum(path), "bytes": path.stat().st_size,
+            "month": month, "rows": len(rows)}
+
+
 def prepare(payload, root):
     """Write durable blocks first; return a small, unpublished JSON manifest."""
     material = payload["material"]
@@ -73,51 +117,57 @@ def prepare(payload, root):
     blocks = []
     root = Path(root)
     with connect() as con:
-        con.execute('CREATE TABLE bars (timeframe VARCHAR, "time" BIGINT, "end" BIGINT, '
-                    'open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume DOUBLE, '
-                    'integer_mask UTINYINT, exact_integers VARCHAR)')
         for month, rows in sorted(groups.items()):
-            identity = hashlib.sha256(encoded([context, rows])).hexdigest()
-            name = f"datasets/chunks/{identity}.parquet"
-            path = block_path(root, name)
-            if not path.exists():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_name(uuid.uuid4().hex + ".tmp")
-                # JSON int/float distinctions belong to old checksum identities.
-                # Preserve those distinctions, including integers beyond 2**53.
-                values = []
-                for tf, b in rows:
-                    mask = sum(1 << i for i, k in enumerate(NUMBERS) if type(b[k]) is int)
-                    exact = {k: b[k] for k in NUMBERS if type(b[k]) is int and abs(b[k]) > 2**53}
-                    values.append((tf, b["time"], b["end"], *(float(b[k]) for k in NUMBERS),
-                                   mask, json.dumps(exact) if exact else None))
-                csv_path = temporary.with_suffix(".csv")
-                try:
-                    with csv_path.open("w", newline="", encoding="utf-8") as stream:
-                        writer = csv.writer(stream)
-                        writer.writerows(values)
-                    columns = {"timeframe": "VARCHAR", "time": "BIGINT", "end": "BIGINT",
-                               **{k: "DOUBLE" for k in NUMBERS}, "integer_mask": "UTINYINT", "exact_integers": "VARCHAR"}
-                    con.execute("DELETE FROM bars")
-                    con.execute("INSERT INTO bars SELECT * FROM read_csv(?,header=false,columns=?)", [str(csv_path), columns])
-                    con.execute("COPY (SELECT * FROM bars ORDER BY timeframe, \"time\") TO ? "
-                                "(FORMAT PARQUET, COMPRESSION ZSTD, COMPRESSION_LEVEL 3, ROW_GROUP_SIZE 32768)", [str(temporary)])
-                    with temporary.open("r+b") as stream:
-                        os.fsync(stream.fileno())
-                    # A concurrent publisher must never replace an existing block.
-                    try:
-                        os.link(temporary, path)
-                    except FileExistsError:
-                        pass
-                finally:
-                    temporary.unlink(missing_ok=True)
-                    csv_path.unlink(missing_ok=True)
-            blocks.append({"path": name, "sha256": checksum(path), "bytes": path.stat().st_size,
-                           "month": month, "rows": len(rows)})
+            blocks.append(write_block(con, root, context, month, rows))
     return {**payload, "material": {**context, "bars": {}}, "storage": {
         "format": FORMAT, "compression": "zstd-3", "blocks": blocks,
         "frames": {tf: len(rows) for tf, rows in material["bars"].items()},
         "weekly": {"version": "xnys-complete-week-1", "count": len(frames["1W"])}}}
+
+
+def incremental_identity(material, storage):
+    # Audit/checkpoint metadata is mutable provenance and excluded, like v1 sources.
+    return hashlib.sha256(encoded([INCREMENTAL_FORMAT, material, storage])).hexdigest()
+
+
+def validate_manifest(manifest):
+    store = manifest["storage"]
+    if store["format"] not in (FORMAT, INCREMENTAL_FORMAT) or manifest["material"]["bars"] != {}:
+        raise ValueError("unsupported/modified Parquet manifest")
+    if set(store["frames"]) not in ({"1h", "4h", "1D"}, {"5m", "1h", "4h", "1D"}):
+        raise ValueError("invalid frame manifest")
+    blocks = store["blocks"]
+    months = [entry["month"] for entry in blocks]
+    if (not months or months != sorted(set(months))
+            or any(not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month) for month in months)
+            or len({entry["path"] for entry in blocks}) != len(blocks)):
+        raise ValueError("invalid month index")
+    if store["format"] == INCREMENTAL_FORMAT and (
+            manifest["id"] != incremental_identity(manifest["material"], store)):
+        raise ValueError("Parquet manifest identity")
+
+
+def verified_paths(entries, root):
+    for entry in entries:
+        path = block_path(Path(root), entry["path"])
+        if path.stat().st_size != entry["bytes"] or checksum(path) != entry["sha256"]:
+            raise ValueError("Parquet checksum")
+        yield path
+
+
+def read_rows(con, paths, where="", params=()):
+    if not paths:
+        return
+    cursor = con.execute('SELECT * FROM read_parquet(?) ' + where + ' ORDER BY timeframe,"time"',
+                         [[str(path) for path in paths], *params])
+    while batch := cursor.fetchmany(4096):
+        for tf, at, end, *rest in batch:
+            values, mask, exact = rest[:5], rest[5], rest[6]
+            integers = json.loads(exact) if exact else {}
+            bar = {"time": at, "end": end}
+            for i, k in enumerate(NUMBERS):
+                bar[k] = integers.get(k, int(values[i])) if mask & (1 << i) else values[i]
+            yield [tf, bar]
 
 
 def hydrate(manifest, root, *, include_weekly=False):
@@ -125,34 +175,18 @@ def hydrate(manifest, root, *, include_weekly=False):
     store = manifest.get("storage")
     if not store:
         return manifest
-    if store["format"] != FORMAT or manifest["material"]["bars"] != {}:
-        raise ValueError("unsupported/modified Parquet manifest")
+    validate_manifest(manifest)
     frames = store["frames"]
-    if set(frames) not in ({"1h", "4h", "1D"}, {"5m", "1h", "4h", "1D"}):
-        raise ValueError("invalid frame manifest")
-    paths = []
-    for entry in store["blocks"]:
-        path = block_path(Path(root), entry["path"])
-        if path.stat().st_size != entry["bytes"] or checksum(path) != entry["sha256"]:
-            raise ValueError("Parquet checksum")
-        paths.append(str(path))
-    if not paths or len(paths) != len(set(paths)):
-        raise ValueError("empty/duplicate Parquet blocks")
+    paths = [str(path) for path in verified_paths(store["blocks"], root)]
     bars = {tf: [] for tf in (*frames, "1W")}
     with connect() as con:
-        cursor = con.execute('SELECT * FROM read_parquet(?) ORDER BY timeframe,"time"', [paths])
-        while batch := cursor.fetchmany(8192):
-            for tf, at, end, *rest in batch:
-                if tf not in bars:
-                    raise ValueError("unexpected interval")
-                values, mask, exact = rest[:5], rest[5], rest[6]
-                integers = json.loads(exact) if exact else {}
-                b = {"time": at, "end": end}
-                for i, k in enumerate(NUMBERS):
-                    b[k] = integers.get(k, int(values[i])) if mask & (1 << i) else values[i]
-                bars[tf].append(b)
+        for tf, bar in read_rows(con, paths):
+            if tf not in bars:
+                raise ValueError("unexpected interval")
+            bars[tf].append(bar)
     weekly = bars.pop("1W")
-    if any(len(bars[tf]) != n for tf, n in frames.items()):
+    if (len(weekly) != store["weekly"]["count"]
+            or any(len(bars[tf]) != n for tf, n in frames.items())):
         raise ValueError("Parquet frame count")
     value = {k: v for k, v in manifest.items() if k != "storage"}
     value["material"] = {**manifest["material"], "bars": bars}
@@ -168,6 +202,11 @@ def publish(payload, path, *, replace=False):
     restored = hydrate(manifest, root)
     if restored != payload or encoded(restored["material"]) != encoded(payload["material"]):
         raise DataError("Parquet-Rückleseprüfung fehlgeschlagen; Original bleibt erhalten.", 409)
+    write_manifest(manifest, path, replace=replace)
+    return manifest
+
+
+def write_manifest(manifest, path, *, replace=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix("." + uuid.uuid4().hex + ".tmp")
     try:
@@ -184,7 +223,16 @@ def publish(payload, path, *, replace=False):
                 pass
     finally:
         temporary.unlink(missing_ok=True)
-    return manifest
+    sync_directory(path.parent)
+
+
+def sync_directory(path):
+    if os.name != "nt":
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def migrate(identity):

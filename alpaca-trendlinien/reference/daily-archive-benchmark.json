@@ -1,0 +1,594 @@
+{
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "python": "3.14.4 (main, Apr  8 2026, 04:02:31) [GCC 15.2.0]",
+  "allowedCpuCount": 1,
+  "fixture": {
+    "start": "2016-01-04",
+    "anchor": "2026-11-23",
+    "sessions": 2739,
+    "fineBarsPerSymbol": 212886,
+    "symbols": [
+      "FXA",
+      "FXB",
+      "FXC"
+    ],
+    "kind": "synthetic OHLCV; no provider access"
+  },
+  "method": "fresh Python process per scenario and path; warm in-process repeat; OS page cache not purged",
+  "scenarios": {
+    "one_session": {
+      "symbols": [
+        "FXA"
+      ],
+      "target": "2026-11-24",
+      "exactFrameAndAuditHashes": {
+        "FXA": "97612cc396c8c5c17feb2332c813267fbf6d47cab892e764e097ecb83e5ec4a1"
+      },
+      "exactReviewHash": null,
+      "reference": {
+        "coldUpdate": {
+          "wallSeconds": 8.446434758000002,
+          "cpuSeconds": 8.380183831,
+          "peakProcessRssKiB": 599560,
+          "memory.peak": 541782016,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 75572,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 42036,
+          "checksumReadBytes": 19580658,
+          "processIo": {
+            "rchar": 38278869,
+            "wchar": 233408,
+            "read_bytes": 13030,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.02340438699999936,
+          "cpuSeconds": 0.021074786999999873,
+          "peakProcessRssKiB": 599560,
+          "memory.peak": 541782016,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 202424,
+            "wchar": 16,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      },
+      "incremental": {
+        "coldUpdate": {
+          "wallSeconds": 2.0138810200000066,
+          "cpuSeconds": 1.9713723469999997,
+          "peakProcessRssKiB": 166568,
+          "memory.peak": 100855808,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 76119,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 42036,
+          "checksumReadBytes": 6609536,
+          "processIo": {
+            "rchar": 17213365,
+            "wchar": 390124,
+            "read_bytes": 995328,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.0026737299999979314,
+          "cpuSeconds": 0.0026730499999998436,
+          "peakProcessRssKiB": 166568,
+          "memory.peak": 100855808,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 181672,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      },
+      "incrementalLimited": {
+        "coldUpdate": {
+          "wallSeconds": 1.9426426489999997,
+          "cpuSeconds": 1.9208354690000002,
+          "peakProcessRssKiB": 166484,
+          "memory.peak": 99733504,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 76119,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 42036,
+          "checksumReadBytes": 6609536,
+          "processIo": {
+            "rchar": 17213371,
+            "wchar": 390124,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.0029126550000029283,
+          "cpuSeconds": 0.0029125759999999445,
+          "peakProcessRssKiB": 166484,
+          "memory.peak": 99733504,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 181671,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      }
+    },
+    "three_symbols": {
+      "symbols": [
+        "FXA",
+        "FXB",
+        "FXC"
+      ],
+      "target": "2026-11-24",
+      "exactFrameAndAuditHashes": {
+        "FXA": "97612cc396c8c5c17feb2332c813267fbf6d47cab892e764e097ecb83e5ec4a1",
+        "FXB": "c5d813cafbbc14a2e63917fcf5c912ed56895bd1c59ab5a066e8e20d57e5d641",
+        "FXC": "2f3324815cb9eeb64c91c600e1a521ad131b047fd60b36c6a013d9eae996b70e"
+      },
+      "exactReviewHash": "a5b691b527dc5c3d243f58ef4818531431ec80d7164c969bdd11fd9b38d177a7",
+      "reference": {
+        "coldUpdate": {
+          "wallSeconds": 20.077021929000004,
+          "cpuSeconds": 19.92453732,
+          "peakProcessRssKiB": 600296,
+          "memory.peak": 542175232,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 6,
+          "retainedBytes": 224736,
+          "parquetWritten": 3,
+          "parquetWrittenBytes": 124128,
+          "checksumReadBytes": 58470865,
+          "processIo": {
+            "rchar": 111592303,
+            "wchar": 691174,
+            "read_bytes": 13030,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 390
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.02587679100000173,
+          "cpuSeconds": 0.023505772000000036,
+          "peakProcessRssKiB": 600296,
+          "memory.peak": 542175232,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 311243,
+            "wchar": 16,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0,
+        "firstReview": {
+          "wallSeconds": 0.41115324099999384,
+          "cpuSeconds": 0.3997751669999978,
+          "peakProcessRssKiB": 600296,
+          "memory.peak": 542175232,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 19492395,
+          "processIo": {
+            "rchar": 45447635,
+            "wchar": 16497,
+            "read_bytes": 22366,
+            "write_bytes": 0
+          }
+        },
+        "repeatReview": {
+          "wallSeconds": 0.3989072920000041,
+          "cpuSeconds": 0.39214332200000257,
+          "peakProcessRssKiB": 600296,
+          "memory.peak": 542175232,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 19492395,
+          "processIo": {
+            "rchar": 45429365,
+            "wchar": 16496,
+            "read_bytes": 0,
+            "write_bytes": 0
+          }
+        },
+        "reviewCandidates": 3,
+        "cachedReview": false
+      },
+      "incremental": {
+        "coldUpdate": {
+          "wallSeconds": 2.35986600599999,
+          "cpuSeconds": 2.289757613,
+          "peakProcessRssKiB": 169392,
+          "memory.peak": 101433344,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 6,
+          "retainedBytes": 226377,
+          "parquetWritten": 3,
+          "parquetWrittenBytes": 124128,
+          "checksumReadBytes": 19734331,
+          "processIo": {
+            "rchar": 48489816,
+            "wchar": 1087184,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 390
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.00343911600000979,
+          "cpuSeconds": 0.0034391069999997192,
+          "peakProcessRssKiB": 169392,
+          "memory.peak": 101433344,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 249838,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0,
+        "firstReview": {
+          "wallSeconds": 0.868138904999995,
+          "cpuSeconds": 0.8495187830000002,
+          "peakProcessRssKiB": 175660,
+          "memory.peak": 107671552,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 19492395,
+          "processIo": {
+            "rchar": 45573180,
+            "wchar": 49361,
+            "read_bytes": 80850,
+            "write_bytes": 0
+          }
+        },
+        "repeatReview": {
+          "wallSeconds": 0.011821288000007257,
+          "cpuSeconds": 0.006675790999999709,
+          "peakProcessRssKiB": 175660,
+          "memory.peak": 107671552,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 341412,
+            "wchar": 24,
+            "read_bytes": 54609,
+            "write_bytes": 0
+          }
+        },
+        "reviewCandidates": 3,
+        "cachedReview": true
+      },
+      "incrementalLimited": {
+        "coldUpdate": {
+          "wallSeconds": 2.3217363889999945,
+          "cpuSeconds": 2.2439109960000003,
+          "peakProcessRssKiB": 169652,
+          "memory.peak": 101335040,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 6,
+          "retainedBytes": 226377,
+          "parquetWritten": 3,
+          "parquetWrittenBytes": 124128,
+          "checksumReadBytes": 19734331,
+          "processIo": {
+            "rchar": 48489808,
+            "wchar": 1087184,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 2,
+          "reusedBlocks": 390
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.003202396000006047,
+          "cpuSeconds": 0.003203758999999806,
+          "peakProcessRssKiB": 169652,
+          "memory.peak": 101335040,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 249838,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0,
+        "firstReview": {
+          "wallSeconds": 0.9119352239999898,
+          "cpuSeconds": 0.898315432,
+          "peakProcessRssKiB": 176704,
+          "memory.peak": 108343296,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 19492395,
+          "processIo": {
+            "rchar": 45573178,
+            "wchar": 49361,
+            "read_bytes": 80850,
+            "write_bytes": 0
+          }
+        },
+        "repeatReview": {
+          "wallSeconds": 0.014444273000009389,
+          "cpuSeconds": 0.008482474000000018,
+          "peakProcessRssKiB": 176704,
+          "memory.peak": 108343296,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 341412,
+            "wchar": 24,
+            "read_bytes": 54609,
+            "write_bytes": 0
+          }
+        },
+        "reviewCandidates": 3,
+        "cachedReview": true
+      }
+    },
+    "three_sessions": {
+      "symbols": [
+        "FXA"
+      ],
+      "target": "2026-11-27",
+      "exactFrameAndAuditHashes": {
+        "FXA": "3eaac78df73be4ef5740cd304d03717c536bf7d1b9ab207e5418e86adfddf009"
+      },
+      "exactReviewHash": null,
+      "reference": {
+        "coldUpdate": {
+          "wallSeconds": 8.624896331000002,
+          "cpuSeconds": 8.556315676,
+          "peakProcessRssKiB": 599168,
+          "memory.peak": 541483008,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 78966,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 45430,
+          "checksumReadBytes": 19587446,
+          "processIo": {
+            "rchar": 38300560,
+            "wchar": 248271,
+            "read_bytes": 13030,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 4,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.025674434999999107,
+          "cpuSeconds": 0.023522916000001004,
+          "peakProcessRssKiB": 599168,
+          "memory.peak": 541483008,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 202838,
+            "wchar": 16,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      },
+      "incremental": {
+        "coldUpdate": {
+          "wallSeconds": 1.958776573999998,
+          "cpuSeconds": 1.9105024509999997,
+          "peakProcessRssKiB": 166212,
+          "memory.peak": 99868672,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 79626,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 45430,
+          "checksumReadBytes": 6616324,
+          "processIo": {
+            "rchar": 17424068,
+            "wchar": 520220,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 4,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.003029787999992095,
+          "cpuSeconds": 0.0030295379999998318,
+          "peakProcessRssKiB": 166212,
+          "memory.peak": 99868672,
+          "memory.swap.peak": 0,
+          "memory.max": 1073741824,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 181784,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      },
+      "incrementalLimited": {
+        "coldUpdate": {
+          "wallSeconds": 1.956497357999993,
+          "cpuSeconds": 1.917816993,
+          "peakProcessRssKiB": 167048,
+          "memory.peak": 100085760,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 2,
+          "retainedBytes": 79626,
+          "parquetWritten": 1,
+          "parquetWrittenBytes": 45430,
+          "checksumReadBytes": 6616324,
+          "processIo": {
+            "rchar": 17424064,
+            "wchar": 520220,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 4,
+          "reusedBlocks": 130
+        },
+        "warmRepeat": {
+          "wallSeconds": 0.0025803640000106043,
+          "cpuSeconds": 0.002579361999999641,
+          "peakProcessRssKiB": 167048,
+          "memory.peak": 100085760,
+          "memory.swap.peak": 0,
+          "memory.max": 536870912,
+          "memory.swap.max": 0,
+          "filesWritten": 0,
+          "retainedBytes": 0,
+          "parquetWritten": 0,
+          "parquetWrittenBytes": 0,
+          "checksumReadBytes": 0,
+          "processIo": {
+            "rchar": 181784,
+            "wchar": 17,
+            "read_bytes": 0,
+            "write_bytes": 0
+          },
+          "fixtureRequests": 0
+        },
+        "externalProviderRequests": 0
+      }
+    }
+  }
+}
