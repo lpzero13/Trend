@@ -1,0 +1,22 @@
+[Unit]
+Description=Tori Daily Post-Close SIP Update, Top-10 Radar & 1000-EUR Papertrade Watchlist
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tori
+Group=tori
+WorkingDirectory=/opt/tori
+Environment=TORI_DATA_DIR=/var/lib/tori
+CPUQuota=60%
+MemoryMax=1G
+MemorySwapMax=0
+ExecStart=/opt/tori/.venv/bin/python /opt/tori/tools/tori_candidate_preview.py \
+  --update \
+  --session auto \
+  --top 10 \
+  --evaluate-watchlist \
+  --md-out /var/lib/tori/operations/preview/full/latest-report.md \
+  --csv-out /var/lib/tori/operations/preview/full/latest-candidates.csv \
+  --json-out /var/lib/tori/operations/preview/full/ranked-candidates.json

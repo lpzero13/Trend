@@ -10,6 +10,11 @@ Weboberfläche für die manuelle Aktienanalyse und Hintergrunddienst für reprod
 
 Weitere Dokumentation:
 
+- [Entry-/Exit-Backtest auf 512 Aktien aus drei Universen](alpaca-trendlinien/BACKTEST-UNIVERSEN-ERGEBNISSE-20261101.md)
+- [Bilanz des erweiterten Backtests: Gewinner, Verlierer und Grenzen](alpaca-trendlinien/BACKTEST-UNIVERSEN-BEWERTUNG-20261101.md)
+- [Vorwarnscanner: Implementierung, CLI und Betriebsgrenzen](alpaca-trendlinien/EARLY-WARNING.md)
+- [Vorwarnungen auf 512 Aktien: aktuelle Bilanz](alpaca-trendlinien/EARLY-WARNING-512-BEWERTUNG-20261101.md)
+- [Vorwarnungen auf 69 Aktien: Ergebnisse und Vergleich](alpaca-trendlinien/EARLY-WARNING-ERGEBNISSE-20261101.md)
 - [Drei weitere Retest-Exitideen: Vergleich und Verbesserungsvorschläge](alpaca-trendlinien/RETEST-EXIT-VARIANTEN-ERGEBNISSE.md)
 - [Retest mit fester oder nachgezogener Safety: interner Exit-/Kapitalvergleich](alpaca-trendlinien/RETEST-EXIT-ERGEBNISSE.md)
 - [Interne Einstiegssuche: zusätzliche Linien, Hermes-Frühwarnungen und empirische Bilanz](alpaca-trendlinien/EINSTIEGSSUCHE-ERGEBNISSE.md)
@@ -25,6 +30,8 @@ Weitere Dokumentation:
 - [Vorlage für Hermes als Auftraggeber/Auswerter](alpaca-trendlinien/integrations/hermes/SKILL.md)
 
 ## Aktueller Stand
+
+Neu lokal am 01.11.2026: Separater kausaler Vorwarnversuch für Ausbruch, roten Retest und Safety-Bounce; zwölf vorab definierte Varianten, Originalsnapshots und familienbezogene Reviewpräferenzen. Noch kein laufender Scanner-/Nachrichtendienst oder neuer Webmenüpunkt. Details und Grenzen in den oben verlinkten Dokumenten; kein Container-Rollout oder GitHub-Upload dieses Stands.
 
 Neu lokal am 21.10.2026: Die Chartoberfläche startet immer manuell, **Tori-Analyse aus**. Ein Toolbar-Knopf schaltet automatische Linien/Marker/Infobox gemeinsam ein oder aus; Ray- und Messwerkzeug sind unabhängig nutzbar. [Bedienung](alpaca-trendlinien/README.md). Diese neueste Änderung ist noch nicht im Container installiert.
 

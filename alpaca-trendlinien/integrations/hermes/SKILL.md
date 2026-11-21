@@ -11,7 +11,43 @@ Diese Vorlage ist für die spätere Einrichtung im Hermes-Zielsystem gedacht. Si
 
 Tori untersucht Long-Ereignisse anhand zufälliger historischer Startpunkte. Ein Hintergrunddienst erledigt bereits die geplanten Untersuchungen. Nutze die vorhandenen Aufträge zuerst, statt bei jeder Nachfrage denselben Versuch erneut zu starten.
 
+## Tages-Radar, Top 10 & 1.000-€-Papertrading
+
+Alle Tagesbefehle laufen immer mit demselben `TORI_DATA_DIR=/var/lib/tori` wie der Webdienst (`User=tori`). Keine Brokerorders, keine erfundenen Kurse, strikt kausal nach US-Börsenschluss.
+
+1. **Täglicher Komplettlauf (SIP-Update + Top-10-Scan + Watchlist/Papertrade-Auswertung):**
+   ```bash
+   TORI_DATA_DIR=/var/lib/tori /opt/tori/.venv/bin/python /opt/tori/tools/tori_candidate_preview.py \
+     --update --session auto --top 10 --evaluate-watchlist \
+     --md-out /var/lib/tori/operations/preview/full/latest-report.md \
+     --csv-out /var/lib/tori/operations/preview/full/latest-candidates.csv \
+     --json-out /var/lib/tori/operations/preview/full/ranked-candidates.json
+   ```
+   - `--update` aktualisiert alle lokal vorhandenen SIP-Historien (Dow 30, Nasdaq-100, S&P 500 sowie vorhandene `SPY`/`QQQ`-Benchmarks) inkrementell nach US-Börsenschluss.
+   - Der Scanner sortiert die Tages-Top-10 strikt nach den empirisch über alle drei PIT-Splits (`train`/`validation`/`holdout`) bestätigten Qualitäts-Stufen:
+     - **Stufe `C` (Premium):** Direkt-Einstieg (`1A`/`4A`) + Aktive Annäherung + Hohe Reife (`≥ 21 T` / `≥ 4 K`) + Ruhige Tagesvola (`ATR_1D < 1,5 %`). Immer ganz oben.
+     - **Stufe `B` (Stark):** Ruhige Vola + 2 der 3 Kernmerkmale.
+     - **Stufe `4` (Ruhige Vola):** `ATR_1D < 1,5 %` mit weniger als 2 weiteren Kernmerkmalen.
+     - **Stufe `A` (3/3-Kern):** Direkt + Aktiv + Hohe Reife (höhere Tagesvola).
+     - **BASIS:** Übrige valide Setups.
+   - `marketRegime` (`SPY`/`QQQ` vs. SMA200/SMA50) ist rein informativ und filtert keine Setups automatisch weg.
+   - `--evaluate-watchlist` aktualisiert automatisch alle aktiven Watchlist- und 1.000-€-Papertrade-Einträge in `TORI_DATA_DIR/paper-watch/watchlist.sqlite3` (getrennt von `research/jobs.sqlite3`).
+   - Systemd-Vorlagen für Mo–Fr 23:00 Uhr `Europe/Berlin`: `deploy/tori-daily-radar.service` und `deploy/tori-daily-radar.timer`.
+
+2. **Watchlist & 1.000-€-Papertrading steuern (`tools/tori_paper_watch.py`):**
+   - `... tools/tori_paper_watch.py list` — aktive Watchlist- & Papertrade-Positionen + Gesamtbilanz.
+   - `... tools/tori_paper_watch.py add --symbol <TICKER> --stop-policy r2_fan --capital 1000` — Kandidat aus dem letzten Scan auf die Watchlist bzw. als isolierten 1.000-€-Papertrade setzen.
+   - `... tools/tori_paper_watch.py evaluate` — alle aktiven Positionen kausal auf 5m-Kerzen aktualisieren.
+   - `... tools/tori_paper_watch.py updates --limit 30` — letzte Stop-/Entry-/Exit-Ereignisse.
+   - `... tools/tori_paper_watch.py summary` / `archive --id <ID>`.
+
+3. **Web-Oberflächen (gleicher `TORI_DATA_DIR`):**
+   - `/radar`: Tages-Radar (Top 10 nach Stufe farblich markiert, US-Marktlage, 1-Klick-Übernahme auf Watchlist/Papertrade).
+   - `/backtest`: Point-in-Time-Backtest-Explorer & Blind-Training mit 1-Klick-Replay-Sprung (liest Studien aus `<app>/artifacts/` oder `TORI_DATA_DIR/artifacts/`).
+
 ## Werkzeuge
+
+**Lokaler Vorwarnversuch vom 01.11.2026:** `tools/early_warning.py` ist ein eigener Offline-CLI-Weg; Vertrag in `EARLY-WARNING.md`, Ergebnisvergleich in `EARLY-WARNING-ERGEBNISSE-20261101.md`. `all/prepare/build/evaluate` verwenden einen ausdrücklich ausgewählten lokalen Quellplan und denselben `TORI_DATA_DIR`; `tools/verify_early_warning.py` und `tools/verify_warning_prefix.py` prüfen Ergebnisse und Zukunftsgrenzen. Code-/Planänderung verlangt einen neuen Studienordner. `briefing --asof` gibt nur damals bekannte offene Warnungen aus geeigneten historischen Fenstern aus, ohne zukünftige Entries/Ausgänge; `show` ist dagegen eine ausdrücklich ergebnisoffene Forschungsansicht. `review` speichert mute/unmute/snooze je Familie oder Episode, ohne Forschungsfälle zu entfernen. Stufen und Warnungen sind noch keine Brokerfreigaben, tatsächlichen Fills oder Profiterwartungen. Die konkrete Originalgeometrie stammt aus dem Warnsnapshot; der normale Chartlink allein garantiert nicht, dass derselbe ältere Kandidat als aktuelle Linie ausgewählt wird. Keine Warnsnapshot-Webebene, kein Liveimport, Versand, Dauerauftrag oder automatischer Rollout eingerichtet. Historische Treffer niemals als neue aktuelle Meldungen verschicken. Ein bis zwei Tage vor einem rohen Bruch und ein bis zwei Tage vor einer späteren Entrybestätigung unterscheiden; die Studie misst beides getrennt. Diese Vorlage wurde nicht in Hermes installiert.
 
 **Optionaler neuer Safety-Weg (20.10.2026, lokal):** `strategy-rules`, `strategy-export`, `strategy-study`, `strategy-report`, `strategy-verify`, `strategy-scan`; Vertrag und genaue Befehle in `SAFETY-STRATEGIEN.md`. Nicht mit bestehender Queue oder den Laborphasen verwechseln. Neue Strategie-Studien benötigen einen frischen Ausgabeordner und gepinnte echte IEX-Datasets; nach Import offline. `--resume` nur unter unveränderter Engine und Quelle, abgeschlossene Phasen nicht überschreiben. Kandidatenscan rekonstruiert chronologisch bis zum Stichtag, gibt historische Open-Ereignisse und noch nicht ausführbare Pending-Signale getrennt aus. Aktualität sichtbar prüfen, stabile IDs deduplizieren, keine rückwirkenden Orders/Meldungen aus historischen Treffern erzeugen. Die Varianten sind Forschungsmodelle, keine freigegebene Gewinnstrategie. Finaler Holdout bleibt geschlossen. Diese Vorlage wurde nicht in Hermes installiert.
 

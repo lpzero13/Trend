@@ -151,7 +151,7 @@ let pageOffset = 0;
 let entryFilter = "entries";
 try {
   document.documentElement.dataset.theme =
-    JSON.parse(localStorage.getItem("tori-theme")) || "light";
+    JSON.parse(localStorage.getItem("tori-theme")) || "dark";
 } catch {}
 $("#research-theme").onclick = () => {
   const theme =

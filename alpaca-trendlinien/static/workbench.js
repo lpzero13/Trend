@@ -50,7 +50,7 @@
   $('wb-note').oninput=$('wb-verdict').onchange=()=>{dirty=true;render()};$('wb-form').onsubmit=action(async()=>{if(!current)throw Error('Zuerst einen Fall laden.');current=await request(`/api/workbench/packs/${current.packId}/${current.id}/label`,{revision:current.revision,verdict:$('wb-verdict').value,note:$('wb-note').value,rays:drawings.rays});dirty=false;render();await comparison()});
   $('wb-reveal').onclick=action(async()=>{guard();if(!current)return;current=await request(`/api/workbench/packs/${current.packId}/${current.id}/reveal`,{revision:current.revision});render();await comparison()});
   $('wb-pack').onchange=action(async()=>{offset=0;await loadPage()});$('wb-case').onchange=action(loadCase);$('wb-refresh').onclick=action(refresh);$('wb-next').onclick=action(async()=>{guard();offset+=50;await loadPage()});$('wb-previous').onclick=action(async()=>{guard();offset=Math.max(0,offset-50);await loadPage()});
-  try{const saved=JSON.parse(root.localStorage.getItem('tori-theme'));if(['light','dark'].includes(saved))document.documentElement.dataset.theme=saved}catch{}
+  let savedTheme='dark';try{const saved=JSON.parse(root.localStorage.getItem('tori-theme'));if(['light','dark'].includes(saved))savedTheme=saved}catch{}document.documentElement.dataset.theme=savedTheme;
   $('wb-theme').onclick=()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;try{root.localStorage.setItem('tori-theme',JSON.stringify(theme))}catch{}if(current)makeChart()};
   root.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});action(refresh)();
 })(globalThis);

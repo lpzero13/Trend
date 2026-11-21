@@ -9,6 +9,35 @@ const context = vm.createContext({
   RayGeometry,
 });
 vm.runInContext(fs.readFileSync("static/analysis.js", "utf8"), context);
+
+test('SMA200 uses only closed source candles; future prices and the viewport cannot affect its known prefix', () => {
+  const rows=Array.from({length:205},(_,i)=>({time:i*3600,end:(i+1)*3600,close:i+1}));
+  assert.equal(context.chartSma200(rows,199*3600).value,undefined);
+  const known=context.chartSma200(rows,200*3600);
+  assert.equal(known.rows.length,200);assert.equal(known.count,200);assert.equal(known.value,100.5);
+  assert.equal(known.rows[198].value,undefined);
+  assert.equal(context.chartSma200(rows,201*3600).value,101.5);
+  const shocked=rows.map((r,i)=>({...r,close:i>=200?999999:r.close}));
+  assert.equal(JSON.stringify(context.chartSma200(shocked,200*3600)),JSON.stringify(known));
+  assert.equal(context.chartSma200(rows,200*3600-1).rows.length,199);
+  assert.equal(context.chartSma200([],200*3600).count,0);
+});
+
+test('SMA200 never propagates an invalid close as a value or silently uses a shorter average',()=>{
+  const rows=Array.from({length:405},(_,i)=>({time:i,end:i+1,close:10}));
+  rows[200].close=NaN;
+  assert.equal(context.chartSma200(rows,400).value,undefined);
+  assert.equal(context.chartSma200(rows,401).value,10);
+});
+
+test('SMA200 honors known canonical source-gap resets, not ordinary overnight trading breaks',()=>{
+  const rows=Array.from({length:405},(_,i)=>({time:i*86400,end:(i+1)*86400,close:i+1}));
+  const gaps=[rows[200].time];
+  assert.equal(context.chartSma200(rows,200*86400,gaps).value,100.5);
+  assert.equal(context.chartSma200(rows,399*86400,gaps).count,199);
+  assert.equal(context.chartSma200(rows,399*86400,gaps).value,undefined);
+  assert.equal(context.chartSma200(rows,400*86400,gaps).value,300.5);
+});
 const bar = (time, close = 10) => ({
   time,
   end: time + 1,
@@ -64,6 +93,14 @@ test("frozen view retains archived candles despite provider revisions and exclud
   );
   assert.equal(view.latest.close, 12);
   assert.equal(JSON.stringify(frozen), original);
+});
+
+test('a frozen chart retains its original SMA gap resets and appends only known later resets',()=>{
+  const {frozen,bundle}=fixture();
+  frozen.payload.charts['1h'].smaGaps=[20];bundle.charts['1h'].smaGaps=[10,40,50];
+  context.state.frozen=frozen;
+  assert.deepEqual(Array.from(context.snapshotChart(bundle,'1h').smaGaps),[20,40]);
+  assert.deepEqual(frozen.payload.charts['1h'].smaGaps,[20]);
 });
 test("future snapshot, wrong symbol and missing bridge are rejected", () => {
   const { frozen, bundle } = fixture();

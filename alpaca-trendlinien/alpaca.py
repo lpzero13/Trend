@@ -1,6 +1,8 @@
 """Read-only market-data adapter. Credentials are used only in server-side Alpaca HTTP headers."""
 from __future__ import annotations
 
+import gzip
+import http.client
 import json
 import math
 import os
@@ -97,39 +99,77 @@ def parse_bars(rows: list[dict], timeframe: str, cutoff: int) -> tuple[list[Bar]
     }
 
 
+_HTTP_LOCAL = threading.local()
+
+
+def _get_https_conn() -> http.client.HTTPSConnection:
+    conn = getattr(_HTTP_LOCAL, "conn", None)
+    if conn is None:
+        conn = http.client.HTTPSConnection("data.alpaca.markets", timeout=25)
+        _HTTP_LOCAL.conn = conn
+    return conn
+
+
+def _reset_https_conn() -> None:
+    conn = getattr(_HTTP_LOCAL, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except OSError:
+            pass
+        _HTTP_LOCAL.conn = None
+
+
 def _request(params: dict, key: str, secret: str) -> dict:
-    url = "https://data.alpaca.markets/v2/stocks/bars?" + urllib.parse.urlencode(params)
-    request = urllib.request.Request(url, headers={
-        "APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret,
-        "Accept": "application/json", "User-Agent": "Tori-Local-Prototype/0.1",
-    }, method="GET")
+    """Persistent HTTP/1.1 Keep-Alive + gzip GET against Alpaca Market Data."""
+    path = "/v2/stocks/bars?" + urllib.parse.urlencode(params)
+    headers = {
+        "APCA-API-KEY-ID": key,
+        "APCA-API-SECRET-KEY": secret,
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "Connection": "keep-alive",
+        "User-Agent": "Tori-Local-Prototype/0.2",
+    }
+    messages = {
+        401: "Alpaca lehnt die Zugangsdaten ab (HTTP 401).",
+        403: "Dieser Datenzugriff ist mit dem Alpaca-Zugang nicht freigegeben (HTTP 403).",
+        429: "Alpacas Abruflimit ist erreicht. Bitte später erneut versuchen.",
+        400: "Alpaca konnte die Kursabfrage nicht verarbeiten. Bitte das US-Symbol prüfen.",
+        422: "Alpaca konnte das Symbol oder Intervall nicht verarbeiten.",
+    }
     for attempt in range(3):
         request_slot()
         try:
-            with urllib.request.urlopen(request, timeout=25) as response:
-                return json.load(response)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429:
+            conn = _get_https_conn()
+            conn.request("GET", path, headers=headers)
+            response = conn.getresponse()
+            raw = response.read()
+            status = response.status
+            encoding = (response.getheader("Content-Encoding") or "").lower()
+            retry_after = response.getheader("Retry-After")
+            if status == 200:
+                if "gzip" in encoding and raw:
+                    raw = gzip.decompress(raw)
+                return json.loads(raw)
+            if status == 429:
                 from provider_budget import cooldown
                 try:
-                    delay = float(exc.headers.get("Retry-After", "60"))
-                except (ValueError, TypeError, AttributeError):
+                    delay = float(retry_after or "60")
+                except (ValueError, TypeError):
                     delay = 60
                 cooldown(delay)
-            if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
+            if status in (429, 500, 502, 503, 504) and attempt < 2:
+                _reset_https_conn()
                 time.sleep(1 + attempt)
                 continue
-            messages = {
-                401: "Alpaca lehnt die Zugangsdaten ab (HTTP 401).",
-                403: "Dieser Datenzugriff ist mit dem Alpaca-Zugang nicht freigegeben (HTTP 403).",
-                429: "Alpacas Abruflimit ist erreicht. Bitte später erneut versuchen.",
-                400: "Alpaca konnte die Kursabfrage nicht verarbeiten. Bitte das US-Symbol prüfen.",
-                422: "Alpaca konnte das Symbol oder Intervall nicht verarbeiten.",
-            }
-            raise DataError(messages.get(exc.code, f"Alpaca-Datenabruf fehlgeschlagen (HTTP {exc.code}).")) from None
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            raise DataError(messages.get(status, f"Alpaca-Datenabruf fehlgeschlagen (HTTP {status}).")) from None
+        except DataError:
+            raise
+        except (http.client.HTTPException, OSError, TimeoutError, json.JSONDecodeError, gzip.BadGzipFile):
+            _reset_https_conn()
             if attempt < 2:
-                time.sleep(1 + attempt)
+                time.sleep(0.5 + attempt)
                 continue
             raise DataError("Alpaca ist derzeit nicht erreichbar. Bitte die Verbindung prüfen.") from None
     raise DataError("Datenabruf fehlgeschlagen.")

@@ -13,6 +13,23 @@ from alpaca import DataError
 
 
 class ServerTests(unittest.TestCase):
+    def test_large_json_uses_negotiated_gzip_without_changing_content_or_cache_policy(self):
+        import gzip
+        expected={'bars':['known-candle']*3000}
+        with patch('server.chart_payload',return_value=expected):
+            for encoding,compressed in [('gzip',True),('gzip;q=0',False),('identity',False)]:
+                request=urllib.request.Request(self.url+'/api/chart?symbol=TEST',headers={'Accept-Encoding':encoding})
+                with urllib.request.urlopen(request) as response:
+                    raw=response.read()
+                    self.assertEqual(response.headers.get('Content-Encoding'), 'gzip' if compressed else None)
+                    self.assertEqual(response.headers.get('Cache-Control'),'no-store')
+                    self.assertIn('Accept-Encoding',response.headers.get('Vary',''))
+                    self.assertEqual(len(raw),int(response.headers['Content-Length']))
+                    if compressed:
+                        self.assertLess(len(raw),len(json.dumps(expected).encode())/10)
+                        raw=gzip.decompress(raw)
+                    self.assertEqual(json.loads(raw),expected)
+
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
@@ -136,6 +153,34 @@ class ServerTests(unittest.TestCase):
                     self.post_snapshot(b'{"analysisId":"abc"}')
                 self.assertEqual(error.exception.code,status)
                 self.assertNotIn('private disk path',error.exception.read().decode())
+
+    def test_replay_transport_routes_keep_origin_and_snapshot_protection(self):
+        from test_research import fixture_sources
+        import chart_replay
+        rows = fixture_sources()
+        at = rows['4h'][0][1000].end
+        from datetime import datetime, timezone
+        stamp = datetime.fromtimestamp(at, timezone.utc).isoformat()
+        from urllib.parse import urlencode
+        with patch('alpaca.load_bars', side_effect=lambda symbol, tf, **kw: rows[tf]):
+            url = self.url+'/api/replay/open?'+urlencode(dict(symbol='TEST', asof=stamp, timeframe='4h', analysis='0'))
+            with urllib.request.urlopen(url) as response:
+                opened = json.load(response)
+        self.assertIn('window', opened)
+        self.assertNotIn('bars', opened['view'])
+        q = dict(session=opened['window']['id'], asof=stamp, timeframe='4h', analysis='1', engine='fan_master')
+        with urllib.request.urlopen(self.url+'/api/replay/view?'+urlencode(q)) as response:
+            view = json.load(response)
+        self.assertTrue(view['analysisEnabled'])
+        self.assertNotIn('bars', view)
+        body = json.dumps({'replay': {k: v for k, v in q.items() if k != 'analysis'}}).encode()
+        with self.post_snapshot(body) as response:
+            snapshot = json.load(response)
+            self.assertEqual(snapshot['analysisCutoff'], at)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.post_snapshot(body, Origin='https://foreign.example')
+        self.assertEqual(error.exception.code, 403)
+        chart_replay.clear()
 
 
 if __name__ == '__main__':

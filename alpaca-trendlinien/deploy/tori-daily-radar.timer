@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Tori Daily Radar after US market close (23:00 Europe/Berlin, Mon-Fri)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 23:00:00 Europe/Berlin
+Persistent=true
+
+[Install]
+WantedBy=timers.target

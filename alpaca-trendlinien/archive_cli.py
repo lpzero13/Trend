@@ -26,9 +26,19 @@ def add_commands(commands):
     estimate.add_argument('--universes',required=True)
     estimate.add_argument('--start',default='2016-01-01T00:00:00Z')
     estimate.add_argument('--end')
+    daily = commands.add_parser('archive-update', help='Lokale SIP-Historien bis zum letzten verfügbaren US-Schluss ergänzen')
+    daily.add_argument('--universes', help='Gespeicherte IDs kommasepariert. Standard: alle gespeicherten Listen')
+    daily.add_argument('--plan', action='store_true', help='Datenstand und fehlende Sitzungen ohne Abruf prüfen')
+    daily.add_argument('--workers', type=int, default=4)
+    daily.add_argument('--max-minutes', type=int, default=55)
 
 
 def execute(args):
+    if args.command == 'archive-update':
+        from daily_archive import make_plan, summarize, update
+        keys = args.universes.split(',') if args.universes else None
+        return summarize(make_plan(keys), {}) if args.plan else update(
+            keys, workers=args.workers, max_minutes=args.max_minutes)
     import history_archive as archive
     import history_fast as fast
     import archive_state as state

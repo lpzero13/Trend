@@ -305,7 +305,7 @@
   $("lab-reveal").onclick = action(async () => { assertSaved(); reviewCase = await request(`/api/lab/reviews/${reviewPack.id}/${reviewCase.id}/reveal`,{}); storedReviewState(); renderReview(); });
   $("lab-review-compare").onclick = action(async () => { if (!reviewPack) throw new Error("Fallpaket auswählen."); json("lab-review-comparison",await request(`/api/lab/reviews/${reviewPack.id}/compare`)); });
   $("lab-review-daily").closest("details").addEventListener("toggle",(e) => { if (e.currentTarget.open) dailyChart?.timeScale().fitContent(); });
-  try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem("tori-theme")) || "light"; } catch {}
+  try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem("tori-theme")) || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }
   $("lab-theme").onclick = () => { const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = theme; try { localStorage.setItem("tori-theme",JSON.stringify(theme)); } catch {} [reviewChart,dailyChart,equityChart].filter(Boolean).forEach((c) => c.applyOptions(themeOptions())); };
   action(async () => {
     const config = await request("/api/lab/profiles"); profiles = config.profiles;

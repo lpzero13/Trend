@@ -64,6 +64,27 @@ class RandomReplayTests(unittest.TestCase):
         self.assertNotIn('rthQuality',p['sources']['4h'])
         self.assertNotIn('5m',p['charts'])
 
+    def test_preloaded_window_keeps_random_origin_and_matches_original_views(self):
+        import chart_replay
+        from fan_chart import apply
+        item = self.create()
+        stamp = datetime.fromtimestamp(item['startAt'], timezone.utc).isoformat()
+        with patch('alpaca._request', side_effect=AssertionError('offline')):
+            opened = chart_replay.open_window({'random': [item['id']], 'dataset': [item['datasetId']],
+                'timeframe': ['4h'], 'analysis': ['0'], 'asof': [stamp]})
+            value = chart_replay.session(opened['window']['id'])
+            for engine in ('legacy', 'fan_master'):
+                for tf in ('1h', '4h', '1D', '1W'):
+                    actual = value.view(item['startAt'], tf, engine, True, full=True)
+                    expected = replay.view(item['id'], tf, stamp, engine == 'legacy')
+                    if engine != 'legacy': apply(expected, engine)
+                    for key in expected:
+                        if key not in ('generatedAt', 'analysisId'):
+                            self.assertEqual(actual[key], expected[key], (engine, tf, key))
+            self.assertTrue(any(b['end'] > item['startAt'] for b in opened['window']['bars']['4h']))
+            self.assertTrue(all(b['end'] <= item['startAt'] for c in actual['charts'].values() for b in c['bars']))
+        chart_replay.clear()
+
     def test_forward_backward_cross_interval_and_reload_preserve_origin(self):
         item=self.create();origin=item['startAt'];at=datetime.fromtimestamp(origin,timezone.utc).isoformat()
         for tf in ('1h','4h','1D','1W'):

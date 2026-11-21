@@ -124,6 +124,8 @@ class RayLayer {
       onChange,
       items: [],
       automatic: [],
+      wedge: null,
+      tradeZones: null,
       selected: null,
       draft: null,
       undoStack: [],
@@ -132,6 +134,12 @@ class RayLayer {
       measurement: null,
       measureDraft: null,
       drag: null,
+      magnet: false,
+      bars: () => [],
+      horizontalActive: false,
+      rectActive: false,
+      longActive: false,
+      hoverPrice: null,
     });
     this.renderer = {
       draw: (target) =>
@@ -146,7 +154,7 @@ class RayLayer {
     host.addEventListener(
       "mousedown",
       (e) => {
-        if (this.active || this.measureActive || this.drag) {
+        if (this.active || this.measureActive || this.horizontalActive || this.rectActive || this.longActive || this.drag) {
           e.preventDefault();
           e.stopImmediatePropagation();
         }
@@ -193,11 +201,36 @@ class RayLayer {
     )
       return null;
     const axis=this.measureActive ? this.axis() : this.drawingAxes?.[this.timeframe] || this.axis();
-    return { time: Math.round(RayGeometry.timeAt(axis,logical)), price };
+    if (this.magnet && (!this.drag || this.drag.key !== "line")) {
+      const bars = typeof this.bars === "function" ? this.bars() : [];
+      const idx = Math.round(logical);
+      if (bars && idx >= 0 && idx < bars.length) {
+        const bar = bars[idx];
+        const cands = [bar.high, bar.low, bar.close, bar.open].filter((v) => Number.isFinite(v) && v > 0);
+        let best = null;
+        let bestDist = 28;
+        for (const v of cands) {
+          const y = this.series.priceToCoordinate(v);
+          if (y !== null && Number.isFinite(y)) {
+            const d = Math.abs(point.y - y);
+            if (d < bestDist) {
+              bestDist = d;
+              best = v;
+            }
+          }
+        }
+        if (best !== null) return { time: bar.time, price: best };
+      }
+    }
+    return { time: RayGeometry.timeAt(axis,logical), price };
   }
   coords(event) {
-    const r = this.host.getBoundingClientRect();
-    return { x: event.clientX - r.left, y: event.clientY - r.top };
+    // Pane coordinates can differ from the host after borders, scaling or layouts.
+    const canvas=this.host.querySelector?.('canvas');
+    const r = (canvas || this.host).getBoundingClientRect();
+    const width=this.chart.timeScale().width(),height=this.chart.panes()[0].getHeight();
+    return { x:(event.clientX-r.left)*(canvas && r.width?width/r.width:1),
+             y:(event.clientY-r.top)*(canvas && r.height?height/r.height:1) };
   }
   inside(p) {
     const pane = this.chart.panes()[0];
@@ -216,6 +249,43 @@ class RayLayer {
   hit(p) {
     for (const ray of [...this.items].reverse()) {
       if (!this.visible(ray)) continue;
+      if (ray.kind === "rect") {
+        const [a, b] = this.line(ray);
+        for (const key of ["a", "b"]) {
+          const q = key === "a" ? a : b;
+          if (q.x !== null && q.y !== null && Math.hypot(p.x - q.x, p.y - q.y) < 11)
+            return { ray, key };
+        }
+        if ([a.x, a.y, b.x, b.y].every(Number.isFinite)) {
+          const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x);
+          const top = Math.min(a.y, b.y), bottom = Math.max(a.y, b.y);
+          if (p.x >= left - 6 && p.x <= right + 6 && p.y >= top - 6 && p.y <= bottom + 6)
+            return { ray, key: "line" };
+        }
+        continue;
+      }
+      if (ray.kind === "longbox") {
+        const axis = this.axisFor(ray);
+        const pa = this.point(ray.a, axis);
+        const pb = this.point(ray.b, axis);
+        const tPrice = Number.isFinite(ray.targetPrice)
+          ? ray.targetPrice
+          : ray.a.price + 2 * Math.max(0.01, ray.a.price - ray.b.price);
+        const pt = this.point({ time: ray.b.time, price: tPrice }, axis);
+        if (pt.x !== null && pt.y !== null && Math.hypot(p.x - pt.x, p.y - pt.y) < 12)
+          return { ray, key: "target" };
+        if (pb.x !== null && pb.y !== null && Math.hypot(p.x - pb.x, p.y - pb.y) < 12)
+          return { ray, key: "b" };
+        if (pa.x !== null && pa.y !== null && Math.hypot(p.x - pa.x, p.y - pa.y) < 12)
+          return { ray, key: "a" };
+        if ([pa.x, pa.y, pb.x, pb.y, pt.y].every(Number.isFinite)) {
+          const left = Math.min(pa.x, pb.x), right = Math.max(pa.x, pb.x);
+          const top = Math.min(pt.y, pa.y, pb.y), bottom = Math.max(pt.y, pa.y, pb.y);
+          if (p.x >= left - 6 && p.x <= right + 6 && p.y >= top - 6 && p.y <= bottom + 6)
+            return { ray, key: "line" };
+        }
+        continue;
+      }
       const [a, b] = this.line(ray);
       for (const key of ["a", "b"]) {
         const q = key === "a" ? a : b;
@@ -261,6 +331,10 @@ class RayLayer {
   setMode(active) {
     this.active = active === true;
     this.measureActive = active === "measure";
+    this.horizontalActive = active === "horizontal";
+    this.rectActive = active === "rect";
+    this.longActive = active === "longbox";
+    this.hoverPrice = null;
     this.draft = null;
     this.measureDraft = null;
     this.onMeasure?.();
@@ -297,6 +371,7 @@ class RayLayer {
   changeColor(value) {
     const color=RayGeometry.color(value);
     this.color=color;
+    if (this.draft) this.draft.color = color;
     const ray=this.items.find(r=>r.id===this.selected);
     if(ray && ray.color!==color) {
       this.remember();ray.color=color;this.commit();
@@ -375,11 +450,128 @@ class RayLayer {
       this.update();
       return;
     }
+    if (this.rectActive) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const axis = this.drawingAxes?.[this.timeframe] || this.axis();
+      const step = axis.length >= 2 ? Math.max(60, Math.round(axis[axis.length - 1] - axis[axis.length - 2])) : 3600;
+      if (!this.draft) {
+        this.draft = {
+          kind: "rect",
+          a: anchor,
+          b: { time: anchor.time + step, price: anchor.price },
+          color: RayGeometry.color(this.color),
+          basis: RayGeometry.capture(axis),
+        };
+        this.onHint?.("Zweite Ecke setzen · Escape zum Abbrechen");
+      } else {
+        this.remember();
+        let a = this.draft.a, b = anchor;
+        if (Math.abs(b.time - a.time) < 1) b = { time: a.time + step * 4, price: b.price };
+        if (b.time < a.time) { const tmp = a; a = b; b = tmp; }
+        const rect = {
+          id: crypto.randomUUID(),
+          kind: "rect",
+          a,
+          b,
+          timeframe: this.timeframe,
+          basis: RayGeometry.capture(axis),
+          color: RayGeometry.color(this.color),
+          observedAt: this.cutoff,
+        };
+        this.items.push(rect);
+        this.selected = rect.id;
+        this.measurementSelected = false;
+        this.draft = null;
+        this.commit();
+        this.onSelection?.();
+        this.onDone?.();
+      }
+      this.update();
+      return;
+    }
+    if (this.longActive) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const axis = this.drawingAxes?.[this.timeframe] || this.axis();
+      const step = axis.length >= 2 ? Math.max(60, Math.round(axis[axis.length - 1] - axis[axis.length - 2])) : 3600;
+      if (!this.draft) {
+        const stopInit = Math.max(0.01, anchor.price * 0.97);
+        this.draft = {
+          kind: "longbox",
+          a: anchor,
+          b: { time: anchor.time + step * 14, price: stopInit },
+          targetPrice: anchor.price + 2 * (anchor.price - stopInit),
+          color: "#26a69a",
+          basis: RayGeometry.capture(axis),
+        };
+        this.onHint?.("Stop-Loss-Niveau anklicken · Escape zum Abbrechen");
+      } else {
+        this.remember();
+        let entryPrice = this.draft.a.price;
+        let stopPrice = anchor.price;
+        if (stopPrice >= entryPrice) {
+          if (Math.abs(stopPrice - entryPrice) < 0.0001) {
+            stopPrice = Math.max(0.01, entryPrice * 0.97);
+          } else {
+            const tmp = entryPrice; entryPrice = stopPrice; stopPrice = tmp;
+          }
+        }
+        const risk = Math.max(0.01, entryPrice - stopPrice);
+        const endTime = Math.max(anchor.time, this.draft.a.time + step * 12);
+        const box = {
+          id: crypto.randomUUID(),
+          kind: "longbox",
+          a: { time: this.draft.a.time, price: entryPrice },
+          b: { time: endTime, price: stopPrice },
+          targetPrice: entryPrice + 2 * risk,
+          timeframe: this.timeframe,
+          basis: RayGeometry.capture(axis),
+          color: "#26a69a",
+          observedAt: this.cutoff,
+        };
+        this.items.push(box);
+        this.selected = box.id;
+        this.measurementSelected = false;
+        this.draft = null;
+        this.commit();
+        this.onSelection?.();
+        this.onDone?.();
+      }
+      this.update();
+      return;
+    }
+    if (this.horizontalActive) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.remember();
+      const axis = this.drawingAxes?.[this.timeframe] || this.axis();
+      const step = axis.length >= 2 ? Math.max(60, Math.round(axis[axis.length - 1] - axis[axis.length - 2])) : 3600;
+      const ray = {
+        id: crypto.randomUUID(),
+        a: { time: anchor.time, price: anchor.price },
+        b: { time: anchor.time + step, price: anchor.price },
+        timeframe: this.timeframe,
+        basis: RayGeometry.capture(axis),
+        color: RayGeometry.color(this.color),
+        extend: "horizontal",
+        observedAt: this.cutoff,
+      };
+      this.items.push(ray);
+      this.selected = ray.id;
+      this.measurementSelected = false;
+      this.hoverPrice = null;
+      this.commit();
+      this.onSelection?.();
+      this.onDone?.();
+      return;
+    }
     if (this.active) {
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!this.draft) {
-        this.draft = { a: anchor, b: anchor, extend:this.extension || 'right' };
+        this.draft = { a: anchor, b: anchor, extend:this.extension || 'right',
+          basis:RayGeometry.capture(this.drawingAxes?.[this.timeframe] || this.axis()) };
         this.onHint?.("Zweiten Punkt setzen · Escape zum Abbrechen");
       } else if (Math.abs(anchor.time - this.draft.a.time) >= 1) {
         this.remember();
@@ -449,16 +641,31 @@ class RayLayer {
         this.update();
       }
     }
-    if (this.draft && this.active && this.inside(p)) {
+    if (this.horizontalActive && this.inside(p)) {
+      const a = this.anchor(p);
+      this.hoverPrice = a ? a.price : null;
+      this.update();
+      return;
+    }
+    if (this.draft && (this.active || this.rectActive || this.longActive) && this.inside(p)) {
       const a = this.anchor(p);
       if (a) {
-        this.draft.b = a;
-        if (this.draft.extend==='horizontal') this.draft.b.price=this.draft.a.price;
+        if (this.draft.kind === "longbox") {
+          const axis = this.drawingAxes?.[this.timeframe] || this.axis();
+          const step = axis.length >= 2 ? Math.max(60, Math.round(axis[axis.length - 1] - axis[axis.length - 2])) : 3600;
+          const entry = this.draft.a.price;
+          const stop = a.price < entry ? a.price : Math.max(0.01, entry - Math.abs(a.price - entry));
+          this.draft.b = { time: Math.max(a.time, this.draft.a.time + step * 12), price: stop };
+          this.draft.targetPrice = entry + 2 * Math.max(0.01, entry - stop);
+        } else {
+          this.draft.b = a;
+          if (this.draft.extend==='horizontal') this.draft.b.price=this.draft.a.price;
+        }
         this.update();
       }
     }
     if (!this.drag) {
-      if (!this.active && !this.measureActive && this.inside(p))
+      if (!this.active && !this.measureActive && !this.horizontalActive && !this.rectActive && !this.longActive && this.inside(p))
         this.host.style.cursor = this.hit(p)
           ? "grab"
           : this.hitMeasurement(p)
@@ -470,17 +677,34 @@ class RayLayer {
     if (!anchor) return;
     const d = this.drag;
     if (d.key === "line") {
-      const dt = anchor.time - d.start.time,
+      const axis=this.drawingAxes?.[this.timeframe] || this.axis(),
+        delta=RayGeometry.logicalAt(axis,anchor.time)-RayGeometry.logicalAt(axis,d.start.time),
         dp = anchor.price - d.start.price;
       if (Math.min(d.original.a.price, d.original.b.price) + dp <= 0) return;
       d.ray.a = {
-        time: d.original.a.time + dt,
+        time: RayGeometry.timeAt(axis,RayGeometry.logicalAt(axis,d.original.a.time)+delta),
         price: d.original.a.price + dp,
       };
       d.ray.b = {
-        time: d.original.b.time + dt,
+        time: RayGeometry.timeAt(axis,RayGeometry.logicalAt(axis,d.original.b.time)+delta),
         price: d.original.b.price + dp,
       };
+      if (d.ray.kind === "longbox" && Number.isFinite(d.original.targetPrice)) {
+        d.ray.targetPrice = Math.max(d.ray.a.price + 0.01, d.original.targetPrice + dp);
+      }
+    } else if (d.ray.kind === "longbox") {
+      if (d.key === "target") {
+        if (anchor.price <= d.ray.a.price || anchor.time <= d.ray.a.time) return;
+        d.ray.targetPrice = anchor.price;
+        d.ray.b = { time: anchor.time, price: d.ray.b.price };
+      } else if (d.key === "b") {
+        if (anchor.price >= d.ray.a.price || anchor.time <= d.ray.a.time) return;
+        d.ray.b = anchor;
+      } else if (d.key === "a") {
+        const tPrice = Number.isFinite(d.ray.targetPrice) ? d.ray.targetPrice : Infinity;
+        if (anchor.price <= d.ray.b.price || anchor.price >= tPrice || anchor.time >= d.ray.b.time) return;
+        d.ray.a = anchor;
+      }
     } else {
       const other = d.key === "a" ? d.ray.b : d.ray.a;
       if (
@@ -561,6 +785,20 @@ class RayLayer {
       }
     }
     const labels = [];
+    if (this.horizontalActive && Number.isFinite(this.hoverPrice)) {
+      const hy = this.series.priceToCoordinate(this.hoverPrice);
+      if (hy !== null && Number.isFinite(hy)) {
+        ctx.save();
+        ctx.strokeStyle = RayGeometry.color(this.color) + "aa";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, hy);
+        ctx.lineTo(size.width, hy);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     const draw = (ray, color, width, dash, label) => {
       if (ray.a.time === ray.b.time) return;
       const scale = this.chart.timeScale();
@@ -640,9 +878,184 @@ class RayLayer {
           });
       }
     };
+    const baseScale = this.chart.timeScale();
+    const baseAxis = this.axis();
+    const baseFrom = RayGeometry.logicalAtPixel(baseScale, 0);
+    const baseTo = RayGeometry.logicalAtPixel(baseScale, size.width);
+    // 1) Optional subtle compression wedge fill between active red & green lines
+    if (this.wedge && this.wedge.red && this.wedge.green && baseAxis.length >= 2 && baseFrom !== null && baseTo !== null) {
+      const wRed = this.wedge.red, wGreen = this.wedge.green;
+      const aR = wRed.a.logical ?? RayGeometry.logicalAt(baseAxis, wRed.a.time);
+      const aG = wGreen.a.logical ?? RayGeometry.logicalAt(baseAxis, wGreen.a.time);
+      const startL = Math.max(baseFrom, aR ?? baseFrom, aG ?? baseFrom);
+      const endL = Math.min(baseTo, baseAxis.length - 1 + 4);
+      if (Number.isFinite(startL) && Number.isFinite(endL) && endL > startL) {
+        const x1 = RayGeometry.pixelAt(baseScale, startL);
+        const x2 = RayGeometry.pixelAt(baseScale, endL);
+        const r1 = RayGeometry.valueAtLogical(baseAxis, wRed, startL);
+        const r2 = RayGeometry.valueAtLogical(baseAxis, wRed, endL);
+        const g1 = RayGeometry.valueAtLogical(baseAxis, wGreen, startL);
+        const g2 = RayGeometry.valueAtLogical(baseAxis, wGreen, endL);
+        if ([x1, x2, r1, r2, g1, g2].every(Number.isFinite) && r1 > g1 && r2 > 0 && g2 > 0) {
+          const yr1 = this.series.priceToCoordinate(r1);
+          const yr2 = this.series.priceToCoordinate(r2);
+          const yg1 = this.series.priceToCoordinate(g1);
+          const yg2 = this.series.priceToCoordinate(g2);
+          if ([yr1, yr2, yg1, yg2].every(Number.isFinite)) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x1, yr1);
+            ctx.lineTo(x2, yr2);
+            ctx.lineTo(x2, yg2);
+            ctx.lineTo(x1, yg1);
+            ctx.closePath();
+            ctx.fillStyle = "rgba(59, 130, 246, 0.055)";
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+    }
+    // 2) Optional Risk / +2R Target shading for active backtest or setup case
+    if (this.tradeZones && baseAxis.length >= 2 && baseFrom !== null && baseTo !== null) {
+      const tz = this.tradeZones;
+      const startL = RayGeometry.logicalAt(baseAxis, tz.startTime);
+      const endL = tz.endTime ? RayGeometry.logicalAt(baseAxis, tz.endTime) : (baseAxis.length - 1 + 6);
+      if (Number.isFinite(startL) && Number.isFinite(endL) && endL >= startL) {
+        const x1 = RayGeometry.pixelAt(baseScale, Math.max(baseFrom, startL));
+        const x2 = RayGeometry.pixelAt(baseScale, Math.min(baseTo, Math.max(startL + 1, endL)));
+        const yEntry = this.series.priceToCoordinate(tz.entry);
+        const yStop = tz.stop ? this.series.priceToCoordinate(tz.stop) : null;
+        const yTarget = tz.target2r ? this.series.priceToCoordinate(tz.target2r) : null;
+        if (Number.isFinite(x1) && Number.isFinite(x2) && x2 > x1 && Number.isFinite(yEntry)) {
+          ctx.save();
+          if (Number.isFinite(yStop)) {
+            ctx.fillStyle = "rgba(239, 83, 80, 0.085)";
+            ctx.fillRect(x1, Math.min(yEntry, yStop), x2 - x1, Math.abs(yStop - yEntry));
+          }
+          if (Number.isFinite(yTarget)) {
+            ctx.fillStyle = "rgba(38, 166, 154, 0.08)";
+            ctx.fillRect(x1, Math.min(yEntry, yTarget), x2 - x1, Math.abs(yEntry - yTarget));
+          }
+          ctx.restore();
+        }
+      }
+    }
+    const fmtDe = (v, d = 2) => Number(v).toFixed(d).replace(".", ",");
+    const pill = (text, x, y, bg, fg = "#fff") => {
+      ctx.save();
+      ctx.font = "600 11px system-ui, -apple-system, sans-serif";
+      const tw = ctx.measureText(text).width;
+      const pw = tw + 12, ph = 19, rad = 5;
+      const px = Math.max(6, Math.min(size.width - pw - 6, x));
+      const py = Math.max(6, Math.min(size.height - ph - 6, y));
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") ctx.roundRect(px, py, pw, ph, rad);
+      else ctx.rect(px, py, pw, ph);
+      ctx.fill();
+      ctx.fillStyle = fg;
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, px + 6, py + ph / 2 + 0.5);
+      ctx.restore();
+    };
+    const drawHandle = (hx, hy, stroke) => {
+      if (!Number.isFinite(hx) || !Number.isFinite(hy)) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    };
+    const drawRect = (r, selected, isDraft = false) => {
+      const axis = this.axisFor(r);
+      const pa = this.point(r.a, axis);
+      const pb = this.point(r.b, axis);
+      if (![pa.x, pa.y, pb.x, pb.y].every(Number.isFinite)) return;
+      const x = Math.min(pa.x, pb.x), y = Math.min(pa.y, pb.y);
+      const w = Math.max(2, Math.abs(pb.x - pa.x)), h = Math.max(2, Math.abs(pb.y - pa.y));
+      const col = RayGeometry.color(r.color);
+      ctx.save();
+      ctx.fillStyle = col + (selected ? "34" : "22");
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = selected ? 2.2 : 1.5;
+      if (isDraft) ctx.setLineDash([5, 4]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.restore();
+      if (selected || isDraft) {
+        const hi = Math.max(r.a.price, r.b.price), lo = Math.min(r.a.price, r.b.price);
+        pill(`Zone ${fmtDe(lo)} – ${fmtDe(hi)}`, x + 4, y - 22, col);
+        drawHandle(pa.x, pa.y, col);
+        drawHandle(pb.x, pb.y, col);
+      }
+    };
+    const drawLongBox = (r, selected, isDraft = false) => {
+      const axis = this.axisFor(r);
+      const entry = r.a.price;
+      const stop = r.b.price;
+      const risk = Math.max(0.0001, entry - stop);
+      const target = Number.isFinite(r.targetPrice) ? r.targetPrice : entry + 2 * risk;
+      const pa = this.point(r.a, axis);
+      const pb = this.point(r.b, axis);
+      const pt = this.point({ time: r.b.time, price: target }, axis);
+      if (![pa.x, pa.y, pb.x, pb.y, pt.y].every(Number.isFinite)) return;
+      const x1 = Math.min(pa.x, pb.x), x2 = Math.max(pa.x, pb.x);
+      const bw = Math.max(12, x2 - x1);
+      const riskPct = (risk / entry) * 100;
+      const reward = Math.max(0, target - entry);
+      const rewardPct = (reward / entry) * 100;
+      const rr = reward / risk;
+      const qty = 1000 / entry;
+      const riskEur = 1000 * (risk / entry);
+      ctx.save();
+      if (isDraft) ctx.setLineDash([5, 4]);
+      // Green target zone
+      ctx.fillStyle = selected ? "rgba(38, 166, 154, 0.26)" : "rgba(38, 166, 154, 0.18)";
+      ctx.fillRect(x1, Math.min(pa.y, pt.y), bw, Math.abs(pa.y - pt.y));
+      ctx.strokeStyle = "#26a69a";
+      ctx.lineWidth = selected ? 2 : 1.4;
+      ctx.strokeRect(x1, Math.min(pa.y, pt.y), bw, Math.abs(pa.y - pt.y));
+      // Red risk zone
+      ctx.fillStyle = selected ? "rgba(239, 83, 80, 0.28)" : "rgba(239, 83, 80, 0.20)";
+      ctx.fillRect(x1, Math.min(pa.y, pb.y), bw, Math.abs(pb.y - pa.y));
+      ctx.strokeStyle = "#ef5350";
+      ctx.lineWidth = selected ? 2 : 1.4;
+      ctx.strokeRect(x1, Math.min(pa.y, pb.y), bw, Math.abs(pb.y - pa.y));
+      // Entry divider line
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(226, 232, 240, 0.85)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, pa.y);
+      ctx.lineTo(x1 + bw, pa.y);
+      ctx.stroke();
+      ctx.restore();
+      // Crisp TradingView-style badges
+      pill(`Ziel ${fmtDe(target)} (+${fmtDe(rewardPct)} % · +${fmtDe(rr, 1)} R)`, x1 + 6, Math.min(pa.y, pt.y) - 22, "#0f766e");
+      pill(`Einstieg ${fmtDe(entry)} · 1.000 € ≈ ${fmtDe(qty, 2)} Stk. · Risiko ${fmtDe(riskEur, 1)} €`, x1 + 6, pa.y - 9.5, "rgba(19, 26, 36, 0.92)", "#e6edf3");
+      pill(`Stop ${fmtDe(stop)} (−${fmtDe(riskPct)} %)`, x1 + 6, Math.max(pa.y, pb.y) + 4, "#b91c1c");
+      if (selected || isDraft) {
+        drawHandle(pa.x, pa.y, "#e2e8f0");
+        drawHandle(pb.x, pb.y, "#ef5350");
+        drawHandle(pt.x, pt.y, "#26a69a");
+      }
+    };
     for (const r of this.automatic) draw(r, r.color, r.width, r.dash, r.label);
     for (const r of this.items) {
       if (!this.visible(r)) continue;
+      if (r.kind === "rect") {
+        drawRect(r, r.id === this.selected, false);
+        continue;
+      }
+      if (r.kind === "longbox") {
+        drawLongBox(r, r.id === this.selected, false);
+        continue;
+      }
       draw(
         r,
         RayGeometry.color(r.color),
@@ -653,17 +1066,15 @@ class RayLayer {
       if (r.id === this.selected) {
         for (const anchor of [r.a, r.b]) {
           const p = this.point(anchor,this.axisFor(r));
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-          ctx.fillStyle = "#fff";
-          ctx.fill();
-          ctx.strokeStyle = RayGeometry.color(r.color);
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          drawHandle(p.x, p.y, RayGeometry.color(r.color));
         }
       }
     }
-    if (this.draft) draw(this.draft, RayGeometry.color(this.color), 2, [5, 4], "");
+    if (this.draft) {
+      if (this.draft.kind === "rect") drawRect(this.draft, true, true);
+      else if (this.draft.kind === "longbox") drawLongBox(this.draft, true, true);
+      else draw(this.draft, RayGeometry.color(this.color), 2, [5, 4], "");
+    }
     const occupied = this.labelObstacles?.() || [];
     const overlaps = (a, b) =>
       a.x < b.x + b.w + 5 &&
@@ -715,8 +1126,14 @@ class RayLayer {
       );
       ctx.stroke();
       ctx.fillStyle = label.color;
-      ctx.fillRect(box.x, box.y, box.w, box.h);
-      ctx.font = "600 12px Arial";
+      if (typeof ctx.roundRect === "function") {
+        ctx.beginPath();
+        ctx.roundRect(box.x, box.y, box.w, box.h, 5);
+        ctx.fill();
+      } else {
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+      }
+      ctx.font = "600 11.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif";
       ctx.fillStyle = "#fff";
       ctx.fillText(label.text, box.x + 7, box.y + 16);
       occupied.push(box);

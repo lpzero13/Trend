@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuelle Kandidatenliste für Tori</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.5 system-ui, sans-serif; }
+  body { max-width: 68rem; margin: 2rem auto; padding: 0 1rem; }
+  h1, h2, p { margin-top: 0; }
+  h2 { margin-top: 1.6rem; }
+  label { display: grid; gap: .25rem; }
+  button, input, select, textarea { font: inherit; padding: .4rem .55rem; }
+  button { cursor: pointer; }
+  textarea { resize: vertical; min-height: 4rem; }
+  form { display: grid; gap: .75rem; max-width: 40rem; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; margin-block: .8rem; }
+  .setups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
+  .setup {
+    display: flex; flex-direction: column; padding: 1rem; border: 1px solid GrayText;
+    border-radius: .5rem; background: color-mix(in srgb, CanvasText 4%, Canvas);
+  }
+  .setup h3 { margin: 0 0 .65rem; font-size: 1.1rem; }
+  .setup dl { margin: 0 0 .9rem; }
+  .setup dt { font-weight: 650; }
+  .setup dd { margin: .15rem 0 .65rem; }
+  .setup dd:last-child { margin-bottom: 0; }
+  .setup .actions { margin: auto 0 0; }
+  .setup-notes { margin-block: 1rem; }
+  .setup-notes p { margin-bottom: .65rem; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; vertical-align: top; padding: .55rem; border-bottom: 1px solid GrayText; }
+  td textarea { min-width: 13rem; min-height: 2.1rem; }
+  .chart-links { white-space: nowrap; }
+  .chart-links a { display: block; }
+  #message { min-height: 1.5em; margin: .5rem 0; }
+</style>
+<main>
+  <h1>Manuelle Kandidatenliste für Tori</h1>
+  <p>Übernimm Ticker aus deinen Suchen, öffne die Charts und halte deine Sichtung fest. Die Liste bleibt in diesem Browser gespeichert. Mit „Liste sichern“ kannst du sie auch als Datei ablegen.</p>
+  <h2>Long-Setups in Finviz</h2>
+  <p>Alle drei Suchen verwenden US-Listings ohne Index- oder Länderfilter, einen Kurs über 10 USD und mehr als 500.000 gehandelte Stück pro Tag im Durchschnitt.</p>
+  <div class="setups">
+    <article class="setup" aria-labelledby="setup-pullback">
+      <h3 id="setup-pullback">Rücksetzer im Aufwärtstrend</h3>
+      <dl>
+        <dt>Finviz-Filter</dt>
+        <dd>Monat im Plus, Woche im Minus, Kurs über dem Tages-SMA200.</dd>
+        <dt>Warum suchen wir so?</dt>
+        <dd>Ein kurzfristiger Rücklauf im stärkeren Tageskontext gibt uns Zeit, einen möglichen neuen Long-Aufbau zu beobachten.</dd>
+        <dt>Im 4h-Chart beobachten</dt>
+        <dd>Lassen sich die tieferen Zwischenhochs zu einer fallenden roten Linie verbinden? Entsteht ein höheres Tief, das eine steigende grüne Safety Line stützt?</dd>
+      </dl>
+      <div class="actions">
+        <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_perf_4wup,ta_perf2_1wdown,ta_sma200_pa&amp;o=-marketcap" target="_blank" rel="noopener">Rücksetzer in Finviz</a>
+      </div>
+    </article>
+    <article class="setup" aria-labelledby="setup-compression">
+      <h3 id="setup-compression">Fallender Keil oder fallendes Dreieck</h3>
+      <dl>
+        <dt>Finviz-Filter</dt>
+        <dd>Wedge Down oder Triangle Descending, jeweils als eigene Suche.</dd>
+        <dt>Warum suchen wir so?</dt>
+        <dd>Beide Muster haben eine fallende Obergrenze und helfen, einen möglichen Ausbruch schon vorher zu beobachten.</dd>
+        <dt>Im 4h-Chart beobachten</dt>
+        <dd>Nähert sich der letzte abgeschlossene Balken Rot von unten? Gibt es im 4h-Aufbau ein höheres Tief für Grün? Der fallende Keilboden oder die waagerechte Dreiecksunterseite allein reicht dafür nicht aus.</dd>
+      </dl>
+      <div class="actions">
+        <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_pattern_wedgedown&amp;o=-marketcap" target="_blank" rel="noopener">Keile in Finviz</a>
+        <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_pattern_wedgesupport&amp;o=-marketcap" target="_blank" rel="noopener">Dreiecke in Finviz</a>
+      </div>
+    </article>
+    <article class="setup" aria-labelledby="setup-reversal">
+      <h3 id="setup-reversal">Frühe Wende unter dem SMA200</h3>
+      <dl>
+        <dt>Finviz-Filter</dt>
+        <dd>Quartal im Minus, Woche im Plus, Kurs unter dem Tages-SMA200 und über dem Tages-SMA20.</dd>
+        <dt>Warum suchen wir so?</dt>
+        <dd>Eine Erholung kann schon während einer größeren Korrektur beginnen. So bleiben Kandidaten sichtbar, die beim Rücksetzer-Filter ausscheiden.</dd>
+        <dt>Im 4h-Chart beobachten</dt>
+        <dd>Hält der erste Rücklauf nach der Erholung über dem vorigen Tief? Zeichne dort die mögliche grüne Safety ein und beobachte den Kurs am länger bestehenden roten Dach.</dd>
+      </dl>
+      <div class="actions">
+        <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_perf_13wdown,ta_perf2_1wup,ta_sma200_pb,ta_sma20_pa&amp;o=-marketcap" target="_blank" rel="noopener">Wendekandidaten in Finviz</a>
+      </div>
+    </article>
+  </div>
+  <div class="setup-notes">
+    <p><strong>Roter Retest.</strong> Hat ein 4h-Balken den Bruch bestätigt, fixiere die gebrochene rote Linie. Markiere den Titel als „Schon über Rot“ und beobachte, ob der Kurs von oben an dieselbe Linie zurückkehrt und dort hält.</p>
+    <p><strong>Handelbarkeit aus Deutschland.</strong> Prüfe den interessanten Titel per ISIN bei deinem Broker. Vergleiche den verfügbaren Handelsplatz, den Geld-Brief-Abstand und die Orderkosten.</p>
+  </div>
+  <details>
+    <summary>Weitere Finviz-Setups</summary>
+    <nav class="actions" aria-label="Weitere Finviz-Setups">
+      <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_pattern_wedgeresistance&amp;o=-marketcap" target="_blank" rel="noopener">Steigendes Dreieck</a>
+      <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o1000,sh_price_o20,ta_perf_4wup,ta_perf2_1wdown,ta_sma20_pa,ta_sma50_sa200,ta_sma200_pa&amp;o=-marketcap" target="_blank" rel="noopener">Rücksetzer mit Erholung</a>
+      <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_perf_4wup,ta_highlow50d_b0to5h&amp;o=-marketcap" target="_blank" rel="noopener">Nähe zum 50-Tage-Hoch</a>
+      <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o500,sh_price_o10,ta_perf2_1wdown,ta_sma200_pa,ta_highlow20d_a0to5h&amp;o=-marketcap" target="_blank" rel="noopener">Rücklauf zur Unterstützung</a>
+      <a href="https://finviz.com/screener/stocks?v=111&amp;ft=4&amp;f=sh_avgvol_o1000,sh_price_o10,ta_beta_o1.5,ta_volatility_mo4&amp;o=-marketcap" target="_blank" rel="noopener">Bewegungsstarke Titel</a>
+    </nav>
+  </details>
+  <details>
+    <summary>Weitere Suchquellen</summary>
+    <nav class="actions" aria-label="Weitere Suchquellen">
+      <a href="https://www.chartmill.com/trading-ideas/202-Technical-Breakout-Setups" target="_blank" rel="noopener">ChartMill Konsolidierung</a>
+      <a href="https://www.tradingview.com/heatmap/stock/" target="_blank" rel="noopener">TradingView Branchen</a>
+      <a href="https://help.stockcharts.com/scanning-and-alerts/scan-writing-resource-center/advanced-scan-library/sample-scans" target="_blank" rel="noopener">StockCharts Scan-Beispiele</a>
+    </nav>
+  </details>
+  <h2>Treffer übernehmen</h2>
+  <form id="add">
+    <label>Quelle oder Suchprofil <input id="source" required maxlength="100" placeholder="z. B. Finviz Rücklauf"></label>
+    <label>Ticker <textarea id="symbols" required placeholder="z. B. AAPL, BRK-B, NASDAQ:MSFT, XETR:SAP"></textarea></label>
+    <p>Kopiere die Ticker-Spalte oder trenne Symbole durch Kommas oder Leerzeichen. Verwende für andere Märkte ein Börsenpräfix, etwa XETR:SAP.</p>
+    <div><button type="submit">Zur Liste hinzufügen</button></div>
+  </form>
+  <p id="message" role="status" aria-live="polite"></p>
+  <h2>Gesammelte Treffer</h2>
+  <div class="actions">
+    <label>Ticker, Quelle oder Notiz <input id="search" type="search"></label>
+    <label>Prüfstand <select id="filter"><option value="">Alle</option></select></label>
+    <button id="backup" type="button">Liste sichern</button>
+    <label>Gesicherte Liste zusammenführen <input id="restore" type="file" accept=".json,application/json"></label>
+  </div>
+  <p id="count"></p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ticker</th><th>Quelle</th><th>Prüfstand</th><th>Chartnotiz</th><th>Charts</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+  const storeKey = "tori-manual-candidates-v1";
+  const statuses = ["Offen", "Zeitnah prüfen", "Beobachten", "Zurückgestellt", "Schon über Rot"];
+  const usExchanges = new Set(["NYSE", "NASDAQ", "AMEX", "NYSEARCA", "BATS", "CBOE"]);
+  const usAliases = new Map([["BRK-B", "BRK.B"], ["BRK-A", "BRK.A"], ["BF-B", "BF.B"], ["BF-A", "BF.A"]]);
+  const byId = (id) => document.getElementById(id);
+  let entries = new Map();
+  const notice = (message) => { byId("message").textContent = message; };
+
+  function identity(input) {
+    const symbol = typeof input === "string" ? input.trim().toUpperCase() : "";
+    if (!/^(?:[A-Z0-9]{2,14}:)?[A-Z0-9][A-Z0-9.-]{0,14}$/.test(symbol) || !/[A-Z]/.test(symbol)) return null;
+    const [prefix, ticker] = symbol.includes(":") ? symbol.split(":") : ["", symbol];
+    const us = !prefix || usExchanges.has(prefix);
+    const normalized = us ? (usAliases.get(ticker) || ticker) : ticker;
+    return { key: us ? normalized : symbol, symbol, us, ticker: normalized };
+  }
+
+  function readBackup(data) {
+    if (data?.version !== 1 || !Array.isArray(data.rows)) throw new Error("Die Datei hat kein gültiges Listenformat.");
+    return data.rows.map((row) => {
+      const instrument = identity(row?.symbol);
+      if (!instrument || !statuses.includes(row.status) || typeof row.note !== "string"
+          || !Array.isArray(row.sources) || row.sources.some((source) => typeof source !== "string")) {
+        throw new Error("Die Datei enthält einen ungültigen Eintrag.");
+      }
+      return { ...instrument, status: row.status, note: row.note, sources: [...new Set(row.sources)] };
+    });
+  }
+
+  function merge(incoming) {
+    const old = entries.get(incoming.key);
+    if (!old) {
+      entries.set(incoming.key, incoming);
+      return true;
+    }
+    old.sources = [...new Set([...old.sources, ...incoming.sources])];
+    if (!old.symbol.includes(":") && incoming.symbol.includes(":")) old.symbol = incoming.symbol;
+    if (!old.note && incoming.note) old.note = incoming.note;
+    if (old.status === statuses[0]) old.status = incoming.status;
+    return false;
+  }
+
+  function snapshot() {
+    return JSON.stringify({ version: 1, rows: [...entries.values()] }, null, 2);
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(storeKey, snapshot());
+      return true;
+    } catch {
+      notice("Der Browser konnte die Liste nicht speichern. Sichere sie über „Liste sichern“.");
+      return false;
+    }
+  }
+
+  function cell(row, text) {
+    const result = row.insertCell();
+    if (text !== undefined) result.textContent = text;
+    return result;
+  }
+
+  function chartLink(parent, text, url) {
+    const link = document.createElement("a");
+    link.textContent = text;
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    parent.append(link);
+  }
+
+  function render() {
+    const query = byId("search").value.trim().toLowerCase();
+    const filter = byId("filter").value;
+    const visible = [...entries.values()].filter((entry) => (
+      (!filter || filter === entry.status)
+      && [entry.symbol, ...entry.sources, entry.note].some((value) => value.toLowerCase().includes(query))
+    ));
+    byId("count").textContent = `${visible.length} von ${entries.size} Titeln sichtbar`;
+    const fragment = document.createDocumentFragment();
+    for (const entry of visible) {
+      const row = document.createElement("tr");
+      cell(row, entry.symbol);
+      cell(row, entry.sources.join(" · "));
+      const state = document.createElement("select");
+      state.setAttribute("aria-label", `Prüfstand für ${entry.symbol}`);
+      for (const value of statuses) state.add(new Option(value, value));
+      state.value = entry.status;
+      state.addEventListener("change", () => { entry.status = state.value; save(); if (filter) render(); });
+      cell(row).append(state);
+      const note = document.createElement("textarea");
+      note.setAttribute("aria-label", `Chartnotiz für ${entry.symbol}`);
+      note.value = entry.note;
+      note.rows = 2;
+      note.addEventListener("input", () => { entry.note = note.value; save(); });
+      cell(row).append(note);
+      const links = cell(row);
+      links.className = "chart-links";
+      chartLink(links, "TradingView", `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(entry.symbol)}`);
+      if (entry.us) chartLink(links, "Tori 4h", `http://127.0.0.1:8765/?symbol=${encodeURIComponent(entry.ticker)}&tf=4h`);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Entfernen";
+      remove.setAttribute("aria-label", `${entry.symbol} entfernen`);
+      remove.addEventListener("click", () => {
+        if (!window.confirm(`${entry.symbol} aus der Liste entfernen?`)) return;
+        entries.delete(entry.key);
+        save();
+        render();
+      });
+      cell(row).append(remove);
+      fragment.append(row);
+    }
+    byId("rows").replaceChildren(fragment);
+  }
+
+  byId("add").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const source = byId("source").value.trim();
+    if (!source) { notice("Gib eine Quelle oder ein Suchprofil an."); return; }
+    const tokens = byId("symbols").value.trim().split(/[\s,;]+/).filter(Boolean);
+    const instruments = tokens.map(identity);
+    const invalid = tokens.filter((_, index) => !instruments[index]);
+    if (invalid.length) { notice(`Bitte diese Angaben prüfen: ${invalid.join(", ")}`); return; }
+    if (!instruments.length) { notice("Gib mindestens einen Ticker ein."); return; }
+    let newCount = 0;
+    for (const instrument of instruments) {
+      if (merge({ ...instrument, status: statuses[0], note: "", sources: [source] })) newCount++;
+    }
+    if (save()) notice(`${newCount} neu, ${instruments.length - newCount} bereits vorhanden.`);
+    byId("symbols").value = "";
+    render();
+  });
+
+  for (const value of statuses) byId("filter").add(new Option(value, value));
+  byId("search").addEventListener("input", render);
+  byId("filter").addEventListener("change", render);
+  byId("backup").addEventListener("click", () => {
+    const url = URL.createObjectURL(new Blob([snapshot()], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "tori-kandidaten.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  byId("restore").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const restored = readBackup(JSON.parse(await file.text()));
+      for (const entry of restored) merge(entry);
+      if (save()) notice(`${restored.length} gesicherte Einträge eingelesen.`);
+      render();
+    } catch (error) {
+      notice(`Liste konnte nicht eingelesen werden. ${error.message}`);
+    } finally {
+      event.target.value = "";
+    }
+  });
+  try {
+    const saved = localStorage.getItem(storeKey);
+    if (saved) for (const entry of readBackup(JSON.parse(saved))) merge(entry);
+  } catch {
+    notice("Die gespeicherte Liste ist hier nicht lesbar. Du kannst eine Sicherungsdatei einlesen.");
+  }
+  render();
+</script>
+</html>

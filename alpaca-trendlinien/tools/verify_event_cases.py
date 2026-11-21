@@ -98,14 +98,16 @@ def reference(case, fine, timeline, cutoff):
     return results
 
 
-def verify(root, samples_per_stock=2, prefix=False):
+def verify(root, samples_per_stock=2, prefix=False, selected=None):
     root = Path(root)
     p = checked(read(root/"plan.json"))
     count = fills = paths = replayed = 0
     replay_ids = []
     all_ids, pairs = set(), set()
     rng = random.Random(20261031)
-    for symbol in p["symbols"]:
+    symbols = p['symbols'] if selected is None else selected
+    assert set(symbols) <= set(p['symbols']) and len(symbols) == len(set(symbols))
+    for symbol in symbols:
         block = load_block(root, p, symbol)
         timeline = block["timeline"]
         states = {t["closedAt"]: t for t in timeline}
@@ -194,7 +196,10 @@ def verify(root, samples_per_stock=2, prefix=False):
               "futurePrefixChecked": prefix, "samplesPerStock": samples_per_stock,
               "replayedCaseIds": replay_ids, "sampleSeed": 20261031,
               "verifierSha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
-    write(root/"verification.json", result)
+    if selected is None:
+        write(root/"verification.json", result)
+    else:
+        result.update(verifiedSymbols=list(symbols), allCaseIds=sorted(all_ids), episodeFamilies=sorted(pairs))
     return result
 
 

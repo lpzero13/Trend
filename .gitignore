@@ -23,5 +23,7 @@
 *.sqlite3
 *.sqlite3-*
 *.db
+*.tar
+*.tar.gz
 .DS_Store
 Thumbs.db

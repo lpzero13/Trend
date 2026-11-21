@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tori · Tages-Radar &amp; 1.000-€-Papertrades</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/radar.css" />
+    <script defer src="/api.js"></script>
+    <script defer src="/radar.js"></script>
+  </head>
+  <body class="radar-page">
+    <nav class="app-navigation" aria-label="Hauptnavigation">
+      <span class="brand">tori<span>.</span></span>
+      <a href="/">Chart</a>
+      <a href="/radar" aria-current="page">Tages-Radar</a>
+      <a href="/backtest">Backtest-Replay</a>
+      <details class="nav-more">
+        <summary>Mehr ▾</summary>
+        <div class="nav-more-menu">
+          <a href="/zufall">Zufall</a>
+          <a href="/sammler">Datensammler</a>
+        </div>
+      </details>
+    </nav>
+
+    <main class="radar-shell">
+      <header class="radar-hero">
+        <div>
+          <h1>Tages-Radar: Top 10 &amp; 1.000-€-Papertrade-Watchlist</h1>
+          <p class="radar-sub">
+            Streng kausaler 4H-Master-Scan nach US-Börsenschluss (6 Pflicht-Tore, 5 Einstiegs-Szenarien, 10-Punkte-Score).
+            Sichtprüfung im Chart mit einem Klick – Übernahme in Watchlist mit separat 1.000 € Kapital pro Aktie.
+          </p>
+        </div>
+        <div class="radar-actions">
+          <button id="btn-scan" class="btn-primary">Top-10-Scan starten (lokal)</button>
+          <button id="btn-eval" class="btn-secondary">Watchlist &amp; Papertrades aktualisieren</button>
+        </div>
+      </header>
+
+      <section class="radar-controls card" aria-label="Scan-Filter">
+        <label>
+          Zielsitzung
+          <input id="inp-session" type="text" value="latest" placeholder="latest, auto oder YYYY-MM-DD" />
+        </label>
+        <label>
+          Universum
+          <select id="sel-universe">
+            <option value="all" selected>Alle (Dow + Nasdaq-100 + S&amp;P 500)</option>
+            <option value="nasdaq100">Nasdaq-100</option>
+            <option value="sp500">S&amp;P 500</option>
+            <option value="dow30">Dow 30</option>
+          </select>
+        </label>
+        <label>
+          Szenario
+          <select id="sel-scenario">
+            <option value="all" selected>Alle Szenarien (1–5)</option>
+            <option value="breakout">Szenario 1 · Frischer Ausbruch</option>
+            <option value="immediate">Szenario 2 · Unmittelbar (&le; 0,40 ATR)</option>
+            <option value="approach">Szenario 3 · Vorwarnung (0,40–0,85 ATR)</option>
+            <option value="retest">Szenario 4 · Roter Retest</option>
+            <option value="fast_a">Anhang · Fast-A+ (2K vor 3K)</option>
+          </select>
+        </label>
+        <label>
+          Mindest-Punkte
+          <select id="sel-min-score">
+            <option value="0" selected>0+</option>
+            <option value="4">4+</option>
+            <option value="6">6+</option>
+            <option value="7">7+</option>
+            <option value="8">8+</option>
+          </select>
+        </label>
+        <label>
+          Qualitäts-Stufe (Sortiert C → B → 4 → A)
+          <select id="sel-quality">
+            <option value="all" selected>Alle Stufen (C immer ganz oben)</option>
+            <option value="focus">Nur Fokus-Stufen (C + B + 4 + A)</option>
+            <option value="quiet">Nur Ruhige Vola (C + B + 4)</option>
+            <option value="tier_c">Nur Stufe C (Premium)</option>
+            <option value="core">Nur 3/3-Kern (C + A)</option>
+          </select>
+        </label>
+        <label>
+          Stop-Nachführung (Watchlist)
+          <select id="sel-stop-policy">
+            <option value="r2_fan" selected>Original bis +2R, danach Fächer</option>
+            <option value="qualified_fan">Original + nur 3-Kontakt-Safety</option>
+            <option value="original_safety">Nur ursprüngliche Safety-Linie</option>
+          </select>
+        </label>
+      </section>
+
+      <div id="radar-status" class="radar-banner" hidden></div>
+
+      <!-- Informative US Market Regime Bar (SPY & QQQ vs SMA200/SMA50, no hard buy ban) -->
+      <section id="market-regime-bar" class="regime-bar card" aria-label="US-Marktlage" hidden>
+        <div class="regime-left">
+          <span id="regime-dot" class="regime-dot"></span>
+          <div>
+            <strong id="regime-label">Marktlage wird geladen …</strong>
+            <p id="regime-hint" class="muted regime-hint"></p>
+          </div>
+        </div>
+        <div id="regime-metrics" class="regime-metrics"></div>
+      </section>
+
+      <!-- KPI Summary Bar -->
+      <section class="kpi-grid" aria-label="Papertrade-Bilanz">
+        <div class="kpi card">
+          <span class="kpi-label">Watchlist (wartend)</span>
+          <strong id="kpi-watching">0</strong>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Offene Papertrades</span>
+          <strong id="kpi-open">0</strong>
+          <small id="kpi-open-cap">0 € Kapital</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Offene Buch-P/L</span>
+          <strong id="kpi-open-pnl">0,00 €</strong>
+          <small id="kpi-open-pct">0,00 %</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Realisierte P/L</span>
+          <strong id="kpi-real-pnl">0,00 €</strong>
+          <small id="kpi-winrate">Geschlossen: 0</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Gesamt-P/L</span>
+          <strong id="kpi-total-pnl">0,00 €</strong>
+          <small id="kpi-avg-r">Ø R: –</small>
+        </div>
+      </section>
+
+      <!-- Section 1: Top 10 of the Day -->
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Top 10 Aktien des Tages</h2>
+            <p id="scan-meta" class="muted">Noch kein Scan geladen.</p>
+          </div>
+          <span id="scan-audit" class="audit-pill"></span>
+        </div>
+        <div class="tier-legend" aria-label="Farblegende Qualitätsstufen">
+          <span class="tier-pill t-c"><strong>Stufe C · Premium</strong> (Direkt+Aktiv+Reife+Ruhig · +0,23R)</span>
+          <span class="tier-pill t-b"><strong>Stufe B · Stark</strong> (Aktiv+Reife+Ruhig · +0,21R)</span>
+          <span class="tier-pill t-4"><strong>Stufe 4 · Ruhige Vola</strong> (&lt;1,5% ATR · +0,16R)</span>
+          <span class="tier-pill t-a"><strong>Stufe A · 3/3-Kern</strong> (Direkt+Aktiv+Reife)</span>
+          <span class="tier-pill t-basis"><strong>Basis</strong> (übrige)</span>
+        </div>
+        <div class="table-wrap">
+          <table class="radar-table" id="top10-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Aktie</th>
+                <th>Szenario</th>
+                <th>Punkte</th>
+                <th>Schluss</th>
+                <th>Abstand Rot</th>
+                <th>Einstiegsschwelle</th>
+                <th>Stop (0,3%)</th>
+                <th>Risiko</th>
+                <th>+2R-Ziel</th>
+                <th>Rot / Grün</th>
+                <th>Trend-Kontext</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="top10-body">
+              <tr><td colspan="13" class="empty">Klicke oben auf „Top-10-Scan starten (lokal)“, um die lokale 520-Aktien-Datenbank auszuwerten.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="fast-a-box" class="fast-a-box" hidden>
+          <h3>Anhang: Fast-A+ (2 Kontakte unmittelbar vor Kontakt Nr. 3, max. Top 3)</h3>
+          <div id="fast-a-list" class="fast-a-list"></div>
+        </div>
+      </section>
+
+      <!-- Section 2: Watchlist & 1.000-EUR Papertrades -->
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Watchlist &amp; 1.000-€-Papertrades (je Aktie separat)</h2>
+            <p class="muted" id="model-note">
+              Ausgewählte Aktien werden kausal überwacht und bei Erfüllung der Tori-Einstiegskriterien automatisch mit separat 1.000 € eröffnet.
+            </p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="radar-table">
+            <thead>
+              <tr>
+                <th>Aktie</th>
+                <th>Status</th>
+                <th>Aufgenommen</th>
+                <th>Einstieg</th>
+                <th>Aktueller Kurs</th>
+                <th>Aktiver Stop</th>
+                <th>Gewinn / Verlust</th>
+                <th>R / Max. Plus / Minus</th>
+                <th>Eigene Notiz</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="watch-body">
+              <tr><td colspan="10" class="empty">Noch keine Aktien auf der Watchlist. Wähle oben Favoriten aus den Top 10 aus.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section 3: Chronological Updates -->
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Entwicklungs-Updates (Verlauf)</h2>
+            <p class="muted">Chronologisches Protokoll aller Ausbrüche, Einstiege, Stop-Nachführungen und Tages-Updates.</p>
+          </div>
+        </div>
+        <ul id="updates-list" class="updates-list">
+          <li class="empty">Noch keine Entwicklungs-Updates vorhanden.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

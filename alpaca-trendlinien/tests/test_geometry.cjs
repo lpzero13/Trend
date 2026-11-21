@@ -5,6 +5,35 @@ const { RayGeometry: G, RayLayer } = require("../static/drawings.js");
 const hour = 3600;
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
 
+test('ray preview and committed anchors use the same calendar axis in empty future space',()=>{
+ const observed=[0,hour,2*hour],calendar=[...observed,72*hour,73*hour,74*hour];
+ const scale={logicalToCoordinate:n=>n*100,coordinateToLogical:x=>x/100,width:()=>1000};
+ const layer=Object.assign(Object.create(RayLayer.prototype),{axis:()=>observed,drawingAxes:{'1h':calendar},timeframe:'1h',
+  chart:{timeScale:()=>scale,panes:()=>[{getHeight:()=>500}]},series:{coordinateToPrice:y=>y,priceToCoordinate:p=>p},
+  active:true,measureActive:false,items:[],undoStack:[],draft:null,cutoff:2*hour,coords:e=>({x:e.clientX,y:e.clientY}),update(){},onChange(){}});
+ const event=(x,y)=>({button:0,clientX:x,clientY:y,preventDefault(){},stopImmediatePropagation(){}});
+ layer.down(event(350.123,100));
+ near(layer.point(layer.draft.a,layer.axisFor(layer.draft)).x,350.123);
+ near(layer.point(layer.draft.a,layer.axisFor(layer.draft)).y,100);
+ layer.down(event(450.234,110));
+ near(layer.line(layer.items[0])[0].x,350.123);near(layer.line(layer.items[0])[1].x,450.234);
+});
+
+test('dragging a whole ray translates both anchors by candle distance across weekends',()=>{
+ const axis=[0,hour,72*hour,73*hour,74*hour],ray={id:'weekend',a:{time:0,price:100},b:{time:72*hour,price:110},basis:G.capture(axis)};
+ const layer=Object.assign(Object.create(RayLayer.prototype),{items:[ray],timeframe:'1h',axis:()=>axis,drawingAxes:{'1h':axis},
+  coords:()=>({x:0,y:0}),anchor:()=>({time:hour,price:101}),update(){},
+  drag:{key:'line',ray,start:{time:0,price:100},original:structuredClone(ray)}});
+ layer.move({preventDefault(){},stopImmediatePropagation(){}});
+ near(ray.a.time,hour);near(ray.b.time,73*hour);near(ray.b.price-ray.a.price,10);
+});
+
+test('pointer positions use the actual pane rectangle and its CSS scale',()=>{
+ const layer=Object.assign(Object.create(RayLayer.prototype),{host:{querySelector:()=>({getBoundingClientRect:()=>({left:20,top:40,width:800,height:400})})},
+  chart:{timeScale:()=>({width:()=>400}),panes:()=>[{getHeight:()=>200}]}});
+ assert.deepEqual(layer.coords({clientX:220,clientY:240}),{x:100,y:100});
+});
+
 test('fractional MTF anchors interpolate integer-only library coordinates instead of jumping to the left edge',()=>{
   const scale={logicalToCoordinate:n=>Number.isInteger(n)?n*100+20:0,coordinateToLogical:x=>Math.ceil((x-20)/100)};
   for(const n of [-.75,0,.1,.5,1,7.25]) {

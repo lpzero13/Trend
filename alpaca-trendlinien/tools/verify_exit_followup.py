@@ -45,11 +45,13 @@ def independently_select(case,timeline,policy):
     return out,gate
 
 
-def verify(root,samples=2):
+def verify(root,samples=2,selected=None):
     p=checked(read(Path(root)/'plan.json'));sp=check_source(read(Path(p['sourceRoot'])/'plan.json'))
     assert p['sourcePlanId']==sp['id']
     rng=random.Random(20261031);cases=paths=replays=0;sample_ids=[]
-    for symbol in p['symbols']:
+    symbols=p['symbols'] if selected is None else selected
+    assert set(symbols)<=set(p['symbols']) and len(symbols)==len(set(symbols))
+    for symbol in symbols:
         base=load_block(p['sourceRoot'],sp,symbol);value=load_followup(root,p,symbol)
         assert value['sourceChecksum']==base['checksum']
         assert value['caseIds']==[c['id'] for c in base['cases']]
@@ -99,7 +101,8 @@ def verify(root,samples=2):
         print(json.dumps({'symbol':symbol,'casesVerified':cases,'independentReplays':replays}),flush=True)
     result={'planId':p['id'],'passed':True,'cases':cases,'newPaths':paths,'independent5mReplays':replays,
             'sampleIds':sample_ids,'sampleSeed':20261031,'verifierSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
-    write(Path(root)/'verification.json',result)
+    if selected is None:write(Path(root)/'verification.json',result)
+    else:result.update(verifiedSymbols=list(symbols))
     return result
 
 

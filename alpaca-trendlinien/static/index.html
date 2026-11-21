@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,6 +13,8 @@
     <script defer src="/vendor/lightweight-charts.js"></script>
     <script defer src="/drawings.js"></script>
     <script defer src="/api.js"></script>
+    <script defer src="/replay-buffer.js"></script>
+    <script defer src="/replay-window.js"></script>
     <script defer src="/analysis.js"></script>
     <script defer src="/measurements.js"></script>
     <script defer src="/entry-history.js"></script>
@@ -22,10 +24,16 @@
     <nav class="app-navigation" aria-label="Hauptnavigation">
       <span class="brand">tori<span>.</span></span>
       <a href="/" aria-current="page">Chart</a>
-      <a href="/research">Forschung</a>
-      <a href="/lab">Labor</a>
-      <a href="/watch">Beobachtung</a>
-    <a href="/pruefung">Sichtprüfung</a><a href="/kandidaten">Kandidaten</a><a href="/faecher">Fächer-Test</a><a href="/sammler">Datensammler</a><a href="/zufall">Zufall</a></nav>
+      <a href="/radar">Tages-Radar</a>
+      <a href="/backtest">Backtest-Replay</a>
+      <details class="nav-more">
+        <summary>Mehr ▾</summary>
+        <div class="nav-more-menu">
+          <a href="/zufall">Zufall</a>
+          <a href="/sammler">Datensammler</a>
+        </div>
+      </details>
+    </nav>
     <header class="toolbar">
       <button
         id="symbol-button"
@@ -53,92 +61,374 @@
       >
         <option value="trading">Handelskerzen</option>
       </select>
+      <div class="divider"></div>
+      <div class="toolbar-group">
+        <select id="analysis-engine" aria-label="Analysemodell" title="Linienfinder auswählen; Analyse bleibt zunächst aus">
+          <option value="legacy">Bisherige Linien</option>
+          <option value="fan_master">Pine Master · 29.10.</option>
+          <option value="fan_extreme">Tori-Fächer</option>
+          <option value="fan_local">Fächer: mehrere Startanker</option>
+        </select>
+        <button
+          id="tori-analysis"
+          class="analysis-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-controls="info-panel"
+          title="Automatische Tori-Analyse einschalten (Taste T)"
+        >Tori-Analyse: Aus</button>
+        <button id="entry-history-toggle" type="button" aria-pressed="false" aria-controls="entry-history-panel" title="Historische Einstiege ein-/ausblenden">Historische Einstiege</button>
+      </div>
       <div class="toolbar-spacer"></div>
-      <select id="analysis-engine" aria-label="Analysemodell" title="Linienfinder auswählen; Analyse bleibt zunächst aus">
-        <option value="legacy">Bisherige Linien</option>
-        <option value="fan_master">Pine Master · 29.10.</option>
-        <option value="fan_extreme">Tori-Fächer</option>
-        <option value="fan_local">Fächer: mehrere Startanker</option>
-      </select>
-
-
-      <button
-        id="tori-analysis"
-        class="analysis-toggle"
-        type="button"
-        aria-pressed="false"
-        aria-controls="info-panel"
-        title="Automatische Tori-Analyse einschalten"
-      >Tori-Analyse: Aus</button>
-      <button id="entry-history-toggle" type="button" aria-pressed="false" aria-controls="entry-history-panel">Historische Einstiege</button>
-      <button
-        id="history-button"
-        title="Chart zu einem vergangenen Zeitpunkt anzeigen"
-        aria-label="Chartzeitpunkt auswählen"
-      >
-        Datum
-      </button>
-      <div class="replay-controls" aria-label="Kerzenweise Wiedergabe">
+      <div class="toolbar-group">
         <button
-          id="step-back"
-          aria-label="Eine Kerze zurück"
-          title="Eine Kerze zurück (←)"
+          id="history-button"
+          title="Chart zu einem vergangenen Zeitpunkt anzeigen"
+          aria-label="Chartzeitpunkt auswählen"
         >
-          ◀
+          Datum
         </button>
-        <span id="replay-interval">4h</span>
+        <div class="replay-controls" aria-label="Kerzenweise Wiedergabe">
+          <button
+            id="step-back"
+            aria-label="Eine Kerze zurück"
+            title="Eine Kerze zurück (←)"
+          >
+            ◀
+          </button>
+          <span id="replay-interval">4h</span>
+          <span id="replay-buffer-status" role="status" style="font-size:11px;color:var(--muted)"></span>
+          <button
+            id="step-next"
+            aria-label="Eine Kerze weiter"
+            title="Eine Kerze weiter (→)"
+          >
+            ▶
+          </button>
+          <button
+            id="replay-play"
+            type="button"
+            aria-pressed="false"
+            aria-label="Automatische Wiedergabe starten oder pausieren"
+            title="Replay abspielen / pausieren (Taste P)"
+          >
+            ⏯
+          </button>
+        </div>
         <button
-          id="step-next"
-          aria-label="Eine Kerze weiter"
-          title="Eine Kerze weiter (→)"
+          id="freeze-button"
+          hidden
+          title="Automatische Linien mit Datenbasis lokal speichern und fixieren"
+          aria-pressed="false"
         >
-          ▶
+          Linien jetzt fixieren
         </button>
       </div>
-      <button
-        id="freeze-button"
-        hidden
-        title="Automatische Linien mit Datenbasis lokal speichern und fixieren"
-        aria-pressed="false"
-      >
-        Linien jetzt fixieren
-      </button>
-      <button
-        id="refresh-button"
-        title="Neue Kerzen abrufen"
-        aria-label="Daten aktualisieren"
-      >
-        ↻</button
-      ><button
-        id="theme-button"
-        title="Darstellung wechseln"
-        aria-label="Zwischen Hell- und Dunkelmodus wechseln"
-        aria-pressed="false"
-      >
-        ☀ Hell</button
-      ><button
-        id="info-button"
-        hidden
-        title="Infobox ein-/ausblenden"
-        aria-label="Infobox ein-/ausblenden"
-        aria-pressed="true"
-      >
-        ⓘ
-      </button>
+      <div class="divider"></div>
+      <div class="toolbar-group">
+        <button
+          id="refresh-button"
+          title="Neue Kerzen abrufen"
+          aria-label="Daten aktualisieren"
+        >
+          ↻</button
+        ><button
+          id="theme-button"
+          title="Darstellung wechseln"
+          aria-label="Zwischen Hell- und Dunkelmodus wechseln"
+          aria-pressed="false"
+        >
+          ☀ Hell</button
+        ><button
+          id="info-button"
+          hidden
+          title="Infobox ein-/ausblenden"
+          aria-label="Infobox ein-/ausblenden"
+          aria-pressed="true"
+        >
+          ⓘ
+        </button>
+      </div>
     </header>
-    <div class="practice-controls">
-      <label>Farbe <input type="color" id="line-color" value="#3988ee" aria-label="Linienfarbe" title="Farbe der ausgewählten Linie und neuer Linien"></label>
-      <label>Linienart <select id="line-extension" aria-label="Verlängerung eigener Linien">
-        <option value="right">Ray nach rechts →</option><option value="left">Ray nach links ←</option>
-        <option value="both">Gerade in beide Richtungen ↔</option><option value="segment">Strecke zwischen zwei Punkten</option>
-        <option value="horizontal">Horizontaler Widerstand / Unterstützung ↔</option>
-      </select></label>
-      <label id="master-date-control" hidden><input id="master-date" type="checkbox" checked> Stichtagslinie</label> <label id="master-sma-control" hidden title="SMA 50/200 nur als Kontext"><input id="master-sma" type="checkbox" checked> SMA 50/200</label>
+    <div id="bt-case-bar" class="bt-case-bar" hidden>
+      <span id="bt-case-badge" class="bt-case-badge"></span>
+      <span id="bt-case-info" class="bt-case-info"></span>
+      <div class="bt-case-actions">
+        <button id="bt-jump-entry" type="button" title="Zurück zum Einstiegstag dieses Backtest-Falls">⏮ Zum Einstieg</button>
+        <button id="bt-jump-exit" type="button" title="Direkt zum Ausstiegszeitpunkt des Backtests springen">⏭ Zum Backtest-Ende</button>
+        <button id="bt-case-close" type="button" title="Backtest-Markierungen ausblenden">×</button>
+      </div>
+    </div>
+    <div id="random-bar" class="practice-controls random-bar">
       <span id="random-controls" hidden><button id="random-new" type="button">⚄ Neu würfeln</button><button id="random-reset" type="button">Zum Startpunkt</button></span>
       <span id="random-note" role="status" hidden></span>
     </div>
     <main id="workspace">
-      <div id="chart" aria-label="Interaktiver Kerzenchart"></div>
+      <nav class="drawing-tools" aria-label="Zeichenwerkzeuge">
+        <button
+          id="cursor-tool"
+          title="Auswählen / Verschieben (V)"
+          aria-label="Auswählen"
+          aria-pressed="true"
+        >
+          <svg viewBox="0 0 24 24"><path d="M5 4l6.5 16 2.5-6 6-2.5L5 4z" /></svg>
+        </button>
+        <button
+          id="ray-tool"
+          title="Trendlinie / Ray zeichnen (R)"
+          aria-label="Ray zeichnen"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M4 19 20 3M14 3h6v6" />
+            <circle cx="6" cy="17" r="2" />
+            <circle cx="13" cy="10" r="2" />
+          </svg>
+        </button>
+        <button
+          id="horiz-tool"
+          title="Horizontale Linie (H) · 1 Klick auf Preis"
+          aria-label="Horizontale Linie zeichnen"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M3 12h18" />
+            <circle cx="12" cy="12" r="2.2" />
+          </svg>
+        </button>
+        <button
+          id="rect-tool"
+          type="button"
+          title="Rechteck / Zone zeichnen (Z) · Widerstand & Unterstützung markieren"
+          aria-label="Rechteck oder Zone zeichnen"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <rect x="4" y="6" width="16" height="12" rx="1.5" />
+            <circle cx="4" cy="6" r="1.5" />
+            <circle cx="20" cy="18" r="1.5" />
+          </svg>
+        </button>
+        <button
+          id="longbox-tool"
+          type="button"
+          title="Long-Position planen (L) · Einstieg, Stop, +2R & 1.000 € Stückzahl"
+          aria-label="Long-Position planen"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <rect x="4" y="4" width="16" height="9" rx="1" stroke="#26a69a" />
+            <rect x="4" y="13" width="16" height="7" rx="1" stroke="#ef5350" />
+            <path d="M4 13h16" />
+          </svg>
+        </button>
+        <button
+          id="measure-tool"
+          title="Preisänderung messen (M) · zwei Punkte setzen"
+          aria-label="Preisänderung messen"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4" />
+          </svg>
+        </button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button
+          id="magnet-tool"
+          type="button"
+          title="Docht-Magnet (G) · rastet an Kerzen-High/Low ein"
+          aria-label="Docht-Magnet ein- oder ausschalten"
+          aria-pressed="false"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M6 5v7a6 6 0 0 0 12 0V5M6 5h3v7a3 3 0 0 0 6 0V5h3M6 9h3M15 9h3" />
+          </svg>
+        </button>
+        <button
+          id="measurements-tool"
+          aria-label="Gespeicherte Messungen öffnen"
+          title="Gespeicherte Messungen"
+        >
+          <svg viewBox="0 0 24 24">
+            <rect x="4" y="5" width="16" height="14" rx="2" />
+            <path d="M8 9h8M8 13h8M8 17h5" />
+          </svg>
+        </button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button
+          id="undo-tool"
+          title="Letzte Linien- oder Messänderung rückgängig (Strg+Z)"
+          aria-label="Zeichnung rückgängig"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M9 10H5V6M5 10a7 7 0 1 1 2 9.5" />
+          </svg>
+        </button>
+        <button
+          id="delete-tool"
+          title="Ausgewählte Linie oder Messung löschen (Entf)"
+          aria-label="Ausgewählte Zeichnung löschen"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12M10 11v5M14 11v5" />
+          </svg>
+        </button>
+      </nav>
+      <div id="chart-stage" class="chart-stage">
+        <div id="chart-watermark" class="chart-watermark" aria-hidden="true"></div>
+        <div id="chart" aria-label="Interaktiver Kerzenchart"></div>
+        <div id="drawing-style-bar" class="drawing-style-bar" hidden aria-label="Linienstil">
+          <div class="swatch-row" role="group" aria-label="Schnellfarben">
+            <button type="button" class="swatch" data-swatch="#3988ee" style="--sw:#3988ee" title="Blau"></button>
+            <button type="button" class="swatch" data-swatch="#ef5350" style="--sw:#ef5350" title="Rot"></button>
+            <button type="button" class="swatch" data-swatch="#26a69a" style="--sw:#26a69a" title="Grün"></button>
+            <button type="button" class="swatch" data-swatch="#f59e0b" style="--sw:#f59e0b" title="Gelb"></button>
+            <button type="button" class="swatch" data-swatch="#a855f7" style="--sw:#a855f7" title="Lila"></button>
+            <button type="button" class="swatch" data-swatch="#e6edf3" style="--sw:#e6edf3" title="Weiß"></button>
+            <input type="color" id="line-color" value="#3988ee" aria-label="Linienfarbe" title="Eigene Farbe wählen">
+          </div>
+          <span class="style-sep" aria-hidden="true"></span>
+          <div class="ext-row" role="group" aria-label="Linienart">
+            <button type="button" class="ext-btn" data-ext="right" title="Ray nach rechts →">↗</button>
+            <button type="button" class="ext-btn" data-ext="horizontal" title="Horizontal ↔">↔</button>
+            <button type="button" class="ext-btn" data-ext="segment" title="Strecke">╱</button>
+            <button type="button" class="ext-btn" data-ext="both" title="Gerade in beide Richtungen">⟷</button>
+            <select id="line-extension" class="ext-select" aria-label="Verlängerung eigener Linien">
+              <option value="right">Ray →</option>
+              <option value="left">Ray ←</option>
+              <option value="both">Gerade ↔</option>
+              <option value="segment">Strecke</option>
+              <option value="horizontal">Horizontal ↔</option>
+            </select>
+          </div>
+        </div>
+        <div id="master-date-line" hidden aria-hidden="true"><span></span></div>
+        <div class="instrument">
+          <div class="instrument-top">
+            <strong id="company">Kursdaten werden geladen</strong>
+            <span class="muted">· <span id="interval-label">4h</span> · <span id="feed-label">IEX</span> · USD</span>
+            <span id="analysis-state" class="analysis-state" role="status"></span>
+          </div>
+          <div id="ohlc" class="ohlc">—</div>
+          <div class="chart-legend" aria-label="Indikatoren">
+            <label id="sma200-control" class="legend-pill legend-sma" title="SMA 200 ein-/ausblenden (Taste S)">
+              <input id="sma200" type="checkbox" checked>
+              <span class="legend-dot" style="background:#cf8500"></span>
+              <span class="legend-name">SMA 200</span>
+              <span id="sma200-status" role="status" class="sma-status" hidden></span>
+            </label>
+            <label id="volume-control" class="legend-pill legend-vol" title="Volumen ein-/ausblenden (Taste B)">
+              <input id="volume-toggle" type="checkbox" checked>
+              <span class="legend-dot" style="background:#26a69a"></span>
+              <span class="legend-name">Volumen</span>
+            </label>
+            <label id="master-sma-control" class="legend-pill" hidden title="Zusätzlicher SMA 50 im Pine-Master-Modell">
+              <input id="master-sma" type="checkbox" checked>
+              <span class="legend-dot" style="background:#a855f7"></span>
+              <span class="legend-name">SMA 50</span>
+            </label>
+            <label id="master-date-control" class="legend-pill" hidden title="Stichtagslinie ein-/ausblenden">
+              <input id="master-date" type="checkbox" checked>
+              <span class="legend-dot" style="background:#3b82f6"></span>
+              <span class="legend-name">Stichtag</span>
+            </label>
+          </div>
+          <div id="synthetic-notice" class="synthetic-notice" role="status" hidden>SYNTHETISCHE TESTDATEN · keine Börsenkurse</div>
+          <div id="replay-status" class="replay-toast" role="status"></div>
+        </div>
+        <div
+          id="measurement-result"
+          class="measurement-result"
+          role="status"
+          hidden
+        >
+          <span id="measurement-text"></span
+          ><button
+            id="clear-measurement"
+            aria-label="Messung entfernen"
+            title="Messung entfernen"
+          >
+            ×
+          </button>
+        </div>
+        <aside
+          id="info-panel"
+          hidden
+          class="info-panel"
+          aria-label="Trendlinien-Infobox"
+        >
+          <div class="info-heading">
+            <b>Tori · Kerzenbasis</b>
+            <div>
+              <button
+                id="collapse-info"
+                title="Infobox einklappen"
+                aria-label="Infobox einklappen"
+                aria-expanded="true"
+              >
+                −
+              </button>
+              <label><input id="outer-lines" type="checkbox" /> Äußere</label
+              ><button
+                id="details-button"
+                title="Daten und Anker"
+                aria-label="Daten und Anker anzeigen"
+              >
+                ⋯
+              </button>
+            </div>
+          </div>
+          <div id="line-table"></div>
+          <div class="projection-note">
+            Linienpreise: Chartprojektion · Brüche: Quellintervall
+          </div>
+          <div class="layer-controls" id="layer-controls"></div>
+          <label class="fit-lines-control"
+            ><input id="fit-lines" type="checkbox" /> Linien einpassen</label
+          >
+          <div id="drawing-summary" class="drawing-summary">Eigene Rays: 0</div>
+        </aside>
+        <nav class="view-tools" aria-label="Chartansicht">
+          <button
+            id="zoom-out"
+            aria-label="Herauszoomen"
+            title="Herauszoomen (−)"
+          >
+            −
+          </button>
+          <button id="zoom-in" aria-label="Hineinzoomen" title="Hineinzoomen (+)">
+            +
+          </button>
+          <button
+            id="latest-view"
+            aria-label="Zur letzten Kerze"
+            title="Zur letzten Kerze, Zoom beibehalten (Pos1)"
+          >
+            ▶|
+          </button>
+          <button
+            id="reset-view"
+            aria-label="Ansicht zurücksetzen"
+            title="Ansicht und Preisskala zurücksetzen (0)"
+          >
+            Ansicht ↺
+          </button>
+          <button
+            id="auto-scale"
+            aria-label="Automatische Preisskala"
+            title="Preisbereich automatisch an sichtbare Kerzen anpassen"
+            aria-pressed="true"
+          >
+            Auto
+          </button>
+        </nav>
+        <div id="drawing-hint" class="drawing-hint" role="status" hidden></div>
+        <div id="loading" class="loading" role="status" hidden>
+          <span class="spinner"></span><b id="loading-text">Kursdaten laden …</b
+          ><small>Beim ersten Abruf wird die Historie gespeichert.</small>
+        </div>
+        <div id="error" class="error" role="alert" hidden></div>
+      </div>
       <aside id="entry-history-panel" class="entry-history-panel" hidden aria-label="Historische Einstiege">
         <details open>
           <summary>Historische Einstiege · feste Signale</summary>
@@ -185,155 +475,6 @@
           </div>
         </details>
       </aside>
-      <div id="master-date-line" hidden aria-hidden="true"><span></span></div>
-      <div class="instrument">
-        <strong id="company">Kursdaten werden geladen</strong
-        ><span class="muted">
-          · <span id="interval-label">4h</span> · <span id="feed-label">IEX</span> · USD</span
-        >
-        <div id="ohlc" class="ohlc">—</div>
-        <div id="synthetic-notice" class="synthetic-notice" role="status" hidden>SYNTHETISCHE TESTDATEN · keine Börsenkurse</div>
-        <div id="analysis-state" class="analysis-state" role="status"></div>
-        <div id="replay-status" class="analysis-state" role="status"></div>
-      </div>
-      <nav class="drawing-tools" aria-label="Zeichenwerkzeuge">
-        <button
-          id="cursor-tool"
-          title="Auswählen / Verschieben (V)"
-          aria-label="Auswählen"
-          aria-pressed="true"
-        >
-          ↖</button
-        ><button
-          id="ray-tool"
-          title="Ray zeichnen (R)"
-          aria-label="Ray zeichnen"
-          aria-pressed="false"
-        >
-          <svg viewBox="0 0 24 24">
-            <path d="M4 19 20 3M14 3h6v6" />
-            <circle cx="6" cy="17" r="2" />
-            <circle cx="13" cy="10" r="2" />
-          </svg></button
-        ><button
-          id="measure-tool"
-          title="Preisänderung messen (M) · zwei Punkte setzen"
-          aria-label="Preisänderung messen"
-          aria-pressed="false"
-        >
-          ↕</button
-        ><button
-          id="measurements-tool"
-          aria-label="Gespeicherte Messungen öffnen"
-          title="Gespeicherte Messungen"
-        >
-          ▤</button
-        ><button
-          id="undo-tool"
-          title="Letzte Linien- oder Messänderung rückgängig (Strg+Z)"
-          aria-label="Zeichnung rückgängig"
-        >
-          ↶</button
-        ><button
-          id="delete-tool"
-          title="Ausgewählte Linie oder Messung löschen (Entf)"
-          aria-label="Ausgewählte Zeichnung löschen"
-        >
-          ⌫
-        </button>
-      </nav>
-      <div
-        id="measurement-result"
-        class="measurement-result"
-        role="status"
-        hidden
-      >
-        <span id="measurement-text"></span
-        ><button
-          id="clear-measurement"
-          aria-label="Messung entfernen"
-          title="Messung entfernen"
-        >
-          ×
-        </button>
-      </div>
-      <aside
-        id="info-panel"
-        hidden
-        class="info-panel"
-        aria-label="Trendlinien-Infobox"
-      >
-        <div class="info-heading">
-          <b>Tori · Kerzenbasis</b>
-          <div>
-            <button
-              id="collapse-info"
-              title="Infobox einklappen"
-              aria-label="Infobox einklappen"
-              aria-expanded="true"
-            >
-              −
-            </button>
-            <label><input id="outer-lines" type="checkbox" /> Äußere</label
-            ><button
-              id="details-button"
-              title="Daten und Anker"
-              aria-label="Daten und Anker anzeigen"
-            >
-              ⋯
-            </button>
-          </div>
-        </div>
-        <div id="line-table"></div>
-        <div class="projection-note">
-          Linienpreise: Chartprojektion · Brüche: Quellintervall
-        </div>
-        <div class="layer-controls" id="layer-controls"></div>
-        <label class="fit-lines-control"
-          ><input id="fit-lines" type="checkbox" /> Linien einpassen</label
-        >
-        <div id="drawing-summary" class="drawing-summary">Eigene Rays: 0</div>
-      </aside>
-      <nav class="view-tools" aria-label="Chartansicht">
-        <button
-          id="zoom-out"
-          aria-label="Herauszoomen"
-          title="Herauszoomen (−)"
-        >
-          −
-        </button>
-        <button id="zoom-in" aria-label="Hineinzoomen" title="Hineinzoomen (+)">
-          +
-        </button>
-        <button
-          id="latest-view"
-          aria-label="Zur letzten Kerze"
-          title="Zur letzten Kerze, Zoom beibehalten (Pos1)"
-        >
-          ▶|
-        </button>
-        <button
-          id="reset-view"
-          aria-label="Ansicht zurücksetzen"
-          title="Ansicht und Preisskala zurücksetzen (0)"
-        >
-          Ansicht ↺
-        </button>
-        <button
-          id="auto-scale"
-          aria-label="Automatische Preisskala"
-          title="Preisbereich automatisch an sichtbare Kerzen anpassen"
-          aria-pressed="true"
-        >
-          Auto
-        </button>
-      </nav>
-      <div id="drawing-hint" class="drawing-hint" role="status" hidden></div>
-      <div id="loading" class="loading" role="status" hidden>
-        <span class="spinner"></span><b id="loading-text">Kursdaten laden …</b
-        ><small>Beim ersten Abruf wird die Historie gespeichert.</small>
-      </div>
-      <div id="error" class="error" role="alert" hidden></div>
     </main>
     <footer>
       <span id="connection" role="status">Verbinden …</span

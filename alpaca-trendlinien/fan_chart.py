@@ -20,7 +20,7 @@ def selected_engine(query):
     return values[0]
 
 
-def apply(payload, engine="fan_extreme", *, config=None, case=None):
+def apply(payload, engine="fan_extreme", *, config=None, case=None, lane_loader=None, context_loader=None, gap_loader=None):
     if engine not in ENGINES[1:]:
         raise DataError("Ungültiger Fächermodus.", 400)
     roots = engine.removeprefix("fan_")
@@ -30,11 +30,12 @@ def apply(payload, engine="fan_extreme", *, config=None, case=None):
         rows = [Bar(**b) for b in view["bars"]]
         meta = payload["sources"][tf]
         regular = meta.get("normalization") == NORMALIZATION or tf == "1W" and payload["sources"]["1D"].get("normalization") == NORMALIZATION
-        gaps = source_gaps(rows, rows[-1].end, tf) if regular else {}
+        gaps = (gap_loader(tf, rows) if gap_loader else source_gaps(rows, rows[-1].end, tf)) if regular else {}
         try:
             clean_atr=(config or {}).get('watch',{}).get('clean_atr',.15)
-            lane = cached_lane((engine,payload['symbol'],tf,stable_id(asdict(rules)),tuple(gaps.items()) if isinstance(gaps,dict) else tuple(gaps),clean_atr),rows,
-                               lambda:analyze(rows,tf,symbol=payload['symbol'],rules=rules,gaps=gaps,context_clean_atr=clean_atr))
+            lane = (lane_loader(rows, tf, rules, gaps, clean_atr) if lane_loader else
+                    cached_lane((engine,payload['symbol'],tf,stable_id(asdict(rules)),tuple(gaps.items()) if isinstance(gaps,dict) else tuple(gaps),clean_atr),rows,
+                               lambda:analyze(rows,tf,symbol=payload['symbol'],rules=rules,gaps=gaps,context_clean_atr=clean_atr)))
         except DataError as exc:
             if exc.status != 404:
                 raise
@@ -47,7 +48,7 @@ def apply(payload, engine="fan_extreme", *, config=None, case=None):
             from fan_master import context
             from fan_execution import ExecutionRules
             from fan_observer import WatchRules
-            lane["context"] = context(rows, gaps)
+            lane["context"] = context_loader(tf, rows, gaps) if context_loader else context(rows, gaps)
             lane["tightSafety"] = lane.get("green")
             lane["safetyChoice"] = (config or {}).get("watch", {}).get("safety_choice", "tight")
             # Original immutable case Safety below remains authoritative.

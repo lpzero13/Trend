@@ -87,10 +87,15 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
     return identity
 
 
-def read_dataset(identity):
+def read_dataset(identity, *, timeframes=None):
     try:
         payload = json.loads(path_for(identity).read_text("utf-8"))
         from parquet_store import hydrate
+        if timeframes is not None and payload.get("storage"):
+            payload = hydrate(payload, data_dir(), timeframes=timeframes)
+            if payload["id"] != identity or payload["material"]["schema"] != SCHEMA:
+                raise ValueError("checksum")
+            return payload
         payload = hydrate(payload, data_dir())
         if payload["id"] != identity or payload["material"]["schema"] != SCHEMA or digest(payload["material"]) != identity:
             raise ValueError("checksum")

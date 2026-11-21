@@ -32,7 +32,7 @@ function payload(analyzed, research = false) {
   };
 }
 
-async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = false, path='/', moving=false, failFreeze=false, deferredFreeze=false, themePreference=null } = {}) {
+async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = false, path='/', moving=false, failFreeze=false, deferredFreeze=false, themePreference=null,smaPreference=null,buffer=false,windowClient=false } = {}) {
   const elements = new Map();
   function element(selector) {
     if (!elements.has(selector)) elements.set(selector, { hidden: true, disabled: false,
@@ -50,14 +50,17 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
     ["tori-frozen:TEST", '"old-snapshot"'], ["tori-rays:TEST", JSON.stringify([manualRay])],
   ]);
   if(themePreference)stored.set('tori-theme',JSON.stringify(themePreference));
-  let range = null, candleData = [], resolveAnalysis, resolveFreeze, lastAnalysis, randomSerial=0; const smaData={}, snapshots=new Map();
+  if(smaPreference!==null)stored.set('tori-sma200',JSON.stringify(smaPreference));
+  let range = null, candleData = [], resolveAnalysis, resolveFreeze, lastAnalysis, randomSerial=0; const smaData={}, snapshots=new Map(),analyses=new Map(),seriesOps=[];
   const scale = { getVisibleLogicalRange: () => range, setVisibleLogicalRange: (r) => { range = r; },
     subscribeVisibleLogicalRangeChange() {}, applyOptions() {} };
   const price = { applyOptions() {}, options: () => ({ autoScale: true }) };
   const chart = { applyOptions() {}, timeScale: () => scale, priceScale: () => price,
     subscribeCrosshairMove() {}, addSeries(type, options) {
       if(type!=="line")chart.autoScale = options.autoscaleInfoProvider;
-      return { applyOptions() {}, setData(rows) { if(type==="line")smaData[options.color]=rows;else candleData = rows; } };
+      return { applyOptions() {}, setData(rows) { if(type==="line")smaData[options.color]=rows;else {candleData = rows.slice();seriesOps.push('replace');} },
+        update(row){if(type==='line')smaData[options.color].push(row);else{candleData.push(row);seriesOps.push('append');}},
+        pop(n){if(type==='line')smaData[options.color].splice(-n);else{candleData.splice(-n);seriesOps.push('remove');}} };
     } };
   class Layer {
     constructor(chart,series,axis,onChange) { this.items = []; this.automatic = []; this.undoStack = [];this.onChange=onChange; }
@@ -78,11 +81,22 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
       createSeriesMarkers: () => ({ setMarkers(markers) { markerCalls.push(markers); } }) },
     apiFetch: async (url,opts) => {
       requests.push(url);
+      if(url.startsWith('/api/replay/')){
+        const q=new URL(url,'http://local').searchParams,at=q.has('asof')?Date.parse(q.get('asof'))/1000:times[0]+12*3600;
+        const data=payload(q.get('analysis')==='1');
+        const all=Array.from({length:50},(_,i)=>({time:times[0]+i*3600,end:times[0]+(i+1)*3600,open:100+i/10,high:102+i/10,low:99+i/10,close:101+i/10,volume:1}));
+        const visible=all.filter(b=>b.end<=at),last=visible.at(-1),before=visible.at(-2);
+        data.analysisCutoff=at;data.historical=q.get('historical')!=='0' && q.has('asof');data.replaySession='d'.repeat(32);
+        data.latest={close:last.close,time:last.time,end:last.end,change:last.close-before.close,changePercent:(last.close/before.close-1)*100};
+        data.reference=last.time;data.chartCounts={};delete data.bars;delete data.axis;
+        for(const tf of Object.keys(data.charts)){data.chartCounts[tf]=visible.length;data.charts[tf]={latest:data.latest,reference:last.time};}
+        return {ok:true,json:async()=>url.includes('/open?')?{window:{id:data.replaySession,symbol:'TEST',through:all.at(-1).end,bars:Object.fromEntries(Object.keys(data.charts).map(tf=>[tf,all]))},view:data}:data};
+      }
       if(url.startsWith('/api/snapshots?'))return {ok:true,json:async()=>({items:[]})};
       if(url==='/api/snapshots' && opts?.method==='POST') {
         if(deferredFreeze)await new Promise(resolve=>{resolveFreeze=resolve;});
         if(failFreeze)return {ok:false,json:async()=>({error:'Disk full'})};
-        const data=structuredClone(lastAnalysis), snapshot={id:data.analysisId,symbol:data.symbol,basis:'bars',
+        const data=structuredClone(analyses.get(JSON.parse(opts.body).analysisId) || lastAnalysis), snapshot={id:data.analysisId,symbol:data.symbol,basis:'bars',
           analysisCutoff:data.analysisCutoff,validFrom:data.latest.end,payload:data};
         snapshots.set(snapshot.id,snapshot);
         return {ok:true,json:async()=>snapshot};
@@ -127,21 +141,24 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
         }
         if(params.has('asof'))data.analysisCutoff=Date.parse(params.get('asof'))/1000;
         if(params.has('dataset'))data.datasetId=params.get('dataset');
+        if(buffer && !params.has('dataset') && path!=='/zufall' && !query.includes('fan_case='))data.replaySourceId='e'.repeat(32);
         if(path==='/zufall')data.randomCase={id:url.split('/')[4]};
-        if(analyzed)lastAnalysis=structuredClone(data);
+        if(analyzed){lastAnalysis=structuredClone(data);analyses.set(data.analysisId,structuredClone(data));}
         return { ok: !(analyzed && failAnalysis), json: async () => analyzed && failAnalysis
           ? { error: "Analysis failed" } : structuredClone(data) };
       }
       throw Error("Unexpected request: " + url);
     },
   });
+  if(buffer)vm.runInContext(fs.readFileSync('static/replay-buffer.js','utf8'),context);
+  if(windowClient)vm.runInContext(fs.readFileSync('static/replay-window.js','utf8'),context);
   vm.runInContext(fs.readFileSync("static/analysis.js", "utf8"), context);
   // Measurement persistence has its own tests; keep the real chart controller.
   vm.runInContext("function setupMeasurements() {} function renderMeasurementList() {} function restoreMeasurements(s) { state.measurementSymbol = s; }", context);
   vm.runInContext(fs.readFileSync("static/app.js", "utf8"), context);
   const flush = () => new Promise((resolve) => setImmediate(resolve));
   await flush();
-  return { context, element, requests, markerCalls, stored, chart, tfButtons, flush, smaData,
+  return { context, element, requests, markerCalls, stored, chart, tfButtons, flush, smaData,seriesOps,
     eval: (code) => vm.runInContext(code, context), candles: () => candleData,
     resolveAnalysis: () => resolveAnalysis(), resolveFreeze: () => resolveFreeze() };
 }
@@ -149,18 +166,89 @@ async function boot({ query = "?symbol=TEST", failAnalysis = false, deferred = f
 test('visible light/dark switch persists choice without changing candles, drawings or fetching data',async()=>{
   const h=await boot();
   const before=h.eval('JSON.stringify({bars:state.data.bars,rays:rayLayer.items})'),requests=h.requests.length;
-  assert.match(h.element('#theme-button').textContent,/Hell/);
-  h.element('#theme-button').onclick();
   assert.match(h.element('#theme-button').textContent,/Dunkel/);
-  assert.equal(h.element('#theme-button').attributes['aria-pressed'],'true');
   assert.equal(h.eval('document.documentElement.dataset.theme'),'dark');
-  assert.equal(h.stored.get('tori-theme'),'"dark"');
+  h.element('#theme-button').onclick();
+  assert.match(h.element('#theme-button').textContent,/Hell/);
+  assert.equal(h.element('#theme-button').attributes['aria-pressed'],'false');
+  assert.equal(h.eval('document.documentElement.dataset.theme'),'light');
+  assert.equal(h.stored.get('tori-theme'),'"light"');
   assert.equal(h.eval('JSON.stringify({bars:state.data.bars,rays:rayLayer.items})'),before);
   assert.equal(h.requests.length,requests);
   const again=await boot({themePreference:JSON.parse(h.stored.get('tori-theme'))});
-  assert.equal(again.eval('document.documentElement.dataset.theme'),'dark');
-  again.element('#theme-button').onclick();
   assert.equal(again.eval('document.documentElement.dataset.theme'),'light');
+  again.element('#theme-button').onclick();
+  assert.equal(again.eval('document.documentElement.dataset.theme'),'dark');
+});
+
+test('quote-window controller loads once, toggles analysis and moves many candles without quote or step downloads',async()=>{
+  const h=await boot({windowClient:true});
+  assert.equal(h.eval('state.data.bars.length'),12);
+  await h.element('#tori-analysis').onclick();
+  for(let i=0;i<16;i++)await h.element('#step-next').onclick();
+  assert.equal(h.eval('state.data.bars.length'),28);
+  for(let i=0;i<8;i++)await h.element('#step-back').onclick();
+  assert.equal(h.eval('state.data.bars.length'),20);
+  assert.equal(h.requests.filter(p=>p.includes('/api/replay/open?')).length,1);
+  assert.equal(h.requests.filter(p=>p.startsWith('/api/step?') || p.startsWith('/api/chart?')).length,0);
+  assert.equal(h.eval('state.data.charts["1D"].bars.at(-1).end'),h.eval('state.data.analysisCutoff'));
+  assert.equal(h.eval('rayLayer.items.length'),1);
+});
+
+test('fixed-line replay requests only quotes; releasing the freeze recalculates the current analysis',async()=>{
+  const h=await boot({windowClient:true});await h.element('#tori-analysis').onclick();
+  h.eval('state.frozen={id:"lock",symbol:state.symbol,basis:"bars",validFrom:state.data.analysisCutoff,analysisCutoff:state.data.analysisCutoff,payload:currentBundle()}');
+  const before=h.requests.length;
+  await h.element('#step-next').onclick();
+  assert.match(h.requests.slice(before).find(p=>p.includes('/api/replay/view?')),/analysis=0/);
+  assert.equal(h.eval('currentBundle().frozenReplay'),true);
+  await h.element('#freeze-button').onclick();
+  assert.equal(h.eval('state.frozen'),null);
+  assert.equal(h.eval('!!currentBundle().frozenReplay'),false);
+  assert.match(h.requests.at(-1),/analysis=1/);
+});
+
+test('prepared replay advances immediately without HTTP, appends/pops candles and keeps future lanes hidden',async()=>{
+  const at=times[0]+6*3600;
+  const h=await boot({buffer:true,moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+  await h.element('#tori-analysis').onclick();
+  const original=h.eval('JSON.stringify({cutoff:state.data.analysisCutoff,lanes:state.data.lanes})');
+  await new Promise(r=>setTimeout(r,130));await h.flush();
+  assert.match(h.element('#replay-buffer-status').textContent,/Schritte bereit/);
+  assert.equal(h.eval('state.replaySource'),'e'.repeat(32));
+  assert.ok(h.requests.some(url=>url.includes('replay_source='+'e'.repeat(32))));
+  assert.equal(h.eval('JSON.stringify({cutoff:state.data.analysisCutoff,lanes:state.data.lanes})'),original);
+  let count=h.requests.length;
+  await h.element('#step-next').onclick();
+  assert.equal(h.requests.length,count);assert.equal(h.eval('state.data.analysisCutoff'),at+3600);
+  assert.equal(h.element('#chart').dataset.candleUpdate,'append');
+  count=h.requests.length;await h.element('#step-back').onclick();
+  assert.equal(h.requests.length,count);assert.equal(h.eval('state.data.analysisCutoff'),at);
+  assert.equal(h.element('#chart').dataset.candleUpdate,'remove');
+  assert.equal(h.eval('JSON.stringify({cutoff:state.data.analysisCutoff,lanes:state.data.lanes})'),original);
+  h.eval('replayBuffer.clear()');
+});
+
+test('freezing after prefetch uses the visible analysis id rather than a later prepared view',async()=>{
+  const at=times[0]+6*3600;
+  const h=await boot({buffer:true,moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+  await h.element('#tori-analysis').onclick();await new Promise(r=>setTimeout(r,130));await h.flush();
+  await h.element('#freeze-button').onclick();
+  assert.equal(h.eval('state.frozen.analysisCutoff'),at);assert.equal(h.eval('state.data.analysisCutoff'),at);
+  h.eval('replayBuffer.clear()');
+});
+
+test('a failed forced refresh preserves the usable visible replay and its prepared bundles',async()=>{
+  const at=times[0]+6*3600;
+  const h=await boot({buffer:true,moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+  await h.element('#tori-analysis').onclick();await new Promise(r=>setTimeout(r,130));await h.flush();
+  const original=h.context.apiFetch;
+  h.context.apiFetch=async(url,opts)=>url.includes('refresh=1')?{ok:false,json:async()=>({error:'offline'})}:original(url,opts);
+  await h.element('#refresh-button').onclick();
+  assert.equal(h.eval('state.data.analysisCutoff'),at);assert.ok(h.eval('currentBundle()'));
+  const count=h.requests.length;await h.element('#step-back').onclick();
+  assert.equal(h.eval('state.data.analysisCutoff'),at-3600);assert.equal(h.requests.length,count);
+  h.eval('replayBuffer.clear()');
 });
 
 test('random page uses its pinned case, separate drawings, all intervals and replay without live provider routes',async()=>{
@@ -350,18 +438,77 @@ test('fan case manual and analyzed loads stay pinned and engine cannot change',a
 });
 
 
-test('new Master profile draws blue main Safety and SMA context, toggle clears series and keeps manual chart',async()=>{
+test('new Master profile draws blue main Safety and optional SMA50 separately from the global SMA200',async()=>{
  const h=await boot({query:'?symbol=TEST&engine=fan_master'});
  assert.equal(h.eval('state.analysisEnabled'),false);assert.equal(h.candles().length,3);
  await h.element('#tori-analysis').onclick();assert.match(h.requests.at(-1),/engine=fan_master/);
  assert.equal(h.element('#master-sma-control').hidden,false);
- assert.equal(h.smaData['#a855f7'].length,3);assert.equal(h.smaData['#8b939f'].length,3);
+ assert.equal(h.smaData['#a855f7'].length,3);assert.equal(h.smaData['#8b939f'],undefined);
+ assert.match(h.element('#sma200-status').textContent,/3\/200/);
  assert.equal(h.candles().length,3);assert.match(h.element('#line-table').innerHTML,/Haupt-Safety \(blau\)/);
  assert.ok(h.eval('rayLayer.automatic.some(r=>r.color==="#1e88e5" && r.label.includes("Safety"))'));
- h.element('#master-sma').checked=false;h.element('#master-sma').onchange();assert.equal(h.smaData['#8b939f'].length,0);
- h.element('#master-sma').checked=true;h.element('#master-sma').onchange();assert.equal(h.smaData['#8b939f'].length,3);
+ h.element('#master-sma').checked=false;h.element('#master-sma').onchange();assert.equal(h.smaData['#a855f7'].length,0);
+ h.element('#master-sma').checked=true;h.element('#master-sma').onchange();assert.equal(h.smaData['#a855f7'].length,3);
  await h.element('#tori-analysis').onclick();assert.equal(h.smaData['#a855f7'].length,0);
  assert.equal(h.element('#master-sma-control').hidden,true);assert.equal(h.candles().length,3);
+});
+
+test('SMA200 starts enabled without Tori, toggles locally and remembers the independent preference',async()=>{
+ const at=times[0]+200*3600;
+ const h=await boot({moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+ assert.equal(h.eval('state.analysisEnabled'),false);
+ assert.equal(h.element('#sma200').checked,true);
+ assert.equal(h.smaData['#cf8500'].length,200);
+ assert.equal(h.smaData['#cf8500'].at(-1).value,200.5);
+ assert.equal(h.smaData['#cf8500'].filter(row=>Number.isFinite(row.value)).length,1);
+ assert.match(h.element('#sma200-status').textContent,/SMA 200 · 4h: 200,50/);
+ const count=h.requests.length,bars=JSON.stringify(h.candles());
+ h.element('#sma200').checked=false;h.element('#sma200').onchange();
+ assert.equal(h.smaData['#cf8500'].length,0);assert.equal(h.element('#sma200-status').hidden,true);
+ assert.equal(h.stored.get('tori-sma200'),'false');assert.equal(h.requests.length,count);
+ assert.equal(JSON.stringify(h.candles()),bars);
+ h.element('#sma200').checked=true;h.element('#sma200').onchange();
+ assert.equal(h.smaData['#cf8500'].at(-1).value,200.5);
+ const again=await boot({moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString(),smaPreference:false});
+ assert.equal(again.element('#sma200').checked,false);assert.equal(again.smaData['#cf8500'],undefined);
+});
+
+test('SMA200 becomes available at the 200th closed replay candle and disappears again on rollback',async()=>{
+ const at=times[0]+199*3600;
+ const h=await boot({moving:true,buffer:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+ assert.match(h.element('#sma200-status').textContent,/Nicht genug Daten \(199\/200/);
+ assert.equal(h.smaData['#cf8500'],undefined);
+ await h.element('#step-next').onclick();
+ assert.equal(h.smaData['#cf8500'].at(-1).value,200.5);
+ assert.doesNotMatch(h.element('#sma200-status').textContent,/Nicht genug/);
+ await h.element('#step-next').onclick();assert.equal(h.smaData['#cf8500'].at(-1).value,201.5);
+ await h.element('#step-back').onclick();await h.element('#step-back').onclick();
+ assert.equal(h.smaData['#cf8500'].length,0);
+ assert.match(h.element('#sma200-status').textContent,/199\/200/);
+});
+
+test('SMA200 follows new candles despite a frozen Tori snapshot and survives hiding the analysis',async()=>{
+ const at=times[0]+200*3600;
+ const h=await boot({moving:true,query:'?symbol=TEST&engine=fan_master&asof='+new Date(at*1000).toISOString()});
+ await h.element('#tori-analysis').onclick();await h.element('#freeze-button').onclick();
+ const frozen=h.eval('JSON.stringify(state.frozen)');
+ await h.element('#step-next').onclick();
+ assert.equal(h.smaData['#cf8500'].at(-1).value,201.5);
+ assert.equal(h.eval('JSON.stringify(state.frozen)'),frozen);
+ await h.element('#tori-analysis').onclick();
+ assert.equal(h.smaData['#cf8500'].at(-1).value,201.5);
+ assert.equal(h.eval('state.analysisEnabled'),false);
+});
+
+test('SMA200 switches to the selected interval and clears the previous stock value on insufficient data',async()=>{
+ const at=times[0]+200*3600;
+ const h=await boot({moving:true,query:'?symbol=TEST&asof='+new Date(at*1000).toISOString()});
+ h.tfButtons.find(b=>b.dataset.tf==='1W').onclick();
+ assert.match(h.element('#sma200-status').textContent,/SMA 200 · 1W:/);
+ assert.equal(h.smaData['#cf8500'].at(-1).time,h.candles().at(-1).time);
+ await h.eval('load("OTHER",false,null)');
+ assert.equal(h.smaData['#cf8500'].length,0);
+ assert.match(h.element('#sma200-status').textContent,/3\/200/);
 });
 
 

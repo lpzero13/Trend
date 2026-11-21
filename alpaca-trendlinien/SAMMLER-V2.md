@@ -145,3 +145,22 @@ python tools/verify_archive.py --id AUFTRAGS_ID --output /pfad/pruefbericht.json
 Der Prüfer unterstützt v1 und v2, benötigt keine Providerzugangsdaten und liest alle referenzierten Kursdateien mit Prüfsummen. Er rechnet jedes gespeicherte Stunden-, Vierstunden- und Tagesaggregat aus seinem exakten 5m-Intervall nach und vergleicht den vollständigen Wochen-Cache. `--watch` prüft neue fertige Aktien während eines ausdrücklich laufenden Imports. Für eine erneute vollständige Prüfung einen neuen Berichtspfad verwenden.
 
 Sicherungen umfassen SQLite, referenzierte Datasets und referenzierte v1/v2-Monatsdateien; Zugangsdaten und große Roh-JSON-Caches bleiben ausgeschlossen. Es wurde kein automatisches Löschen alter Bestände ergänzt.
+## Tägliches Kursupdate für Hermes
+
+Der Befehl `archive-update` ergänzt vorhandene Alpaca-SIP-Historien im gemeinsamen `TORI_DATA_DIR`. Er liest die lokal gespeicherten Universumslisten und verarbeitet jedes Symbol einmal. Hermes kann den Befehl täglich um **23:00 Uhr in der Zeitzone Europe/Berlin** ausführen. Verwende auf Proxmox denselben Benutzer, dieselbe Python-Umgebung, denselben Datenordner und dieselben Alpaca-Zugangsdaten wie beim normalen Tori-Sammler.
+
+~~~sh
+python tori.py archive-update --plan
+python tori.py archive-update
+python tori.py archive-update --universes nasdaq100,dow30,sp500 --max-minutes 55
+~~~
+
+`--plan` zeigt den Bestand je Symbol und die vorgesehenen Sitzungen ohne Alpaca-Abrufe. Ohne `--universes` berücksichtigt der Lauf alle gespeicherten Listen. Titel ohne kompatible lokale SIP-Historie erscheinen als `no_local_history`. Der Sammler bietet für diese Titel den getrennten Erstimport an.
+
+Der Handelskalender bestimmt den letzten regulären New Yorker Börsenschluss einschließlich Feiertagen und verkürzten Sitzungen. Die Sitzung wird 16 Minuten nach Schluss für den Import verfügbar. Fällige Sitzungen werden je Symbol nachgeholt. Der Abruf fasst bis zu 100 Symbole pro Sitzung zusammen. Die 5‑Minuten-Daten werden mit den bisherigen Daten abgeglichen und zu 1h, 4h und 1D zusammengefasst. Der neue Datensatz hat eine eigene ID. Hermes erhält sie in der JSON-Ausgabe und kann sie direkt für einen nachfolgenden Scan verwenden.
+
+Pro Lauf werden je Symbol bis zu 20 ausstehende Sitzungen aufgenommen. Neuere Datenlücken werden innerhalb der letzten fünf Sitzungen erneut geprüft. Ältere dem Update bereits bekannte Lücken stehen weiterhin im Bericht. Abweichende OHLC-Werte im Überlapp können auf eine Kursrevision oder einen Split hindeuten. Das betroffene Symbol erhält `error` und kann über den vorhandenen Sammler mit einheitlicher Splitbereinigung neu importiert werden. Reine Volumenänderungen werden im neuen Datensatz berücksichtigt.
+
+**Toleranz für Kurslücken.** Der Bericht zählt erwartete und fehlende reguläre 5‑Minuten-Kerzen je Aktie und Sitzung. Bei 1–9 fehlenden Kerzen erscheint `gapStatus: "tolerated"`, ab 10 `gapStatus: "problem"`. Das gilt auch bei einem für die Nachprüfung vorgemerkten Symbol mit `status: "pending"`. Hermes kann für die Statistik `gapCounts` und pro Symbol `missingBarsBySession` lesen. Vollständige übergeordnete Kerzen entstehen weiterhin aus den tatsächlichen lückenlosen 5‑Minuten-Intervallen. Bei einer Lücke kann die jüngste vollständige Tageskerze daher älter sein als die jüngste geprüfte Sitzung.
+
+Das Standardbudget von 55 Minuten stoppt das Anfangen weiterer Arbeit. Laufende Speicheroperationen können noch abschließen. Der nächste Lauf ermittelt den Bedarf anhand der inzwischen gespeicherten Daten. Prüfe im JSON `counts`, `behindTarget` und je Symbol `status`, `checkedThrough` und `missingSessions`. `pending` zeigt Arbeit, die nach dem Zeitbudget noch aussteht. `behindTarget` zählt vorhandene Historien mit älterer letzter vollständiger Tageskerze. Wenn die Zielsession bereits vollständig vorliegt und keine jüngeren Lücken nachzuprüfen sind, fallen keine Alpaca-Abrufe an.

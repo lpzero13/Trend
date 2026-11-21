@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tori · Backtest-Explorer &amp; Replay-Training</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/radar.css" />
+    <link rel="stylesheet" href="/backtest.css" />
+    <script defer src="/api.js"></script>
+    <script defer src="/backtest.js"></script>
+  </head>
+  <body class="radar-page">
+    <nav class="app-navigation" aria-label="Hauptnavigation">
+      <span class="brand">tori<span>.</span></span>
+      <a href="/">Chart</a>
+      <a href="/radar">Tages-Radar</a>
+      <a href="/backtest" aria-current="page">Backtest-Replay</a>
+      <details class="nav-more">
+        <summary>Mehr ▾</summary>
+        <div class="nav-more-menu">
+          <a href="/zufall">Zufall</a>
+          <a href="/sammler">Datensammler</a>
+        </div>
+      </details>
+    </nav>
+
+    <main class="radar-shell">
+      <header class="radar-hero">
+        <div>
+          <h1>Backtest-Explorer &amp; Replay-Training (Point-in-Time)</h1>
+          <p class="radar-sub">
+            Alle historischen Signale aus dem Survivorship-Bias-freien 802-Aktien-Backtest (2017–2026) durchsuchen und filtern.
+            Klicke auf <strong>„Im Replay starten“</strong>, um exakt am Signaltimestamp ohne Zukunftsspoiler zu starten und Kerze für Kerze manuell nachzuverfolgen.
+          </p>
+        </div>
+        <div class="radar-actions">
+          <label class="blind-toggle">
+            <input type="checkbox" id="chk-blind" />
+            <span><strong>Blind-Training</strong> (Ergebnis &amp; P/L verdecken)</span>
+          </label>
+        </div>
+      </header>
+
+      <section class="radar-controls card" aria-label="Backtest-Filter">
+        <label>
+          Qualitäts-Stufe
+          <select id="bt-tier">
+            <option value="C" selected>Stufe C · Premium (Direkt+Aktiv+Reife+Ruhig)</option>
+            <option value="quiet">Alle Ruhigen (C + B + 4 · ATR &lt; 1,5%)</option>
+            <option value="focus">Fokus-Stufen (C + B + 4 + A)</option>
+            <option value="B">Nur Stufe B (Aktiv+Reife+Ruhig)</option>
+            <option value="4">Nur Stufe 4 (Übrige Ruhige)</option>
+            <option value="A">Nur Stufe A (3/3-Kern ohne Ruhig)</option>
+            <option value="all">Alle 14.809 Signale</option>
+            <option value="BASIS">Nur Basis (Rest)</option>
+          </select>
+        </label>
+        <label>
+          Zeitraum (Split)
+          <select id="bt-split">
+            <option value="all" selected>Alle Zeiträume (2017–2026)</option>
+            <option value="holdout">Holdout (2025–2026)</option>
+            <option value="validation">Validation (2024)</option>
+            <option value="train">Train (2017–2023)</option>
+          </select>
+        </label>
+        <label>
+          Kalenderjahr
+          <select id="bt-year">
+            <option value="all" selected>Alle Jahre</option>
+          </select>
+        </label>
+        <label>
+          Einstiegs-Szenario
+          <select id="bt-scenario">
+            <option value="all" selected>Alle Szenarien</option>
+            <option value="direct">Alle Direkteinstiege (1A + 4A)</option>
+            <option value="1A_CLEAN_BREAKOUT">1A · Frischer Ausbruch</option>
+            <option value="4A_RETEST_TRIGGER">4A · Direkter Retest</option>
+            <option value="watch">Watchlist-Auslösungen (1B/2/3/4B)</option>
+          </select>
+        </label>
+        <label>
+          Ausgang
+          <select id="bt-outcome">
+            <option value="all" selected>Alle Ausgänge</option>
+            <option value="win">Nur Gewinner (&gt; 0 €)</option>
+            <option value="loss">Nur Verlierer (&le; 0 €)</option>
+            <option value="r2">Nur +2R erreicht</option>
+            <option value="censored">Nur Datenlücken</option>
+          </select>
+        </label>
+        <label>
+          Stop-Modell
+          <select id="bt-policy">
+            <option value="r2_fan" selected>r2_fan (Original bis +2R)</option>
+            <option value="qualified_fan">qualified_fan (3K-Safety)</option>
+            <option value="original_safety">original_safety (nur Urspr.)</option>
+          </select>
+        </label>
+        <label>
+          Sortierung
+          <select id="bt-sort">
+            <option value="date_desc" selected>Datum (neueste zuerst)</option>
+            <option value="date_asc">Datum (älteste zuerst)</option>
+            <option value="tier">Stufe (C → B → 4 → A)</option>
+            <option value="r_desc">Beste Netto-R zuerst</option>
+            <option value="r_asc">Schlechteste Netto-R zuerst</option>
+            <option value="pnl_desc">Höchster Euro-Gewinn</option>
+          </select>
+        </label>
+        <label>
+          Aktie suchen
+          <input id="bt-symbol" type="text" placeholder="z. B. AAPL, SIVB, NVDA" />
+        </label>
+      </section>
+
+      <div id="bt-status" class="radar-banner" hidden></div>
+
+      <!-- KPI Summary Bar -->
+      <section class="kpi-grid" aria-label="Filter-Bilanz">
+        <div class="kpi card">
+          <span class="kpi-label">Signale (bewertbar)</span>
+          <strong id="bt-kpi-count">–</strong>
+          <small id="bt-kpi-cens">–</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Trefferquote</span>
+          <strong id="bt-kpi-win">–</strong>
+          <small id="bt-kpi-r2">+2R Quote: –</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Gesamt-P/L (je 1.000 €)</span>
+          <strong id="bt-kpi-pnl">–</strong>
+          <small id="bt-kpi-avgeur">Ø €: –</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Ø Netto-R</span>
+          <strong id="bt-kpi-avgr">–</strong>
+          <small id="bt-kpi-medr">Median R: –</small>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Ø R ohne Top-3</span>
+          <strong id="bt-kpi-ex3">–</strong>
+          <small id="bt-kpi-study">Studie: –</small>
+        </div>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Historische Signale &amp; 1-Klick-Replay</h2>
+            <p id="bt-meta" class="muted">Lade lokale Backtest-Daten …</p>
+          </div>
+          <div class="pager-bar">
+            <button id="bt-prev" class="btn-mini">← Zurück</button>
+            <span id="bt-page-info" class="muted">Seite 1 / 1</span>
+            <button id="bt-next" class="btn-mini">Weiter →</button>
+          </div>
+        </div>
+
+        <div class="tier-legend" aria-label="Farblegende Qualitätsstufen">
+          <span class="tier-pill t-c"><strong>Stufe C · Premium</strong></span>
+          <span class="tier-pill t-b"><strong>Stufe B · Stark</strong></span>
+          <span class="tier-pill t-4"><strong>Stufe 4 · Ruhige Vola</strong></span>
+          <span class="tier-pill t-a"><strong>Stufe A · 3/3-Kern</strong></span>
+          <span class="tier-pill t-basis"><strong>Basis</strong></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="radar-table" id="bt-table">
+            <thead>
+              <tr>
+                <th>Stufe</th>
+                <th>Einstiegstag</th>
+                <th>Aktie</th>
+                <th>Replay (ohne Spoiler)</th>
+                <th>P/L (1.000 €)</th>
+                <th>Netto-R (MFE/MAE)</th>
+                <th>Ausgang</th>
+                <th>Szenario</th>
+                <th>Einstieg / Stop</th>
+                <th>Risiko / Vola</th>
+                <th>Struktur (Rot)</th>
+              </tr>
+            </thead>
+            <tbody id="bt-body">
+              <tr><td colspan="11" class="empty">Lade Signale …</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

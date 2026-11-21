@@ -70,10 +70,7 @@ const state = {
   bundles: new Map(),
   visible: { "1D": true, "4h": true, "1h": true, "1W":true },
   request: 0,
-  theme: read(
-    "tori-theme",
-    matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
-  ),
+  theme: read("tori-theme", "dark"),
   favorites: read("tori-favorites", [
     "AAPL",
     "MSFT",
@@ -87,10 +84,17 @@ const state = {
   assetRequest: 0,
   assetRows: [],
   info: true,
-  infoCollapsed: false,
+  infoCollapsed: read("tori-info-collapsed", true),
   axisMode: "trading",
   asOf: query.get("asof") || null,
   datasetId: query.get("dataset") || null,
+  btId: query.get("bt") || null,
+  btPolicy: query.get("bt_policy") || "r2_fan",
+  btStudy: query.get("bt_study") || "",
+  btCase: null,
+  btPriceLines: [],
+  btStopSeries: null,
+  replayTimer: null,
   randomId: randomMode ? query.get('case') : null,
   randomStartAt: null,
   randomPicking: false,
@@ -101,27 +105,33 @@ const state = {
   stepping: false,
   freezing: false,
   frozen: null,
+  replaySource:null,
   snapshotLists: new Map(),
   measurementSymbol: null,
   measurementArchive: { items: [], trash: [], activeId: null },
   includeLines: read("tori-fit-lines", false),
   showSma: read("tori-master-sma", true),
+  showSma200: read("tori-sma200", true),
+  showVolume: read("tori-volume", true),
   showDateMarker: read("tori-master-date", true),
   contextSeries: {},
+  volumeSeries: null,
 };
 let entryHistory = null;
 const chart = LC.createChart($("#chart"), {
   autoSize: true,
-  layout: { attributionLogo: true, fontFamily: "Arial", fontSize: 12 },
+  layout: { attributionLogo: true, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Arial, sans-serif", fontSize: 12 },
   rightPriceScale: {
-    borderVisible: false,
-    minimumWidth: 70,
-    scaleMargins: { top: 0.13, bottom: 0.1 },
+    borderVisible: true,
+    borderColor: "rgba(148, 163, 184, 0.14)",
+    minimumWidth: 74,
+    scaleMargins: { top: 0.10, bottom: 0.17 },
   },
   timeScale: {
-    borderVisible: false,
+    borderVisible: true,
+    borderColor: "rgba(148, 163, 184, 0.14)",
     timeVisible: true,
-    rightOffset: 14,
+    rightOffset: 16,
     barSpacing: 9,
     lockVisibleTimeRangeOnResize: true,
     minBarSpacing: 0.02,
@@ -188,9 +198,11 @@ const rayLayer = new RayLayer(
     updateDrawingSummary();
   },
 );
+rayLayer.bars = () => state.data?.bars || [];
+rayLayer.magnet = read("tori-magnet", false);
 rayLayer.labelObstacles = () => {
   const host = $("#chart").getBoundingClientRect();
-  return [$("#info-panel"), $(".instrument"), $(".view-tools"), $('#entry-history-panel')]
+  return [$("#info-panel"), $(".instrument"), $(".view-tools"), $('#entry-history-panel'), $("#drawing-style-bar")]
     .filter((el) => el && !el.hidden)
     .map((el) => {
       const r = el.getBoundingClientRect();
@@ -210,29 +222,38 @@ function theme() {
   const dark = state.theme === "dark";
   chart.applyOptions({
     layout: {
-      background: { type: "solid", color: dark ? "#11151e" : "#ffffff" },
-      textColor: dark ? "#c5cfdf" : "#5c6777",
+      background: { type: "solid", color: dark ? "#0f141c" : "#ffffff" },
+      textColor: dark ? "#9fb0c6" : "#5c6777",
     },
     grid: {
-      vertLines: { color: dark ? "#273245" : "#f0f2f5" },
-      horzLines: { color: dark ? "#273245" : "#f0f2f5" },
+      vertLines: { color: dark ? "rgba(148, 163, 184, 0.06)" : "rgba(15, 23, 42, 0.06)" },
+      horzLines: { color: dark ? "rgba(148, 163, 184, 0.06)" : "rgba(15, 23, 42, 0.06)" },
+    },
+    rightPriceScale: {
+      borderColor: dark ? "rgba(148, 163, 184, 0.14)" : "rgba(15, 23, 42, 0.12)",
+    },
+    timeScale: {
+      borderColor: dark ? "rgba(148, 163, 184, 0.14)" : "rgba(15, 23, 42, 0.12)",
     },
     crosshair: {
       vertLine: {
-        color: "#8b98aa",
-        labelBackgroundColor: dark ? "#3b465b" : "#576376",
+        color: dark ? "rgba(148, 163, 184, 0.45)" : "rgba(71, 85, 105, 0.45)",
+        style: 3,
+        labelBackgroundColor: dark ? "#243043" : "#475569",
       },
       horzLine: {
-        color: "#8b98aa",
-        labelBackgroundColor: dark ? "#3b465b" : "#576376",
+        color: dark ? "rgba(148, 163, 184, 0.45)" : "rgba(71, 85, 105, 0.45)",
+        style: 3,
+        labelBackgroundColor: dark ? "#243043" : "#475569",
       },
     },
   });
   candles.applyOptions({
-    upColor: dark ? "#20b998" : "#00a483",
-    downColor: dark ? "#f05a70" : "#f23752",
-    wickUpColor: dark ? "#20b998" : "#00a483",
-    wickDownColor: dark ? "#f05a70" : "#f23752",
+    upColor: dark ? "#26a69a" : "#00a483",
+    downColor: dark ? "#ef5350" : "#f23752",
+    wickUpColor: dark ? "#26a69a" : "#00a483",
+    wickDownColor: dark ? "#ef5350" : "#f23752",
+    borderVisible: false,
   });
   $("#theme-button").textContent = dark ? "☾ Dunkel" : "☀ Hell";
   $("#theme-button").setAttribute('aria-pressed',String(dark));
@@ -240,12 +261,43 @@ function theme() {
     ? "Zum Hellmodus wechseln"
     : "Zum Dunkelmodus wechseln";
   $("#theme-button").setAttribute('aria-label',$("#theme-button").title);
-  if(state.data)automaticLines();
+  if (state.data) {
+    updateVolume();
+    automaticLines();
+  }
   rayLayer.update();
+}
+function updateDrawingStyleBar() {
+  const bar = $("#drawing-style-bar");
+  if (!bar) return;
+  const sel = rayLayer.items.find((r) => r.id === rayLayer.selected);
+  const isRect = Boolean(rayLayer.rectActive || sel?.kind === "rect");
+  const isLong = Boolean(rayLayer.longActive || sel?.kind === "longbox");
+  const show = Boolean(!isLong && (rayLayer.active || rayLayer.horizontalActive || rayLayer.rectActive || sel));
+  bar.hidden = !show;
+  const extRow = bar.querySelector?.(".ext-row");
+  const sep = bar.querySelector?.(".style-sep");
+  if (extRow) extRow.hidden = isRect;
+  if (sep) sep.hidden = isRect;
+  const curColor = RayGeometry.color($("#line-color")?.value || rayLayer.color || "#3988ee").toLowerCase();
+  const curExt = $("#line-extension")?.value || rayLayer.extension || "right";
+  document.querySelectorAll("[data-swatch]").forEach((btn) => {
+    btn.classList.toggle("active", (btn.dataset.swatch || "").toLowerCase() === curColor);
+  });
+  document.querySelectorAll("[data-ext]").forEach((btn) => {
+    btn.setAttribute("aria-pressed", String(btn.dataset.ext === curExt));
+  });
+}
+function syncMagnetUI() {
+  const btn = $("#magnet-tool");
+  if (btn) btn.setAttribute("aria-pressed", String(Boolean(rayLayer.magnet)));
 }
 function setTool(active) {
   rayLayer.setMode(active);
   $("#ray-tool").setAttribute("aria-pressed", String(active === true));
+  if ($("#horiz-tool")) $("#horiz-tool").setAttribute("aria-pressed", String(active === "horizontal"));
+  if ($("#rect-tool")) $("#rect-tool").setAttribute("aria-pressed", String(active === "rect"));
+  if ($("#longbox-tool")) $("#longbox-tool").setAttribute("aria-pressed", String(active === "longbox"));
   $("#measure-tool").setAttribute("aria-pressed", String(active === "measure"));
   $("#cursor-tool").setAttribute("aria-pressed", String(!active));
   $("#drawing-hint").hidden = !active;
@@ -253,7 +305,14 @@ function setTool(active) {
     $("#drawing-hint").textContent =
       active === "measure"
         ? "Messung: Startpreis setzen · dann Endpreis · Escape zum Abbrechen"
-        : "Ersten Punkt setzen · dann zweiten Punkt · Escape zum Abbrechen";
+        : active === "horizontal"
+          ? "Horizontale Linie: Preis im Chart anklicken · Escape zum Abbrechen"
+          : active === "rect"
+            ? "Zone / Rechteck: erste Ecke setzen · dann zweite Ecke · Escape zum Abbrechen"
+            : active === "longbox"
+              ? "Long-Position: Einstieg anklicken · dann Stop-Loss · Escape zum Abbrechen"
+              : "Ersten Punkt setzen · dann zweiten Punkt · Escape zum Abbrechen";
+  updateDrawingStyleBar();
 }
 rayLayer.onMeasure = () => {
   updateMeasurementSummary();
@@ -282,6 +341,7 @@ rayLayer.onSelection = () => {
     $('#line-color').value=RayGeometry.color(selected.color);
     rayLayer.color=$('#line-color').value;
   }
+  updateDrawingStyleBar();
   updateDrawingSummary();
 };
 function updateDrawingSummary() {
@@ -351,26 +411,353 @@ $('#master-date').onchange=()=>{state.showDateMarker=$('#master-date').checked;w
 chart.timeScale().subscribeVisibleLogicalRangeChange(updateMasterDateMarker);
 function updateMasterContext() {
   updateMasterDateMarker();
+  updateSma200();
   const active=hasToriAnalysis() && state.analysisEngine==='fan_master';
   $('#master-sma-control').hidden=!active;$('#master-sma').checked=state.showSma;
   if(!LC.LineSeries)return;
-  for(const period of ['50','200']) {
+  for(const period of ['50']) {
     // Context can end before the replay candle (warm-up, gaps, frozen stand).
     // Keep every plotted series on exactly the candle grid, including whitespace.
     const known = new Map((state.data?.lanes[state.timeframe]?.context?.series?.[period] || []).map(row=>[row.time,row]));
     const rows=active && state.showSma ? state.data.bars.map(bar=>known.get(bar.time) || {time:bar.time}) : [];
     if(rows.length && !state.contextSeries[period])state.contextSeries[period]=chart.addSeries(LC.LineSeries,{color:period==='50'?'#a855f7':'#8b939f',lineWidth:period==='50'?1:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
-    state.contextSeries[period]?.setData(rows);
+    const series=state.contextSeries[period];
+    if(series){if(typeof ReplayBuffer!=='undefined')ReplayBuffer.updateSeries(series,rows);else series.setData(rows);}
   }
 }
 $('#master-sma').onchange=()=>{state.showSma=$('#master-sma').checked;write('tori-master-sma',state.showSma);updateMasterContext();};
+function updateSma200() {
+  $('#sma200').checked=state.showSma200;
+  const result=state.data ? chartSma200(state.data.bars,state.data.analysisCutoff,state.data.smaGaps) : null;
+  const status=$('#sma200-status');
+  status.hidden=!state.showSma200 || !result;
+  status.textContent=!result ? '' : Number.isFinite(result.value)
+    ? `SMA 200 · ${state.timeframe}: ${fmt(result.value)}`
+    : `SMA 200 · ${state.timeframe}: Nicht genug Daten (${result.count}/200 abgeschlossene Kerzen).`;
+  const rows=state.showSma200 && result?.rows.some(row=>Number.isFinite(row.value)) ? result.rows : [];
+  if(!LC.LineSeries)return;
+  if(rows.length && !state.contextSeries['200'])state.contextSeries['200']=chart.addSeries(LC.LineSeries,{
+    color:'#cf8500',lineWidth:1.5,title:'SMA 200',priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:true,
+    autoscaleInfoProvider:()=>null,
+  });
+  const series=state.contextSeries['200'];
+  if(series){if(typeof ReplayBuffer!=='undefined')ReplayBuffer.updateSeries(series,rows);else series.setData(rows);}
+}
+$('#sma200').onchange=()=>{state.showSma200=$('#sma200').checked;write('tori-sma200',state.showSma200);updateSma200();};
+
+function updateWatermark() {
+  const wm = $("#chart-watermark");
+  if (!wm || !state.data) return;
+  const sym = state.data.symbol || state.symbol || "";
+  const tf = (state.timeframe || "").toUpperCase();
+  const feed = (state.data.feed || "").toUpperCase();
+  wm.innerHTML = `<span class="wm-sym">${sym}</span><span class="wm-sub">${tf}${feed ? " · " + feed : ""}</span>`;
+}
+
+function updateVolume() {
+  const cb = $("#volume-toggle");
+  if (cb) cb.checked = state.showVolume;
+  if (!LC.HistogramSeries || !state.data || !Array.isArray(state.data.bars)) return;
+  if (state.showVolume && !state.volumeSeries) {
+    state.volumeSeries = chart.addSeries(LC.HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "volume",
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    if (typeof chart.priceScale === "function") {
+      try {
+        chart.priceScale("volume").applyOptions({
+          scaleMargins: { top: 0.84, bottom: 0.0 },
+          visible: false,
+        });
+      } catch {}
+    }
+  }
+  if (!state.volumeSeries) return;
+  const dark = state.theme === "dark";
+  const upCol = dark ? "rgba(38, 166, 154, 0.26)" : "rgba(0, 164, 131, 0.22)";
+  const dnCol = dark ? "rgba(239, 83, 80, 0.26)" : "rgba(242, 55, 82, 0.22)";
+  const rows = state.showVolume
+    ? state.data.bars.map((b) => ({
+        time: b.time,
+        value: Number(b.volume || 0),
+        color: b.close >= b.open ? upCol : dnCol,
+      }))
+    : [];
+  state.volumeSeries.setData(rows);
+}
+if ($("#volume-toggle")) {
+  $("#volume-toggle").onchange = () => {
+    state.showVolume = $("#volume-toggle").checked;
+    write("tori-volume", state.showVolume);
+    updateVolume();
+  };
+}
+function clearBtPriceLines(clearStopSeries = true) {
+  if (typeof candles.removePriceLine === "function") {
+    for (const pl of state.btPriceLines) {
+      try { candles.removePriceLine(pl); } catch {}
+    }
+  }
+  state.btPriceLines = [];
+  if (clearStopSeries && state.btStopSeries) {
+    try { state.btStopSeries.setData([]); } catch {}
+  }
+}
+
+function decorateBacktestCase(markers) {
+  const bar = $("#bt-case-bar");
+  const c = state.btCase;
+  if (!c || !state.data || !Array.isArray(state.data.bars) || !state.data.bars.length) {
+    clearBtPriceLines();
+    if (bar) bar.hidden = true;
+    return;
+  }
+  if (c.symbol && state.symbol && c.symbol !== state.symbol) {
+    clearBtPriceLines();
+    if (bar) bar.hidden = true;
+    return;
+  }
+  const bars = state.data.bars;
+  const lastEnd = Number(bars[bars.length - 1].end || bars[bars.length - 1].time || 0);
+  const findBarAt = (targetTs) => {
+    if (!targetTs) return null;
+    for (const b of bars) {
+      if (Number(b.end || b.time) >= targetTs) return b;
+    }
+    return bars[bars.length - 1];
+  };
+  const fmtD = (v, d = 2) => (v == null || !Number.isFinite(Number(v)) ? "–" : Number(v).toFixed(d).replace(".", ","));
+  const fmtS = (v, d = 2) => (v == null || !Number.isFinite(Number(v)) ? "–" : (Number(v) > 0 ? "+" : "") + Number(v).toFixed(d).replace(".", ","));
+
+  const entryReached = !c.entryAt || lastEnd >= c.entryAt - 3600;
+  const exitReached = Boolean(c.exitAt && lastEnd >= c.exitAt - 3600);
+  let entryBarTime = null;
+  let exitBarTime = null;
+
+  if (entryReached && c.entryAt) {
+    const eb = findBarAt(c.entryAt);
+    if (eb) {
+      entryBarTime = eb.time;
+      markers.push({
+        id: "bt:entry",
+        time: eb.time,
+        position: "belowBar",
+        color: "#26a69a",
+        shape: "arrowUp",
+        text: `${fmtD(c.entryPrice)} $`,
+        size: 1.5,
+      });
+    }
+  }
+
+  const out = c.outcome || {};
+  const reasonMap = { stop: "Hard-Stop", stop_gap: "Stop-Gap", data_end: "Studienende" };
+  const reasonTxt = out.status === "censored" ? "Datenlücke" : (reasonMap[out.reason] || out.reason || "Ende");
+  const isWin = out.pnlEur != null && Number(out.pnlEur) > 0;
+
+  if (exitReached && c.exitAt) {
+    const xb = findBarAt(c.exitAt);
+    if (xb) {
+      exitBarTime = xb.time;
+      const rTxt = out.netR != null ? `${fmtS(out.netR, 2)} R` : reasonTxt;
+      markers.push({
+        id: "bt:exit",
+        time: xb.time,
+        position: "aboveBar",
+        color: isWin ? "#26a69a" : "#ef5350",
+        shape: "arrowDown",
+        text: `${rTxt}`,
+        size: 1.5,
+      });
+    }
+  }
+
+  if (entryReached && entryBarTime && c.entryPrice != null) {
+    const risk = c.initialStop != null ? Math.max(0, Number(c.entryPrice) - Number(c.initialStop)) : 0;
+    const t2r = c.r2TargetPrice != null ? Number(c.r2TargetPrice) : (risk > 0 ? Number(c.entryPrice) + 2 * risk : null);
+    rayLayer.tradeZones = {
+      startTime: entryBarTime,
+      endTime: exitReached ? exitBarTime : null,
+      entry: Number(c.entryPrice),
+      stop: c.initialStop != null ? Number(c.initialStop) : null,
+      target2r: t2r,
+    };
+  } else {
+    rayLayer.tradeZones = null;
+  }
+
+  // Causal +2R milestone marker (only once reached in replay!)
+  const lastBarTime = Number(bars[bars.length - 1].time || 0);
+  if (c.r2ActivatedAt && Number(c.r2ActivatedAt) <= lastBarTime) {
+    const r2b = bars.find((b) => Number(b.time) >= Number(c.r2ActivatedAt));
+    if (r2b) {
+      markers.push({
+        id: "bt:r2",
+        time: r2b.time,
+        position: "aboveBar",
+        color: "#26a69a",
+        shape: "circle",
+        text: "+2R aktiv",
+        size: 1,
+      });
+    }
+  }
+
+  clearBtPriceLines(false);
+  // Causal step-line for the actual rising stop trail (aligned to candle grid with whitespace)
+  let hasStopTrail = false;
+  if (LC.LineSeries && entryReached && Array.isArray(c.stopTrail) && c.stopTrail.length) {
+    const visibleTrail = c.stopTrail.filter((p) => Number(p.time) <= lastBarTime && Number.isFinite(Number(p.value)));
+    if (visibleTrail.length) {
+      const aligned = [];
+      let ti = 0;
+      let curVal = null;
+      const firstTrailTime = Number(visibleTrail[0].time);
+      for (const b of bars) {
+        const bt = Number(b.time);
+        const be = Number(b.end || b.time);
+        while (ti < visibleTrail.length && Number(visibleTrail[ti].time) <= be) {
+          curVal = Number(visibleTrail[ti].value);
+          ti++;
+        }
+        if (curVal !== null && bt >= firstTrailTime) {
+          aligned.push({ time: b.time, value: curVal });
+        } else {
+          aligned.push({ time: b.time });
+        }
+      }
+      if (aligned.some((r) => Number.isFinite(r.value))) {
+        hasStopTrail = true;
+        if (!state.btStopSeries) {
+          state.btStopSeries = chart.addSeries(LC.LineSeries, {
+            color: "#ef5350",
+            lineWidth: 2,
+            lineStyle: 2,
+            lineType: 1,
+            title: "Stop-Treppe",
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: true,
+            autoscaleInfoProvider: () => null,
+          });
+        }
+        state.btStopSeries.setData(aligned);
+      }
+    }
+  }
+  if (!hasStopTrail && state.btStopSeries) {
+    try { state.btStopSeries.setData([]); } catch {}
+  }
+
+  if (typeof candles.createPriceLine === "function" && entryReached) {
+    if (c.entryPrice != null) {
+      state.btPriceLines.push(candles.createPriceLine({
+        price: Number(c.entryPrice),
+        color: "#26a69a",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "Einstieg",
+      }));
+    }
+    if (c.initialStop != null) {
+      state.btPriceLines.push(candles.createPriceLine({
+        price: Number(c.initialStop),
+        color: "#ef5350",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "Stop 0,3%",
+      }));
+    }
+    if (rayLayer.tradeZones && rayLayer.tradeZones.target2r != null) {
+      state.btPriceLines.push(candles.createPriceLine({
+        price: Number(rayLayer.tradeZones.target2r),
+        color: "#26a69a",
+        lineWidth: 1,
+        lineStyle: 3,
+        axisLabelVisible: true,
+        title: "+2R",
+      }));
+    }
+    if (exitReached && c.exitPrice != null) {
+      state.btPriceLines.push(candles.createPriceLine({
+        price: Number(c.exitPrice),
+        color: "#f59e0b",
+        lineWidth: 1,
+        lineStyle: 3,
+        axisLabelVisible: true,
+        title: "Backtest-Ende",
+      }));
+    }
+  }
+
+  if (bar) {
+    bar.hidden = false;
+    const badge = $("#bt-case-badge");
+    const info = $("#bt-case-info");
+    if (badge) badge.textContent = `Stufe ${c.tier || "BASIS"} · ${c.policy || "r2_fan"}`;
+    const baseTxt = `${c.symbol} · Einstieg: ${c.entryDay} (${fmtD(c.entryPrice)} $ · Stop ${fmtD(c.initialStop)} $)`;
+    if (info) {
+      if (exitReached) {
+        info.textContent = `${baseTxt}  →  Backtest-Ende erreicht: ${c.exitDay} (${fmtD(c.exitPrice)} $ · ${fmtS(out.netR, 2)} R · ${fmtS(out.pnlEur, 2)} € · ${reasonTxt}${out.r2Activated ? " · +2R aktiv" : ""})`;
+      } else if (c.exitDay) {
+        info.textContent = `${baseTxt}  ·  Replay läuft (Backtest lief bis ${c.exitDay}, ${fmtD(out.holdingDays, 0)} Tage – Ausstieg bleibt verborgen bis du dort ankommst)`;
+      } else {
+        info.textContent = baseTxt;
+      }
+    }
+    const jumpExit = $("#bt-jump-exit");
+    if (jumpExit) jumpExit.hidden = !c.exitAsOfIso;
+  }
+}
+
+async function initBacktestCase() {
+  if (!state.btId) return;
+  try {
+    const qs = new URLSearchParams({ id: state.btId, policy: state.btPolicy || "r2_fan" });
+    if (state.btStudy) qs.set("study", state.btStudy);
+    const resp = await apiFetch("/api/backtest/case?" + qs.toString());
+    if (!resp.ok) return;
+    state.btCase = await resp.json();
+    const btnEntry = $("#bt-jump-entry");
+    const btnExit = $("#bt-jump-exit");
+    const btnClose = $("#bt-case-close");
+    if (btnEntry) {
+      btnEntry.onclick = () => {
+        if (state.btCase?.entryAsOfIso) load(state.symbol, false, state.btCase.entryAsOfIso, state.analysisEnabled);
+      };
+    }
+    if (btnExit) {
+      btnExit.onclick = () => {
+        if (state.btCase?.exitAsOfIso) load(state.symbol, false, state.btCase.exitAsOfIso, state.analysisEnabled);
+      };
+    }
+    if (btnClose) {
+      btnClose.onclick = () => {
+        state.btCase = null;
+        clearBtPriceLines();
+        const bar = $("#bt-case-bar");
+        if (bar) bar.hidden = true;
+        automaticLines();
+      };
+    }
+    if (state.data) automaticLines();
+  } catch {}
+}
+
 function automaticLines() {
   updateMasterContext();
   rayLayer.automatic = [];
+  rayLayer.wedge = null;
+  rayLayer.tradeZones = null;
   if (!hasToriAnalysis()) {
     const historyMarkers = [];
     if (typeof entryHistory !== 'undefined') entryHistory?.decorate(historyMarkers);
-    markerPlugin.setMarkers(historyMarkers);
+    decorateBacktestCase(historyMarkers);
+    markerPlugin.setMarkers(historyMarkers.sort((a, b) => a.time - b.time));
     rayLayer.update();
     return;
   }
@@ -381,11 +768,12 @@ function automaticLines() {
     const add = (r, kind, outer = false, retest = false) => {
       if (!r) return;
       const master = r.algorithm === "master";
-      const color = retest ? "#f48200" : master ? r.color : kind === "red" ? "#ff4564" : "#0bbb78";
+      const color = retest ? "#f59e0b" : master ? r.color : kind === "red" ? "#ef5350" : "#26a69a";
+      const lineColor = outer ? (color.length === 7 ? color + (master ? "88" : "44") : color) : color;
       rayLayer.automatic.push({
         ...asRay(r),
-        color: outer && !master ? color + "44" : color,
-        width: master && !retest ? (outer ? 2 : 3) : outer ? 1 : tf === state.timeframe ? 2.5 : 2,
+        color: lineColor,
+        width: master && !retest ? (outer ? 1.25 : 2.2) : outer ? 1 : tf === state.timeframe ? 2.2 : 1.75,
         dash: retest
           ? tf === "1D"
             ? [2, 5]
@@ -418,6 +806,9 @@ function automaticLines() {
     if(lane.mainSafety && lane.mainSafety.id!==lane.green?.id)add(lane.mainSafety,"green",true);
     if(lane.tightSafety && lane.tightSafety.id!==lane.green?.id && lane.tightSafety.id!==lane.mainSafety?.id)add(lane.tightSafety,"green",true);
     add(lane.green, "green");
+    if (tf === state.timeframe && lane.red && lane.green) {
+      rayLayer.wedge = { red: asRay(lane.red), green: asRay(lane.green) };
+    }
     if (lane.retest) add(lane.retest.ray, "red", false, true);
     if (tf === state.timeframe) {
       for (const kind of ["red", "green"]) {
@@ -465,6 +856,7 @@ function automaticLines() {
     }
   }
   if (typeof entryHistory !== 'undefined') entryHistory?.decorate(markers);
+  decorateBacktestCase(markers);
   markerPlugin.setMarkers(markers.sort((a, b) => a.time - b.time));
   rayLayer.update();
 }
@@ -545,10 +937,29 @@ function table() {
       }),
   );
 }
+function fmtVol(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(".", ",") + " Mrd.";
+  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(".", ",") + " Mio.";
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + " Tsd.";
+  return String(Math.round(n));
+}
 function ohlc(bar) {
-  $("#ohlc").textContent = bar
-    ? `${dt(Number(bar.time))}   O ${fmt(bar.open)}   H ${fmt(bar.high)}   L ${fmt(bar.low)}   C ${fmt(bar.close)}`
-    : "—";
+  const el = $("#ohlc");
+  if (!el) return;
+  if (!bar) {
+    el.textContent = "—";
+    return;
+  }
+  const full = state.data?.bars?.find((x) => x.time === bar.time) || bar;
+  const pct = full.open > 0 ? ((full.close - full.open) / full.open) * 100 : null;
+  const pctStr = pct !== null && Number.isFinite(pct)
+    ? ` <span class="${pct >= 0 ? "chg-up" : "chg-dn"}">${pct >= 0 ? "+" : ""}${pct.toFixed(2).replace(".", ",")} %</span>`
+    : "";
+  const volTxt = fmtVol(full.volume);
+  const volHtml = volTxt ? ` <span class="vol-dim">· Vol ${volTxt}</span>` : "";
+  el.innerHTML = `${dt(Number(bar.time))}   O ${fmt(bar.open)}   H ${fmt(bar.high)}   L ${fmt(bar.low)}   C ${fmt(bar.close)}${pctStr}${volHtml}`;
 }
 chart.subscribeCrosshairMove((p) => {
   const b = p.seriesData.get(candles);
@@ -632,6 +1043,7 @@ function view(bundle, tf) {
   return data;
 }
 function render(bundle, preserve = false) {
+  const renderStarted=performance.now(),previousData=state.data;
   const hadData = !!state.data;
   const symbolChanged = state.symbol !== bundle.symbol;
   const oldRange =
@@ -686,15 +1098,42 @@ function render(bundle, preserve = false) {
       }),
   );
   const byTime = new Map(data.bars.map((b) => [b.time, b]));
-  candles.setData(
-    data.axis.map((time) => {
+  const candleRows=data.axis.map((time) => {
       const b = byTime.get(time);
       return b
         ? { time, open: b.open, high: b.high, low: b.low, close: b.close }
         : { time };
-    }),
-  );
-  chart.timeScale().applyOptions({
+    });
+  const resetSeries=!previousData || previousData.symbol!==data.symbol || previousData.timeframe!==data.timeframe || previousData.datasetId!==data.datasetId || previousData.randomCase?.id!==data.randomCase?.id;
+  const prevEnd = previousData?.bars?.at(-1)?.time ?? -Infinity;
+  const nextEnd = data.bars.at(-1)?.time ?? -Infinity;
+  const shrinking = Boolean(previousData && (candleRows.length < previousData.bars.length || nextEnd < prevEnd));
+  if (resetSeries || shrinking) {
+    // Clear markers and trailing secondary series before shortening/replacing candles
+    // so Lightweight Charts' SeriesMarkers dataChanged handler never looks up removed bars.
+    try { markerPlugin.setMarkers([]); } catch {}
+    if (state.btStopSeries) {
+      try { state.btStopSeries.setData([]); } catch {}
+    }
+    if (resetSeries || (previousData && previousData.bars.length - candleRows.length > 1)) {
+      if (state.volumeSeries) {
+        try { state.volumeSeries.setData([]); } catch {}
+      }
+      for (const s of Object.values(state.contextSeries)) {
+        if (s) {
+          try {
+            if (typeof ReplayBuffer !== 'undefined') ReplayBuffer.updateSeries(s, [], true);
+            else s.setData([]);
+          } catch {}
+        }
+      }
+    }
+  }
+  const candleMode=typeof ReplayBuffer!=='undefined'?ReplayBuffer.updateSeries(candles,candleRows,resetSeries):(candles.setData(candleRows),'replace');
+  $('#chart').dataset.candleUpdate=candleMode;
+  updateWatermark();
+  updateVolume();
+  if(resetSeries)chart.timeScale().applyOptions({
     timeVisible: !['1D','1W'].includes(state.timeframe),
     tickMarkFormatter: (time, type) =>
       new Intl.DateTimeFormat("de-DE", {
@@ -707,10 +1146,19 @@ function render(bundle, preserve = false) {
   table();
   automaticLines();
   ohlc(data.bars.at(-1));
-  if (windowTimes)
+  const preservedFrom = windowTimes ? RayGeometry.logicalAt(data.axis, windowTimes.from) : null;
+  const preservedTo = windowTimes ? RayGeometry.logicalAt(data.axis, windowTimes.to) : null;
+  if (
+    windowTimes &&
+    Number.isFinite(preservedFrom) &&
+    Number.isFinite(preservedTo) &&
+    preservedFrom < preservedTo &&
+    preservedTo >= 0 &&
+    preservedFrom < data.axis.length + 10
+  )
     chart.timeScale().setVisibleLogicalRange({
-      from: RayGeometry.logicalAt(data.axis, windowTimes.from),
-      to: RayGeometry.logicalAt(data.axis, windowTimes.to),
+      from: preservedFrom,
+      to: preservedTo,
     });
   else setRange(state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30);
   $("#axis-mode").value = state.axisMode;
@@ -736,6 +1184,81 @@ function render(bundle, preserve = false) {
   if (warnings.length) showError(warnings[0]);
   updateRandomUI();
   if (typeof entryHistory !== 'undefined') entryHistory?.onRender();
+  $('#chart').dataset.renderMs=(performance.now()-renderStarted).toFixed(2);
+  replayBuffer?.prime(bundle);
+}
+
+let replayBuffer=null;
+const replayWindow=typeof ReplayWindow==='undefined'?null:new ReplayWindow.Client(async path=>{
+  const response=await apiFetch(path),data=await response.json();
+  if(!response.ok){const error=Error(data.error || 'Replay-Abruf fehlgeschlagen.');error.status=response.status;throw error;}
+  return data;
+});
+const chartRequests=new Map();
+let sourceEpoch=0;
+function replayContext(){
+  return JSON.stringify([state.symbol,state.datasetId,state.entryRun,state.randomId,state.fanJob,state.fanCase,
+    state.researchJob,state.researchTrial,state.researchVariant,state.timeframe,state.analysisEnabled,state.analysisEngine,state.frozen?.id,state.replaySource,sourceEpoch]);
+}
+async function requestChart(symbol,asOf,analysis,force=false){
+  const key=sourceEpoch+'|'+bundleKey(symbol,asOf,analysis);
+  if(!force && chartRequests.has(key))return chartRequests.get(key);
+  const params=new URLSearchParams({symbol,timeframe:state.timeframe,refresh:force?'1':'0',analysis:analysis?'1':'0'});
+  if(asOf)params.set('asof',asOf);
+  if(state.datasetId)params.set('dataset',state.datasetId);
+  if(state.replaySource && !state.datasetId && !state.randomId && !state.fanCase)params.set('replay_source',state.replaySource);
+  if(state.entryRun)params.set('run',state.entryRun);
+  if(state.analysisEngine!=='legacy')params.set('engine',state.analysisEngine);
+  if(state.fanCase){params.set('fan_job',state.fanJob);params.set('fan_case',state.fanCase);}
+  if(state.researchJob){params.set('job',state.researchJob);params.set('trial',state.researchTrial);params.set('variant',state.researchVariant);}
+  const path=state.entryRun?'/api/entries/chart?':state.fanCase?'/api/fan/chart?':state.randomId?'/api/random/cases/'+encodeURIComponent(state.randomId)+'/chart?':state.datasetId?'/api/dataset-chart?':'/api/chart?';
+  const useWindow=replayWindow && !state.entryRun && !state.fanCase && !state.researchJob;
+  const config={symbol,timeframe:state.timeframe,refresh:force?'1':'0',analysis:analysis?'1':'0',engine:state.analysisEngine};
+  if(asOf)config.asof=asOf;
+  if(state.datasetId)config.dataset=state.datasetId;
+  if(state.randomId)config.random=state.randomId;
+  const locked=analysis && state.frozen?.symbol===symbol &&
+    (state.frozen.payload.analysisEngine || 'legacy')===state.analysisEngine &&
+    (state.frozen.payload.datasetId || null)===(state.datasetId || null) &&
+    (state.frozen.payload.randomCase?.id || null)===(state.randomId || null) &&
+    asOf && Date.parse(asOf)/1000>=frozenBoundary(state.frozen)?state.frozen:null;
+  if(locked)config.analysis='0';
+  const pending=(async()=>{
+    let rejectedWindow=false;
+    if(useWindow){
+      try{
+        const data=await replayWindow.request(config);
+        return locked?{...data,analysisEnabled:true,analysisEngine:state.analysisEngine,
+          lanes:locked.payload.lanes,frozenReplay:true}:data;
+      }
+      catch(e){if(e.status!==422)throw e;rejectedWindow=true;} // Strict single-view fallback.
+    }
+    const response=await apiFetch(path+params);const data=await response.json();if(!response.ok)throw Error(data.error || 'Datenabruf fehlgeschlagen.');
+    if(rejectedWindow)replayWindow.clear();
+    return data;
+  })();
+  chartRequests.set(key,pending);
+  try{return await pending;}finally{if(chartRequests.get(key)===pending)chartRequests.delete(key);}
+}
+async function resolveReplayTarget(base,direction){
+  const tf=state.timeframe;
+  if(base.replaySession){
+    const target=replayWindow?.target(base,tf,direction);
+    if(target)return target;
+    // A background neighbour preparation must not initiate another provider import.
+    return null;
+  }
+  // Every preceding candle is already in the current causal prefix.
+  if(direction==='back'){
+    const bars=base.charts[tf].bars,bar=bars.at(-2);
+    if(!bar || state.analysisEnabled && state.frozen && bar.end<frozenBoundary(state.frozen))return null;
+    return {closedAt:bar.end,asof:new Date(bar.end*1000).toISOString(),timeframe:tf};
+  }
+  const params=new URLSearchParams({symbol:state.symbol,timeframe:tf,asof:new Date(base.analysisCutoff*1000).toISOString(),direction});
+  if(state.datasetId)params.set('dataset',state.datasetId);
+  const response=await apiFetch((state.randomId?'/api/random/cases/'+encodeURIComponent(state.randomId)+'/step?':'/api/step?')+params);
+  const target=await response.json();if(!response.ok)throw Error(target.error || 'Kerzenschritt nicht verfügbar.');
+  return target;
 }
 function showError(text) {
   $("#error").textContent = text;
@@ -747,6 +1270,9 @@ async function load(
   asOf = state.asOf,
   preserveView = false,
 ) {
+  if (!state.stepping) stopReplayPlay();
+  const refreshCache=force?new Map(state.bundles):null;
+  if(force){sourceEpoch++;replayBuffer?.clear();state.bundles.clear();chartRequests.clear();}
   const previousContext = {
     datasetId: state.datasetId,
     fanJob: state.fanJob,
@@ -755,6 +1281,7 @@ async function load(
     researchJob: state.researchJob,
     researchTrial: state.researchTrial,
     researchVariant: state.researchVariant,
+    replaySource:state.replaySource,
   };
   if (symbol !== state.symbol && !state.randomId) {
     state.datasetId = null;
@@ -764,6 +1291,7 @@ async function load(
     state.researchJob = null;
     state.researchTrial = null;
     state.researchVariant = null;
+    state.replaySource=null;
   }
   const id = ++state.request;
   setTool(false);
@@ -788,33 +1316,13 @@ async function load(
       force ||
       (!data.historical && Date.now() - Date.parse(data.generatedAt) >= 300000)
     ) {
-      const params = new URLSearchParams({
-        symbol,
-        timeframe: state.timeframe,
-        refresh: force ? "1" : "0",
-        analysis: analysis ? "1" : "0",
-      });
-      if (asOf) params.set("asof", asOf);
-      if (state.datasetId) params.set("dataset", state.datasetId);
-      if (state.entryRun) params.set('run',state.entryRun);
-      if (state.analysisEngine !== "legacy") params.set("engine", state.analysisEngine);
-      if (state.fanCase) {
-        params.set("fan_job", state.fanJob);
-        params.set("fan_case", state.fanCase);
-      }
-      if (state.researchJob) {
-        params.set("job", state.researchJob);
-        params.set("trial", state.researchTrial);
-        params.set("variant", state.researchVariant);
-      }
-      const response = await apiFetch(
-        (state.entryRun ? '/api/entries/chart?' : state.fanCase ? "/api/fan/chart?" : state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/chart?' : state.datasetId ? "/api/dataset-chart?" : "/api/chart?") + params,
-      );
-      data = await response.json();
-      if (!response.ok) throw Error(data.error || "Datenabruf fehlgeschlagen.");
+      data=await requestChart(symbol,asOf,analysis,force);
       fetched = true;
     }
     if (id !== state.request) return false;
+    if('replaySourceId' in data && data.replaySourceId!==state.replaySource){
+      state.replaySource=data.replaySourceId;state.bundles.clear();sourceEpoch++;replayBuffer?.clear();
+    }
     if (!analysis && fetched) {
       // A new manual import invalidates older overlays for the same view.
       state.bundles.delete(bundleKey(symbol, asOf, true));
@@ -829,7 +1337,7 @@ async function load(
     state.asOf = isoCutoff(data);
     const asset = state.assetRows.find((a) => a.symbol === symbol);
     if (asset && data.dataKind !== "synthetic") data.company = asset.name;
-    state.bundles.set(key, data);
+    state.bundles.set(bundleKey(symbol,asOf,analysis), data);
     state.bundles.set(bundleKey(symbol, state.asOf), data);
     while (state.bundles.size > 32)
       state.bundles.delete(state.bundles.keys().next().value);
@@ -840,6 +1348,7 @@ async function load(
   } catch (e) {
     if (id !== state.request) return false;
     Object.assign(state, previousContext);
+    if(refreshCache)state.bundles=refreshCache;
     showError(e.message);
     if (!state.data) $("#company").textContent = `${symbol} · Keine Kursdaten`;
     $("#connection").textContent = state.data
@@ -1023,20 +1532,64 @@ $("#outer-lines").onchange = automaticLines;
 $("#ray-tool").onclick = () => {
   if (state.data) setTool(!rayLayer.active);
 };
+if ($("#horiz-tool")) {
+  $("#horiz-tool").onclick = () => {
+    if (state.data) setTool(rayLayer.horizontalActive ? false : "horizontal");
+  };
+}
+if ($("#rect-tool")) {
+  $("#rect-tool").onclick = () => {
+    if (state.data) setTool(rayLayer.rectActive ? false : "rect");
+  };
+}
+if ($("#longbox-tool")) {
+  $("#longbox-tool").onclick = () => {
+    if (state.data) setTool(rayLayer.longActive ? false : "longbox");
+  };
+}
+if ($("#magnet-tool")) {
+  syncMagnetUI();
+  $("#magnet-tool").onclick = () => {
+    rayLayer.magnet = !rayLayer.magnet;
+    write("tori-magnet", rayLayer.magnet);
+    syncMagnetUI();
+  };
+}
 $('#line-extension').onchange=()=>{
-  setTool(false);
+  if (!rayLayer.active && !rayLayer.horizontalActive) setTool(false);
   rayLayer.changeExtension($('#line-extension').value);
+  updateDrawingStyleBar();
   updateDrawingSummary();
 };
 $('#line-color').value=RayGeometry.color(read('tori-line-color','#3988ee'));
 rayLayer.color=$('#line-color').value;
 $('#line-color').onchange=()=>{
-  setTool(false);
+  if (!rayLayer.active && !rayLayer.horizontalActive && !rayLayer.rectActive) setTool(false);
   const color=RayGeometry.color($('#line-color').value);
   write('tori-line-color',color);
   rayLayer.changeColor(color);
+  updateDrawingStyleBar();
   updateDrawingSummary();
 };
+document.querySelectorAll("[data-swatch]").forEach((btn) => {
+  btn.onclick = () => {
+    const color = RayGeometry.color(btn.dataset.swatch);
+    $("#line-color").value = color;
+    write("tori-line-color", color);
+    rayLayer.changeColor(color);
+    updateDrawingStyleBar();
+    updateDrawingSummary();
+  };
+});
+document.querySelectorAll("[data-ext]").forEach((btn) => {
+  btn.onclick = () => {
+    const ext = btn.dataset.ext;
+    $("#line-extension").value = ext;
+    rayLayer.changeExtension(ext);
+    updateDrawingStyleBar();
+    updateDrawingSummary();
+  };
+});
 $("#cursor-tool").onclick = () => setTool(false);
 $("#measure-tool").onclick = () => {
   if (state.data) setTool(rayLayer.measureActive ? false : "measure");
@@ -1048,8 +1601,22 @@ document.querySelectorAll("[data-tf]").forEach(
     (b.onclick = () => {
       if (state.timeframe === b.dataset.tf) return;
       const bundle = currentBundle();
-      if(!bundle?.charts[b.dataset.tf] || state.frozen && !state.frozen.payload.charts[b.dataset.tf]) {
-        showError('Dieses Intervall fehlt im angezeigten Bestand oder alten fixierten Stand. Gegebenenfalls Fixierung lösen und Daten neu laden.');return;
+      if (state.frozen && !state.frozen.payload.charts[b.dataset.tf]) {
+        showError('Dieses Intervall fehlt im angezeigten Bestand oder alten fixierten Stand. Gegebenenfalls Fixierung lösen und Daten neu laden.');
+        return;
+      }
+      if (!bundle?.charts[b.dataset.tf]) {
+        if (state.datasetId || randomMode) {
+          showError('Dieses Intervall fehlt im angezeigten Bestand oder alten fixierten Stand. Gegebenenfalls Fixierung lösen und Daten neu laden.');
+          return;
+        }
+        state.timeframe = b.dataset.tf;
+        state.range = state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30;
+        document.querySelectorAll("[data-tf]").forEach((btn) => btn.setAttribute("aria-pressed", String(btn === b)));
+        setTool(false);
+        rayLayer.timeframe = state.timeframe;
+        load(state.symbol, false, state.asOf, state.analysisEnabled);
+        return;
       }
       state.timeframe = b.dataset.tf;
       state.range = state.timeframe === "1D" ? 90 : state.timeframe==='1W' ? 730 : 30;
@@ -1089,16 +1656,79 @@ $("#fit-lines").onchange = () => {
   chart.priceScale("right").applyOptions({ autoScale: true });
   $("#auto-scale").setAttribute("aria-pressed", "true");
 };
+function stopReplayPlay() {
+  if (state.replayTimer) {
+    clearInterval(state.replayTimer);
+    state.replayTimer = null;
+  }
+  const btn = $("#replay-play");
+  if (btn) {
+    btn.setAttribute("aria-pressed", "false");
+    btn.textContent = "⏯";
+  }
+}
+
+function toggleReplayPlay() {
+  if (state.replayTimer) {
+    stopReplayPlay();
+    return;
+  }
+  const btn = $("#replay-play");
+  if (btn) {
+    btn.setAttribute("aria-pressed", "true");
+    btn.textContent = "⏸";
+  }
+  const tick = async () => {
+    if (!state.replayTimer) return;
+    if (state.stepping || state.freezing || !$("#loading").hidden) return;
+    const nextBtn = $("#step-next");
+    if (nextBtn && nextBtn.disabled) {
+      stopReplayPlay();
+      return;
+    }
+    try {
+      const ok = await stepAnalysis("next");
+      if (ok === false || !$("#error").hidden) stopReplayPlay();
+    } catch {
+      stopReplayPlay();
+    }
+  };
+  state.replayTimer = setInterval(tick, 550);
+  tick();
+}
+if ($("#replay-play")) {
+  $("#replay-play").onclick = toggleReplayPlay;
+}
+
 document.addEventListener("keydown", (e) => {
   if (
     document.querySelector("dialog[open]") ||
-    /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)
+    /INPUT|SELECT|TEXTAREA|BUTTON|A|SUMMARY/.test(e.target.tagName)
   )
     return;
   if (!e.ctrlKey && !e.metaKey && !e.altKey) {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
+      stopReplayPlay();
       stepAnalysis(e.key === "ArrowLeft" ? "back" : "next");
+    }
+    if (e.key.toLowerCase() === "p" && state.data) {
+      e.preventDefault();
+      toggleReplayPlay();
+    }
+    if (e.key.toLowerCase() === "t" && state.data) {
+      e.preventDefault();
+      toggleToriAnalysis();
+    }
+    if (e.key.toLowerCase() === "s" && $("#sma200")) {
+      e.preventDefault();
+      $("#sma200").checked = !$("#sma200").checked;
+      $("#sma200").onchange();
+    }
+    if (e.key.toLowerCase() === "b" && $("#volume-toggle")) {
+      e.preventDefault();
+      $("#volume-toggle").checked = !$("#volume-toggle").checked;
+      $("#volume-toggle").onchange();
     }
     if (e.key === "+" || e.key === "=") {
       e.preventDefault();
@@ -1122,10 +1752,22 @@ document.addEventListener("keydown", (e) => {
     rayLayer.selected = null;
     rayLayer.measurementSelected = false;
     rayLayer.update();
+    updateDrawingStyleBar();
     updateDrawingSummary();
   }
   if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey && state.data)
     setTool(true);
+  if (e.key.toLowerCase() === "h" && !e.ctrlKey && !e.metaKey && state.data)
+    setTool(rayLayer.horizontalActive ? false : "horizontal");
+  if (e.key.toLowerCase() === "z" && !e.ctrlKey && !e.metaKey && state.data)
+    setTool(rayLayer.rectActive ? false : "rect");
+  if (e.key.toLowerCase() === "l" && !e.ctrlKey && !e.metaKey && state.data)
+    setTool(rayLayer.longActive ? false : "longbox");
+  if (e.key.toLowerCase() === "g" && !e.ctrlKey && !e.metaKey) {
+    rayLayer.magnet = !rayLayer.magnet;
+    write("tori-magnet", rayLayer.magnet);
+    syncMagnetUI();
+  }
   if (e.key.toLowerCase() === "v") setTool(false);
   if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey && state.data)
     setTool("measure");
@@ -1168,6 +1810,7 @@ $("#analysis-engine").onchange = async () => {
   }
 };
 setupMeasurements();
+initBacktestCase();
 function updateRandomUI(){
   if(!randomMode)return;
   $('#random-controls').hidden=false;$('#random-note').hidden=false;
@@ -1209,6 +1852,21 @@ entryHistory = typeof EntryHistory !== 'undefined' ? EntryHistory.attach({
   },
   disable: async () => {state.entryRun=null;await load(state.symbol,false,state.asOf,true);}
 }) : null;
+if(typeof ReplayBuffer!=='undefined')replayBuffer=new ReplayBuffer.Prefetch({
+  context:replayContext,target:resolveReplayTarget,radius:8,
+  fetch:async target=>{
+    const data=state.bundles.get(bundleKey(state.symbol,target.asof)) || await requestChart(state.symbol,target.asof,state.analysisEnabled);
+    if(state.replaySource && data.replaySourceId && data.replaySourceId!==state.replaySource)throw Error('Replay-Datenstand geändert.');
+    return data;
+  },
+  store:(target,data)=>{
+    const key=bundleKey(state.symbol,target.asof);state.bundles.delete(key);state.bundles.set(key,data);
+    const current=bundleKey(state.symbol,state.asOf),active=state.bundles.get(current);
+    if(active){state.bundles.delete(current);state.bundles.set(current,active);}
+    while(state.bundles.size>32)state.bundles.delete(state.bundles.keys().next().value);
+  },
+  status:(mode,count)=>{$('#replay-buffer-status').textContent=mode==='preparing'?(count?`${count} Schritte bereit · lade weiter …`:'Bereite Schritte vor …'):mode==='ready'?`${count} Schritte bereit`:'';}
+});
 if(randomMode){
   document.title='Tori · Zufall';
   document.querySelector('.app-navigation a[href="/"]')?.setAttribute('aria-current','false');

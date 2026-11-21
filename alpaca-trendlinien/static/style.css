@@ -32,22 +32,23 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #11151e;
-  --surface: #191e29;
-  --text: #e2e7f0;
-  --muted: #99a4b5;
-  --border: #47546b;
-  --grid: #273245;
-  --hover: #262f3e;
-  --accent: #85aaff;
-  --green: #20cc91;
-  --red: #ff5b75;
-  --panel: #1b2230;
-  --panel-text: #edf2fa;
-  --shadow: 0 12px 48px #0006;
-  --entry-breakout:#82b1ff;
-  --entry-retest:#cf9eff;
-  --entry-safety:#42d3b7;
+  --bg: #0f141c;
+  --surface: #161d27;
+  --text: #e6edf3;
+  --muted: #9aa7b8;
+  --border: #263142;
+  --grid: #1e293b;
+  --hover: #1d2736;
+  --accent: #3b82f6;
+  --panel: #131a24;
+  --panel-text: #e6edf3;
+  --green: #10b981;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --shadow: 0 12px 48px #0008;
+  --entry-breakout:#3b82f6;
+  --entry-retest:#a855f7;
+  --entry-safety:#10b981;
 }
 #theme-button{min-width:94px;white-space:nowrap;border:1px solid var(--border);background:var(--hover);border-radius:5px;padding:6px 9px;font-weight:650}
 html,
@@ -118,10 +119,12 @@ button[aria-pressed="true"] {
 .app-navigation {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 36px;
+  height: auto;
   flex-shrink: 0;
-  padding: 0 12px;
+  padding: 4px 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -129,14 +132,116 @@ button[aria-pressed="true"] {
   color: var(--muted);
   text-decoration: none;
   font-weight: 650;
-  padding: 7px 12px;
+  padding: 5px 8px;
   border-radius: 5px;
   white-space: nowrap;
+  font-size: 12.5px;
 }
-.app-navigation a:hover,
-.app-navigation a[aria-current="page"] {
-  color: var(--accent);
+.app-navigation a:hover {
+  color: var(--text);
   background: var(--hover);
+}
+.app-navigation a[aria-current="page"] {
+  color: #ffffff;
+  background: #2563eb;
+}
+.app-navigation .nav-more {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.app-navigation .nav-more > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 650;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  user-select: none;
+}
+.app-navigation .nav-more > summary::-webkit-details-marker {
+  display: none;
+}
+.app-navigation .nav-more > summary:hover,
+.app-navigation .nav-more[open] > summary {
+  color: var(--text);
+  background: var(--hover);
+}
+.app-navigation .nav-more:has(a[aria-current="page"]) > summary {
+  color: #ffffff;
+  background: #2563eb;
+}
+.app-navigation .nav-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  z-index: 80;
+}
+.app-navigation .nav-more-menu a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+:root[data-theme="dark"] .app-navigation .nav-more > summary {
+  color: #b7c4d6;
+}
+:root[data-theme="dark"] .app-navigation .nav-more > summary:hover,
+:root[data-theme="dark"] .app-navigation .nav-more[open] > summary {
+  color: #ffffff;
+  background: #1d2736;
+}
+:root[data-theme="dark"] .app-navigation .nav-more:has(a[aria-current="page"]) > summary {
+  color: #ffffff;
+  background: #2563eb;
+}
+:root[data-theme="dark"] .app-navigation .nav-more-menu {
+  background: #161d27;
+  border-color: #263142;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme="dark"] .app-navigation {
+  background: #131a24;
+  border-bottom-color: #243043;
+}
+:root[data-theme="dark"] .research-header,
+:root[data-theme="dark"] .watch-header,
+:root[data-theme="dark"] .fan-page header {
+  background: #131a24;
+  border-bottom-color: #243043;
+}
+:root[data-theme="dark"] .research-header .app-navigation,
+:root[data-theme="dark"] .watch-header .app-navigation,
+:root[data-theme="dark"] .fan-page .app-navigation {
+  background: transparent;
+}
+:root[data-theme="dark"] .research-card,
+:root[data-theme="dark"] .fan-card,
+:root[data-theme="dark"] .watch-card {
+  background: #161d27;
+  border-color: #263142;
+  border-radius: 10px;
+}
+:root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background: #0f141c;
+  color: #e6edf3;
+  border-color: #304057;
+}
+:root[data-theme="dark"] .toolbar {
+  background: #131a24;
+  border-bottom-color: #243043;
 }
 .research-header .app-navigation {
   border: 0;
@@ -1034,8 +1139,109 @@ dialog::backdrop {
 .practice-controls label{display:flex;align-items:center;gap:6px}
 .practice-controls select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px;max-width:270px}
 #random-note{color:var(--muted);flex:1;min-width:190px}
+.sma-status{font-size:12px;color:var(--muted)}
 #random-new{color:var(--accent);font-weight:650}
-.app-navigation{overflow-x:auto}
+.app-navigation{overflow:visible}
+.bt-case-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 14px;
+  background: #131c28;
+  border-bottom: 1px solid #263449;
+  border-left: 4px solid #10b981;
+  color: #e6edf3;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+.bt-case-bar[hidden] { display: none !important; }
+.bt-case-badge {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.22);
+  border: 1px solid #10b981;
+  color: #6ee7b7;
+}
+.bt-case-info {
+  flex: 1;
+  min-width: 240px;
+}
+.bt-case-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bt-case-actions button {
+  padding: 4px 10px;
+  min-height: 26px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #1f2b3d;
+  border: 1px solid #334663;
+  color: #e6edf3;
+  border-radius: 6px;
+}
+.bt-case-actions button:hover {
+  background: #2b3c55;
+}
+#bt-jump-exit {
+  background: #0f766e;
+  border-color: #14b8a6;
+  color: #fff;
+}
+#bt-jump-exit:hover {
+  background: #0d9488;
+}
+.chart-watermark {
+  position: absolute;
+  inset: 0 76px 28px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  user-select: none;
+  z-index: 3;
+  text-align: center;
+  line-height: 1.05;
+}
+.chart-watermark .wm-sym {
+  font-size: clamp(46px, 8vw, 96px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: rgba(148, 163, 184, 0.085);
+}
+.chart-watermark .wm-sub {
+  margin-top: 6px;
+  font-size: clamp(13px, 1.5vw, 18px);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.075);
+}
+:root[data-theme="light"] .chart-watermark .wm-sym {
+  color: rgba(30, 41, 59, 0.055);
+}
+:root[data-theme="light"] .chart-watermark .wm-sub {
+  color: rgba(30, 41, 59, 0.05);
+}
+.ohlc .chg-up { color: #26a69a; font-weight: 600; }
+.ohlc .chg-dn { color: #ef5350; font-weight: 600; }
+.ohlc .vol-dim { color: var(--muted); }
+:root[data-theme="dark"] #info-panel {
+  background: rgba(19, 26, 36, 0.86);
+  backdrop-filter: blur(8px);
+  border-color: #2b3a50;
+}
+#replay-play[aria-pressed="true"] {
+  background: #0f766e;
+  color: #fff;
+}
 @media(max-width:600px){.practice-controls{padding:4px 8px}.practice-controls select{max-width:220px}#random-note{flex-basis:100%;font-size:12px}}
 
 #master-sma-control,#master-date-control{font-size:11px;white-space:nowrap;display:flex;gap:4px;align-items:center}#master-sma-control[hidden],#master-date-control[hidden]{display:none}#master-date-line{position:absolute;top:0;bottom:30px;border-left:1px dashed #2979ff;pointer-events:none;z-index:2}#master-date-line[hidden]{display:none}#master-date-line span{position:absolute;top:78px;right:4px;background:#2979ff;color:white;padding:4px 6px;border-radius:3px;white-space:nowrap;font-size:11px}
@@ -1043,3 +1249,374 @@ dialog::backdrop {
 .info-panel{max-height:calc(100% - 24px);overflow-y:auto;overscroll-behavior:contain}.info-panel .info-heading{position:sticky;top:0;background:var(--panel);z-index:1}.master-extra{border-top:1px solid #ffffff25;padding:5px 8px}.master-extra summary{cursor:pointer;font-size:12px;color:#c4cbd7}.master-extra small{display:block;line-height:1.4;padding:5px 0}
 
 .master-blue{color:#5aa9ff}
+
+/* === TradingView-Inspired Unified Chart Chrome === */
+.chart-page > .toolbar {
+  min-height: 42px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.chart-page .symbol-button {
+  min-width: 96px;
+  gap: 7px;
+  padding: 4px 10px;
+  min-height: 30px;
+  border-radius: 6px;
+}
+.chart-page .symbol-button > span:first-child {
+  font-size: 17px;
+}
+.chart-page .toolbar button,
+.chart-page .toolbar select {
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 12.5px;
+  border-radius: 6px;
+}
+.chart-page .segmented {
+  background: rgba(148, 163, 184, 0.08);
+  padding: 2px;
+  border-radius: 7px;
+  gap: 2px;
+}
+.chart-page .segmented button {
+  min-height: 26px;
+  padding: 2px 9px;
+  border: 0;
+  background: transparent;
+}
+.chart-page .segmented button[aria-pressed="true"] {
+  background: #2563eb;
+  color: #ffffff;
+}
+.chart-page #analysis-engine {
+  max-width: 170px;
+}
+.chart-page .replay-controls {
+  padding: 1px 4px;
+  gap: 2px;
+  border-radius: 7px;
+}
+.chart-page .replay-controls button {
+  min-height: 26px;
+  padding: 2px 7px;
+}
+.random-bar {
+  padding: 4px 12px;
+  min-height: 0;
+}
+.random-bar:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+/* Docked left TradingView drawing rail */
+#workspace {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  position: relative;
+}
+.chart-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.drawing-tools {
+  position: static;
+  left: auto;
+  top: auto;
+  width: 44px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  background: var(--surface);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  z-index: 5;
+}
+:root[data-theme="dark"] .drawing-tools {
+  background: #131a24;
+  border-right-color: #243043;
+}
+.drawing-tools button {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.drawing-tools button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.drawing-tools button[aria-pressed="true"] {
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(59, 130, 246, 0.55);
+  color: #60a5fa;
+}
+:root[data-theme="light"] .drawing-tools button[aria-pressed="true"] {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+.drawing-tools #magnet-tool[aria-pressed="true"] {
+  background: rgba(38, 166, 154, 0.22);
+  border-color: rgba(38, 166, 154, 0.6);
+  color: #2dd4bf;
+}
+.drawing-tools button:disabled {
+  opacity: 0.32;
+}
+.drawing-tools svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.drawing-tools .tool-sep {
+  width: 22px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* Watermark & compact TradingView chart header + clickable indicator legend */
+.chart-watermark {
+  inset: 0 76px 28px 0;
+}
+.instrument {
+  left: 14px;
+  top: 8px;
+  max-width: calc(100% - 290px);
+  line-height: 1.38;
+  font-size: 13px;
+}
+.instrument-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.instrument-top strong {
+  font-weight: 650;
+  font-size: 13.5px;
+}
+.instrument-top .analysis-state {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.1);
+}
+.instrument-top .analysis-state:empty {
+  display: none;
+}
+.ohlc {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  pointer-events: auto;
+}
+.legend-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(19, 26, 36, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.legend-pill:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.85);
+}
+.legend-pill[hidden] {
+  display: none !important;
+}
+.legend-pill input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.legend-pill:has(input:not(:checked)) {
+  opacity: 0.42;
+}
+.legend-pill:has(input:not(:checked)) .legend-name {
+  text-decoration: line-through;
+}
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.legend-pill .sma-status {
+  font-size: 11px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+.legend-pill .sma-status[hidden] {
+  display: none;
+}
+#sma200-control:has(#sma200-status:not([hidden])) .legend-name {
+  display: none;
+}
+:root[data-theme="light"] .legend-pill {
+  background: rgba(255, 255, 255, 0.84);
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+.replay-toast {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #93c5fd;
+}
+.replay-toast:empty {
+  display: none;
+}
+
+/* Floating TradingView drawing style bar (shown only while drawing / ray selected) */
+.drawing-style-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(19, 26, 36, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid #2b3a50;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+.drawing-style-bar[hidden] {
+  display: none !important;
+}
+:root[data-theme="light"] .drawing-style-bar {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.14);
+}
+.swatch-row,
+.ext-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.swatch {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--sw);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.swatch:hover {
+  transform: scale(1.15);
+}
+.swatch.active {
+  box-shadow: 0 0 0 2px #0f141c, 0 0 0 3.5px #ffffff;
+}
+:root[data-theme="light"] .swatch.active {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3.5px #2563eb;
+}
+.drawing-style-bar #line-color {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 1px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+.style-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+.ext-btn {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ext-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.ext-btn[aria-pressed="true"] {
+  background: rgba(37, 99, 235, 0.25);
+  border-color: rgba(59, 130, 246, 0.55);
+  color: #60a5fa;
+}
+.ext-select {
+  height: 26px;
+  min-height: 26px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  border-radius: 6px;
+}
+
+@media (max-width: 760px) {
+  .drawing-tools {
+    width: 38px;
+    padding: 6px 2px;
+  }
+  .drawing-tools button {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+  .instrument {
+    max-width: calc(100% - 70px);
+  }
+}

@@ -1,7 +1,7 @@
 const $=s=>document.querySelector(s), V=WatchView;
 let active=null,everUnblinded=false,chart=null,queryPage=null,selection=0,listed=0,loading=false;
 let theme;
-try{theme=JSON.parse(localStorage.getItem("tori-theme"))||"light";}catch{theme="light";}
+try{theme=JSON.parse(localStorage.getItem("tori-theme"))||"dark";}catch{theme="dark";}
 document.documentElement.dataset.theme=theme;
 async function json(url,options){const r=await apiFetch(url,options);const data=await r.json();if(!r.ok)throw new Error(data.error||"Anfrage fehlgeschlagen");return data;}
 function text(id,value){$(id).textContent=value;}

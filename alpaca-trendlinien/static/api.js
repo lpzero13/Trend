@@ -8,3 +8,10 @@ async function apiFetch(input, options) {
     );
   }
 }
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  document.addEventListener("click", (ev) => {
+    document.querySelectorAll("details.nav-more[open]").forEach((el) => {
+      if (!el.contains(ev.target)) el.removeAttribute("open");
+    });
+  });
+}

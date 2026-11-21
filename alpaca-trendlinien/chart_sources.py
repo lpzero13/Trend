@@ -46,7 +46,10 @@ def sources_for(identity):
     with _lock:
         item=_cache.get(key)
         if item is None or time.monotonic()-item[0]>=REVERIFY_SECONDS:
-            d=read_dataset(identity)  # Full existing checksum verification, including 5m blocks.
+            try:
+                d=read_dataset(identity, timeframes=('1h','4h','1D'))
+            except TypeError:
+                d=read_dataset(identity)
             if signature(identity)!=key:raise DataError('Dataset wurde während der Prüfung geändert.',409)
             m=d['material']
             sources={tf:([Bar(**b) for b in bars],deepcopy(d['sources'][tf]))

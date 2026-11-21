@@ -9,6 +9,7 @@ import re
 import os
 import base64
 import secrets
+import gzip
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -16,7 +17,34 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import threading
+import alpaca as _alpaca_mod
 from alpaca import DataError, ROOT, TIMEFRAMES, NY, credentials, load_bars, next_bar_close
+_DEFAULT_LOAD_BARS = load_bars
+_PREFETCH_INFLIGHT = set()
+_PREFETCH_LOCK = threading.Lock()
+
+
+def _prefetch_1h_background(symbol: str, now: datetime, cutoff: datetime | None):
+    key = (symbol, cutoff.date().isoformat() if cutoff else "live")
+    with _PREFETCH_LOCK:
+        if key in _PREFETCH_INFLIGHT:
+            return
+        _PREFETCH_INFLIGHT.add(key)
+
+    def _run():
+        try:
+            kwargs = {"force": False, "now": now, "history_days": 180}
+            if cutoff is not None:
+                kwargs["end"] = cutoff
+            load_bars(symbol, "1h", **kwargs)
+        except Exception:
+            pass
+        finally:
+            with _PREFETCH_LOCK:
+                _PREFETCH_INFLIGHT.discard(key)
+
+    threading.Thread(target=_run, daemon=True).start()
 from trendlines import RULES_VERSION, analyze
 from assets import search_assets, cached_asset_name
 from analysis_service import build_chart
@@ -50,21 +78,55 @@ def parse_cutoff(value: str, now: datetime) -> datetime:
         raise DataError("Ungültiger oder durch die Zeitumstellung mehrdeutiger Analysezeitpunkt (New York).", 400) from None
 
 
-def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None, *, include_analysis=True, analysis_engine="legacy") -> dict:
+def chart_payload(symbol: str, timeframe: str, force: bool = False, as_of: str | None = None, *, include_analysis=True, analysis_engine="legacy", replay_source=None) -> dict:
     if timeframe not in CHART_TIMEFRAMES:
         raise DataError("Erlaubte Intervalle: 1h, 4h, 1D und 1W.", 400)
     if not re.fullmatch(r"[A-Z][A-Z0-9./-]{0,29}", symbol):
         raise DataError("Bitte ein gültiges US-Symbol eingeben.", 400)
     now = datetime.now(timezone.utc)
     cutoff = parse_cutoff(as_of, now) if as_of else now - timedelta(minutes=15)
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        kwargs = {"force":force, "now":now}
-        if as_of:
-            kwargs["end"] = cutoff
-        futures = {tf: pool.submit(load_bars, symbol, tf, **kwargs) for tf in TIMEFRAMES}
-        datasets = {tf: future.result() for tf, future in futures.items()}
-    result = build_chart(datasets, symbol, '1D' if timeframe=='1W' else timeframe, cutoff, now, historical=bool(as_of), include_analysis=include_analysis and analysis_engine=="legacy")
+    from replay_sources import covered,remember as remember_sources
+    if replay_source is not None and not re.fullmatch('[a-f0-9]{32}',replay_source):raise DataError('Ungültiger Replay-Datenstand.',400)
+    req_tf = '1D' if timeframe == '1W' else timeframe
+    datasets=covered(replay_source,symbol,int(cutoff.timestamp())) if replay_source and not force else None
+    if datasets is not None and req_tf not in datasets:
+        datasets = None
+    local_meta = None
+    live_fast_mode = (load_bars is _DEFAULT_LOAD_BARS and _alpaca_mod.load_bars is _DEFAULT_LOAD_BARS)
+    if datasets is None and live_fast_mode and not force:
+        from fast_chart_store import load_local_chart_sources
+        local_ds, local_meta = load_local_chart_sources(symbol, int(cutoff.timestamp()))
+        if local_ds is not None and req_tf in local_ds:
+            datasets = local_ds
+            replay_source, datasets = remember_sources(symbol, datasets, int(cutoff.timestamp()), replay_source)
+    if datasets is None:
+        defer_1h = (
+            live_fast_mode
+            and req_tf != "1h"
+            and not (include_analysis and analysis_engine == "legacy")
+        )
+        fetch_tfs = ("4h", "1D") if defer_1h else tuple(TIMEFRAMES)
+        with ThreadPoolExecutor(max_workers=len(fetch_tfs)) as pool:
+            futures = {}
+            for tf in fetch_tfs:
+                kwargs = {"force": force, "now": now}
+                if as_of:
+                    kwargs["end"] = cutoff
+                if live_fast_mode:
+                    kwargs["history_days"] = 180 if tf == "1h" else 380
+                futures[tf] = pool.submit(load_bars, symbol, tf, **kwargs)
+            datasets = {tf: future.result() for tf, future in futures.items()}
+        if defer_1h:
+            _prefetch_1h_background(symbol, now, cutoff if as_of else None)
+        replay_source,datasets=remember_sources(symbol,datasets,int(cutoff.timestamp()),None if force else replay_source)
+    result = build_chart(datasets, symbol, req_tf, cutoff, now, historical=bool(as_of), include_analysis=include_analysis and analysis_engine=="legacy")
+    if local_meta:
+        result["feed"] = local_meta["feed"]
+        result["adjustment"] = local_meta["adjustment"]
+        if local_meta.get("session"):
+            result["session"] = local_meta["session"]
     add_weekly(result,timeframe)
+    result['replaySourceId']=replay_source
     if include_analysis and analysis_engine != "legacy":
         from fan_chart import apply
         apply(result, analysis_engine)
@@ -116,10 +178,21 @@ class Handler(BaseHTTPRequestHandler):
         # Never log request headers, provider responses or credential files.
         print(f"{self.address_string()} {self.command} {urlparse(self.path).path}", flush=True)
 
-    def send_bytes(self, body: bytes, status: int, content_type: str):
+    def send_bytes(self, body: bytes, status: int, content_type: str, *, compress=False):
+        encoded=False
+        if compress and len(body)>=8192:
+            for encoding in self.headers.get('Accept-Encoding','').lower().split(','):
+                parts=encoding.strip().split(';')
+                if parts[0]!='gzip':continue
+                try:enabled=all(float(p.strip().split('=',1)[1])>0 for p in parts[1:] if p.strip().startswith('q='))
+                except (ValueError,IndexError):enabled=False
+                if enabled:body=gzip.compress(body,compresslevel=3);encoded=True
+                break
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if compress:self.send_header('Vary','Accept-Encoding')
+        if encoded:self.send_header('Content-Encoding','gzip')
         self.send_header("Cache-Control", "no-store" if self.path.startswith("/api/") else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -128,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_json(self, payload: dict, status=200):
-        self.send_bytes(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8"), status, "application/json; charset=utf-8")
+        self.send_bytes(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8"), status, "application/json; charset=utf-8",compress=True)
 
     def allowed_hosts(self):
         return {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"} | set(getattr(self.server,"allowed_hosts",()))
@@ -165,6 +238,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlparse(self.path).path
         try:
+            if path == '/api/replay/open':
+                from chart_replay import open_window
+                return self.send_json(open_window(parse_qs(urlparse(self.path).query, keep_blank_values=True)))
+            if path == '/api/replay/view':
+                from chart_replay import get
+                return self.send_json(get(parse_qs(urlparse(self.path).query, keep_blank_values=True)))
             if path == "/api/health":
                 from operations import status
                 try:
@@ -182,6 +261,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path.startswith('/api/entries/'):
                 from entry_history import get
+                return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
+            if path.startswith('/api/radar/'):
+                from radar_api import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
             if path == "/api/research/jobs":
                 from operations import status
@@ -204,6 +286,9 @@ class Handler(BaseHTTPRequestHandler):
                     apply(payload, engine)
                     remember(payload)
                 return self.send_json(payload)
+            if path.startswith("/api/backtest/"):
+                from backtest_api import get
+                return self.send_json(get(path, parse_qs(urlparse(self.path).query)))
             if path.startswith("/api/workbench/"):
                 from workbench_reviews import get
                 return self.send_json(get(path,parse_qs(urlparse(self.path).query)))
@@ -251,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(chart_payload(query.get("symbol", ["AAPL"])[0].strip().upper(),
                                                     query.get("timeframe", ["4h"])[0],
                                                     query.get("refresh", ["0"])[0] == "1",
-                                                    query.get("asof", [None])[0],include_analysis=chart_analysis_requested(query), **({"analysis_engine":analysis_engine} if analysis_engine!="legacy" else {})))
+                                                    query.get("asof", [None])[0],include_analysis=chart_analysis_requested(query), **({"analysis_engine":analysis_engine} if analysis_engine!="legacy" else {}), **({'replay_source':query['replay_source'][0]} if 'replay_source' in query else {})))
             if path == "/api/step":
                 query=parse_qs(urlparse(self.path).query)
                 if "dataset" in query:
@@ -290,6 +375,8 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("exchange", [""])[0], offset, symbols))
             files = {
                 "/": "index.html", "/zufall":"index.html", "/app.js": "app.js", "/style.css": "style.css",
+                "/radar": "radar.html", "/radar.js": "radar.js", "/radar.css": "radar.css",
+                "/backtest": "backtest.html", "/backtest.js": "backtest.js", "/backtest.css": "backtest.css",
                 "/research": "research.html", "/research.js":"research.js", "/research.css":"research.css",
                 "/lab":"lab.html", "/lab.js":"lab.js", "/lab.css":"lab.css",
                 "/watch":"watch.html", "/watch.js":"watch.js", "/watch.css":"watch.css",
@@ -302,6 +389,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/sammler":"collector.html", "/collector.js":"collector.js",
                 "/drawings.js": "drawings.js",
                 "/analysis.js": "analysis.js",
+                "/replay-buffer.js": "replay-buffer.js",
+                "/replay-window.js": "replay-window.js",
                 "/entry-history.js": "entry-history.js",
                 "/measurements.js": "measurements.js", "/api.js": "api.js",
                 "/vendor/lightweight-charts.js": "vendor/lightweight-charts.js",
@@ -326,8 +415,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path=urlparse(self.path).path
         entry_request=path.startswith('/api/entries/')
+        radar_request=path.startswith('/api/radar/')
         research=path in ("/api/research/jobs","/api/research/schedule") or (path.startswith("/api/research/jobs/") and path.endswith("/cancel")) or path.startswith("/api/lab/") or path.startswith("/api/watch/") or path.startswith("/api/workbench/") or path.startswith("/api/random/") or path.startswith('/api/archive/')
-        research=research or entry_request
+        research=research or entry_request or radar_request
         if path != "/api/snapshots" and not research:
             return self.send_json({"error": "Schreibzugriffe sind nur zum lokalen Speichern eines Analysestands vorgesehen."}, 405)
         allowed = self.allowed_hosts()
@@ -345,6 +435,9 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             if entry_request:
                 from entry_history import post
+                return self.send_json(post(path,body))
+            if radar_request:
+                from radar_api import post
                 return self.send_json(post(path,body))
             if research:
                 if path.startswith('/api/archive/'):
@@ -368,6 +461,9 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/research/schedule":
                     return self.send_json(jobs.schedule(body))
                 return self.send_json(jobs.cancel(path.split("/")[4]))
+            if isinstance(body, dict) and set(body) == {'replay'}:
+                from chart_replay import freeze
+                return self.send_json(freeze(body['replay']), 201)
             return self.send_json(save_snapshot(body.get("analysisId", "")), 201)
         except DataError as exc:
             self.send_json({"error":str(exc)}, exc.status)
@@ -390,6 +486,13 @@ def main():
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.allowed_hosts=args.allowed_host
     server.api_token=token
+    def _warm_local_index():
+        try:
+            from fast_chart_store import lookup_symbol
+            lookup_symbol("AAPL")
+        except Exception:
+            pass
+    threading.Thread(target=_warm_local_index, daemon=True).start()
     worker=None
     if not args.no_worker:
         if os.environ.get("TORI_AUTO_ENABLED","1") == "1":

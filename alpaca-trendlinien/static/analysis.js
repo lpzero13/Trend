@@ -1,4 +1,28 @@
 /* Analysis cutoff and immutable automatic-line snapshots. */
+// Chart-only SMA: use the displayed closed-candle prefix, never the transport
+// window or a frozen trendline's context. No change to research entry filters.
+function chartSma200(bars, cutoff, gapTimes = []) {
+  const rows = [], window = [];
+  const gaps = new Set(gapTimes);
+  let sum = 0, count = 0;
+  for (const bar of bars) {
+    if (bar.end > cutoff) break;
+    if (gaps.has(bar.time)) { window.length = 0; sum = 0; count = 0; }
+    const row = {time: bar.time};
+    if (!Number.isFinite(bar.close)) {
+      window.length = 0; sum = 0; count = 0;
+    } else {
+      sum += bar.close;
+      window.push(bar.close);
+      if (window.length > 200) sum -= window.shift();
+      count++;
+      if (window.length === 200) row.value = sum / 200;
+    }
+    rows.push(row);
+  }
+  return {rows, count, value: rows.at(-1)?.value};
+}
+
 function bundleKey(symbol, asOf, enabled = state.analysisEnabled) {
   return (
     symbol +
@@ -15,6 +39,7 @@ function bundleKey(symbol, asOf, enabled = state.analysisEnabled) {
     (state.analysisEngine && state.analysisEngine !== "legacy" ? "|engine=" + state.analysisEngine : "") +
     (state.fanCase ? "|fan_case=" + state.fanCase + "|fan_job=" + state.fanJob : "") +
     (state.entryRun ? "|entry_run=" + state.entryRun : "")
+    + (state.replaySource ? '|replay_source='+state.replaySource : '')
   );
 }
 function hasToriAnalysis() {
@@ -65,8 +90,9 @@ async function toggleToriAnalysis() {
   }
   state.analysisEnabled = true;
   state.info = true;
-  state.infoCollapsed = false;
+  state.infoCollapsed = read("tori-info-collapsed", true);
   updateToriControls();
+  updateCollapsedInfo();
   const request = state.request + 1;
   if (!(await load(state.symbol, false, state.asOf, true)) && request === state.request) {
     state.analysisEnabled = false;
@@ -141,6 +167,8 @@ function snapshotChart(bundle, tf) {
     before = bars.at(-2);
   return {
     bars,
+    smaGaps: [...new Set([...(frozen.payload.charts[tf].smaGaps || []),
+      ...(bundle.charts[tf].smaGaps || []).filter(time=>time>locked.at(-1).time && time<=last.time)])],
     axis: bars.map((bar) => bar.time),
     reference: last.time,
     latest: {
@@ -288,7 +316,7 @@ function updateStepButtons() {
   if (typeof updateRandomUI === 'function') updateRandomUI();
 }
 async function stepAnalysis(direction) {
-  if (!state.data || state.stepping || state.freezing || !$("#loading").hidden) return;
+  if (!state.data || state.stepping || state.freezing || !$("#loading").hidden) return false;
   state.stepping = true;
   updateStepButtons();
   setTool(false);
@@ -298,30 +326,25 @@ async function stepAnalysis(direction) {
   const request = state.request,
     symbol = state.symbol,
     tf = state.timeframe;
+  const stepStarted=performance.now();
+  let ok = false;
   try {
-    const params = new URLSearchParams({
-      symbol,
-      timeframe: tf,
-      asof: new Date((direction==='back' ? state.data.latest.end : state.data.analysisCutoff) * 1000).toISOString(),
-      direction,
-    });
-    if (state.datasetId) params.set("dataset", state.datasetId);
-    const response = await apiFetch((state.randomId ? '/api/random/cases/'+encodeURIComponent(state.randomId)+'/step?' : "/api/step?") + params),
-      target = await response.json();
+    const base=currentBundle();
+    const target=replayBuffer?await replayBuffer.resolve(base,direction):await resolveReplayTarget(base,direction);
     if (
       request !== state.request ||
       symbol !== state.symbol ||
       tf !== state.timeframe
     )
-      return;
-    if (!response.ok)
-      throw Error(target.error || "Kerzenschritt nicht verfügbar.");
+      return false;
+    if(!target)throw Error('Keine weitere Kerze in diesem Datenstand verfügbar.');
     if (state.analysisEnabled && state.frozen && target.closedAt < frozenBoundary(state.frozen))
       throw Error(
         "Vor den fixierten Datenstand geht es nur nach dem Lösen der Fixierung.",
       );
     const range = chart.timeScale().getVisibleLogicalRange();
     if (await load(symbol, false, target.asof, true)) {
+      ok = true;
       if (range)
         chart
           .timeScale()
@@ -334,6 +357,7 @@ async function stepAnalysis(direction) {
       else latestView();
       $("#replay-status").textContent =
         `Kerzenschluss: ${dtLong(target.closedAt)} ET`;
+      $('#chart').dataset.stepMs=(performance.now()-stepStarted).toFixed(2);
     } else
       $("#replay-status").textContent =
         "Schritt nicht ausgeführt; bisheriger Stand bleibt sichtbar.";
@@ -342,7 +366,13 @@ async function stepAnalysis(direction) {
   } finally {
     state.stepping = false;
     updateStepButtons();
+    clearTimeout(stepAnalysis._clearTimer);
+    stepAnalysis._clearTimer = setTimeout(() => {
+      const el = $("#replay-status");
+      if (el && !state.stepping) el.textContent = "";
+    }, 3500);
   }
+  return ok;
 }
 async function toggleFreeze() {
   if (state.stepping || state.freezing || !$("#loading").hidden || state.researchJob || state.fanCase) return;
@@ -353,7 +383,9 @@ async function toggleFreeze() {
   if (state.frozen) {
     state.frozen = null;
     write(frozenKey(state.symbol), null);
-    render(bundle, true);
+    for(const [key,data] of state.bundles)if(data.frozenReplay)state.bundles.delete(key);
+    if(bundle.frozenReplay)await load(state.symbol,false,state.asOf,true);
+    else render(bundle, true);
     return;
   }
   state.freezing = true;
@@ -364,7 +396,9 @@ async function toggleFreeze() {
     const response = await apiFetch("/api/snapshots", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ analysisId: bundle.analysisId }),
+      body: JSON.stringify(bundle.replaySession?{replay:{session:bundle.replaySession,
+        asof:new Date(bundle.analysisCutoff*1000).toISOString(),timeframe:bundle.timeframe,
+        engine:bundle.analysisEngine || 'legacy'}}:{ analysisId: bundle.analysisId }),
     });
     const snapshot = await response.json();
     if (!response.ok)
@@ -424,6 +458,7 @@ function setupAnalysisUI() {
     updateCollapsedInfo();
   };
   $("#history-button").onclick = () => {
+    if (typeof stopReplayPlay === "function") stopReplayPlay();
     if (state.data)
       $("#analysis-at").value = nyInput(state.data.analysisCutoff);
     $("#history-dialog").showModal();
@@ -431,17 +466,25 @@ function setupAnalysisUI() {
   };
   $("#history-form").onsubmit = (event) => {
     event.preventDefault();
+    if (typeof stopReplayPlay === "function") stopReplayPlay();
     const cutoff = $("#analysis-at").value;
     if (!cutoff) return;
     $("#history-dialog").close();
     load(state.symbol, false, cutoff);
   };
   $("#live-analysis").onclick = () => {
+    if (typeof stopReplayPlay === "function") stopReplayPlay();
     $("#history-dialog").close();
     load(state.symbol, false, null);
   };
   $("#freeze-button").onclick = toggleFreeze;
-  $("#step-back").onclick = () => stepAnalysis("back");
-  $("#step-next").onclick = () => stepAnalysis("next");
+  $("#step-back").onclick = () => {
+    if (typeof stopReplayPlay === "function") stopReplayPlay();
+    return stepAnalysis("back");
+  };
+  $("#step-next").onclick = () => {
+    if (typeof stopReplayPlay === "function") stopReplayPlay();
+    return stepAnalysis("next");
+  };
   $("#saved-stand").onchange = () => openSavedSnapshot($("#saved-stand").value);
 }
