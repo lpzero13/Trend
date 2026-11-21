@@ -20,6 +20,7 @@ import duckdb
 from models import Bar, DataError
 
 FORMAT = "tori-parquet-1"
+INCREMENTAL_FORMAT = "tori-parquet-2"
 FIELDS = ("time", "end", "open", "high", "low", "close", "volume")
 NUMBERS = FIELDS[2:]
 
@@ -120,9 +121,32 @@ def prepare(payload, root):
         "weekly": {"version": "xnys-complete-week-1", "count": len(frames["1W"])}}}
 
 
+def incremental_identity(material, storage):
+    # Audit/checkpoint metadata is mutable provenance and excluded, like v1 sources.
+    return hashlib.sha256(encoded([INCREMENTAL_FORMAT, material, storage])).hexdigest()
+
+
+def validate_manifest(manifest):
+    store = manifest["storage"]
+    if store["format"] not in (FORMAT, INCREMENTAL_FORMAT) or manifest["material"]["bars"] != {}:
+        raise ValueError("unsupported/modified Parquet manifest")
+    if set(store["frames"]) not in ({"1h", "4h", "1D"}, {"5m", "1h", "4h", "1D"}):
+        raise ValueError("invalid frame manifest")
+    blocks = store["blocks"]
+    months = [entry["month"] for entry in blocks]
+    if (not months or months != sorted(set(months))
+            or any(not re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", month) for month in months)
+            or len({entry["path"] for entry in blocks}) != len(blocks)):
+        raise ValueError("invalid month index")
+    if store["format"] == INCREMENTAL_FORMAT and (
+            manifest["id"] != incremental_identity(manifest["material"], store)):
+        raise ValueError("Parquet manifest identity")
+
+
 def hydrate(manifest, root, *, include_weekly=False, timeframes=None):
     """Read/verify every referenced block, then recreate the exact legacy API.
 
+    Supports both tori-parquet-1 and tori-parquet-2 incremental delta manifests.
     When `timeframes` is given (e.g. ('1h', '4h', '1D')), every Parquet block
     checksum is still verified, but DuckDB only materializes the requested
     timeframes (skipping ~200k 5m rows for 10x faster chart loads).
@@ -130,11 +154,8 @@ def hydrate(manifest, root, *, include_weekly=False, timeframes=None):
     store = manifest.get("storage")
     if not store:
         return manifest
-    if store["format"] != FORMAT or manifest["material"]["bars"] != {}:
-        raise ValueError("unsupported/modified Parquet manifest")
+    validate_manifest(manifest)
     frames = store["frames"]
-    if set(frames) not in ({"1h", "4h", "1D"}, {"5m", "1h", "4h", "1D"}):
-        raise ValueError("invalid frame manifest")
     paths = []
     for entry in store["blocks"]:
         path = block_path(Path(root), entry["path"])

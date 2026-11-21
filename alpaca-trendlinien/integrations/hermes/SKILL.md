@@ -26,7 +26,7 @@ Alle Tagesbefehle laufen immer mit demselben `TORI_DATA_DIR=/var/lib/tori` wie d
    - `--update` aktualisiert alle lokal vorhandenen SIP-Historien (Dow 30, Nasdaq-100, S&P 500 sowie vorhandene `SPY`/`QQQ`-Benchmarks) inkrementell nach US-Börsenschluss.
    - Der Scanner sortiert die Tages-Top-10 strikt nach den empirisch über alle drei PIT-Splits (`train`/`validation`/`holdout`) bestätigten Qualitäts-Stufen:
      - **Stufe `C` (Premium):** Direkt-Einstieg (`1A`/`4A`) + Aktive Annäherung + Hohe Reife (`≥ 21 T` / `≥ 4 K`) + Ruhige Tagesvola (`ATR_1D < 1,5 %`). Immer ganz oben.
-     - **Stufe `B` (Stark):** Ruhige Vola + 2 der 3 Kernmerkmale.
+     - **Stufe `B` (Stark):** Aktive Annäherung + Hohe Reife (`≥ 21 T` / `≥ 4 K`) + Ruhige Tagesvola (`ATR_1D < 1,5 %`), ohne Direkteinstieg (Watch-Setup).
      - **Stufe `4` (Ruhige Vola):** `ATR_1D < 1,5 %` mit weniger als 2 weiteren Kernmerkmalen.
      - **Stufe `A` (3/3-Kern):** Direkt + Aktiv + Hohe Reife (höhere Tagesvola).
      - **BASIS:** Übrige valide Setups.

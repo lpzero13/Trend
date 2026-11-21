@@ -370,6 +370,50 @@ class HermesScannerAndWatchTests(unittest.TestCase):
                 self.assertIn("dataset=ds1", res["items"][0]["replayUrl"])
                 self.assertIn("asof=2026-01-15", res["items"][0]["replayUrl"])
 
+    def test_incremental_tori_parquet_2_datasets_load_in_chart_and_reject_tamper(self):
+        import os
+        import chart_sources
+        import parquet_store as ps
+        from datasets import path_for, read_dataset, save_dataset
+        from models import DataError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.dict(os.environ, {"TORI_DATA_DIR": str(root)}):
+                _days, sources, _q = _build_synthetic_bars(start_day="2025-01-02", num_sessions=6)
+                material = {
+                    tf: (rows, {"feed": "sip", "adjustment": "split", "normalization": "rth-open-anchored-1",
+                                "count": len(rows), "first": rows[0].time, "last": rows[-1].time, "lastClose": rows[-1].end})
+                    for tf, rows in sources.items()
+                }
+                v1_id = save_dataset("DHITEST", material, feed="sip", adjustment="split", session="XNYS regular")
+                v1_manifest = json.loads(path_for(v1_id).read_text("utf-8"))
+                # Convert manifest to tori-parquet-2 with canonical incremental_identity
+                v2_storage = {**v1_manifest["storage"], "format": ps.INCREMENTAL_FORMAT}
+                v2_id = ps.incremental_identity(v1_manifest["material"], v2_storage)
+                v2_manifest = {**v1_manifest, "id": v2_id, "storage": v2_storage}
+                path_for(v2_id).write_text(json.dumps(v2_manifest), encoding="utf-8")
+
+                chart_sources.clear()
+                full = read_dataset(v2_id)
+                self.assertEqual(full["id"], v2_id)
+                self.assertEqual(len(full["material"]["bars"]["4h"]), len(sources["4h"]))
+
+                fast = read_dataset(v2_id, timeframes=("1h", "4h", "1D"))
+                self.assertEqual(set(fast["material"]["bars"]), {"1h", "4h", "1D"})
+
+                src, meta = chart_sources.sources_for(v2_id)
+                self.assertEqual(meta["symbol"], "DHITEST")
+                self.assertEqual(len(src["4h"][0]), len(sources["4h"]))
+
+                # Tampering with tori-parquet-2 identity must still be rejected
+                bad_id = "0" * 64
+                path_for(bad_id).write_text(json.dumps({**v2_manifest, "id": bad_id}), encoding="utf-8")
+                with self.assertRaises(DataError):
+                    read_dataset(bad_id)
+                with self.assertRaises(DataError):
+                    read_dataset(bad_id, timeframes=("1h", "4h", "1D"))
+
 
 if __name__ == "__main__":
     unittest.main()

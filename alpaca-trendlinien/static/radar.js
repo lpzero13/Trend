@@ -267,8 +267,8 @@ function renderScan(scan) {
           <td>
             <div class="action-row">
               <a class="btn-mini" href="${esc(item.chart_path)}" target="_blank" rel="noopener">Chart</a>
-              <button class="btn-mini accent" data-add="${esc(item.symbol)}" ${inWatch ? "disabled" : ""}>
-                ${inWatch ? "Auf Watchlist" : "+ Watchlist (1.000 €)"}
+              <button class="btn-mini accent" data-add="${esc(item.symbol)}" title="Mit 1.000 € auf die Watchlist übernehmen" ${inWatch ? "disabled" : ""}>
+                ${inWatch ? "Beobachtet" : "+ Watchlist"}
               </button>
             </div>
           </td>

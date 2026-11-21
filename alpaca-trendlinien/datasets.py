@@ -89,15 +89,17 @@ def save_dataset(symbol, sources, *, provider="Alpaca", feed="iex", adjustment="
 
 def read_dataset(identity, *, timeframes=None):
     try:
-        payload = json.loads(path_for(identity).read_text("utf-8"))
-        from parquet_store import hydrate
-        if timeframes is not None and payload.get("storage"):
-            payload = hydrate(payload, data_dir(), timeframes=timeframes)
+        manifest = json.loads(path_for(identity).read_text("utf-8"))
+        from parquet_store import INCREMENTAL_FORMAT, hydrate
+        incremental = manifest.get("storage", {}).get("format") == INCREMENTAL_FORMAT
+        if timeframes is not None and manifest.get("storage"):
+            payload = hydrate(manifest, data_dir(), timeframes=timeframes)
             if payload["id"] != identity or payload["material"]["schema"] != SCHEMA:
                 raise ValueError("checksum")
             return payload
-        payload = hydrate(payload, data_dir())
-        if payload["id"] != identity or payload["material"]["schema"] != SCHEMA or digest(payload["material"]) != identity:
+        payload = hydrate(manifest, data_dir())
+        if (payload["id"] != identity or payload["material"]["schema"] != SCHEMA
+                or (not incremental and digest(payload["material"]) != identity)):
             raise ValueError("checksum")
         return payload
     except (OSError, ValueError, KeyError, TypeError, OverflowError, ParquetError):
